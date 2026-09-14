@@ -38,4 +38,10 @@ python3 -m unittest discover -s tests -v
 node --test custom_components/finanzplaner/frontend/panel-utils.test.mjs
 ```
 
+## Versionierung
+
+Die Versionsnummer steht in `custom_components/finanzplaner/manifest.json` und folgt
+Semantic Versioning. Für einen HACS-Release werden Manifest, [CHANGELOG.md](CHANGELOG.md)
+und ein Git-Tag im Format `vMAJOR.MINOR.PATCH` gemeinsam aktualisiert.
+
 Die Designspezifikation liegt unter `docs/superpowers/specs/2026-09-14-ha-finanzplaner-design.md`.
