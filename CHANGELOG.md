@@ -8,6 +8,11 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.1.1] – 2026-09-14
+
+- HACS-Installation auf den normalen GitHub-Quellarchiv-Download umgestellt
+- fehlerhafte Abhängigkeit von einem nicht vorhandenen `finanzplaner.zip`-Release-Asset entfernt
+
 ## [0.1.0] – 2026-09-14
 
 Erste vorbereitete vertikale Version:
@@ -21,3 +26,4 @@ Erste vorbereitete vertikale Version:
 - visuelles Konzept „Statusfeld mit Prüfstreifen"
 
 [0.1.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.1.0
+[0.1.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.1.1
