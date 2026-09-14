@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Finanzplaner",
+        "description": "Richte den lokalen Finanzplan für deinen gemeinsamen Haushalt ein.",
+        "data": {
+          "household_name": "Name des Haushalts"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Der Finanzplaner ist bereits eingerichtet."
+    }
+  }
+}

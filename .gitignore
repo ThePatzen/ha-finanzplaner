@@ -1,6 +1,12 @@
 .idea/
 template/
 .impeccable/config.local.json
+.impeccable/build/
+.impeccable/mocks/
+.impeccable/questions/
+.impeccable/review/
+.claude/
+.codex/
 __pycache__/
 .pytest_cache/
 .venv/

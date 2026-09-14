@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Finanzplaner",
+        "description": "Set up a local finance plan for your shared household.",
+        "data": {
+          "household_name": "Household name"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Finanzplaner is already configured."
+    }
+  }
+}
