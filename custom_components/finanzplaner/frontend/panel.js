@@ -603,6 +603,9 @@ class FinanzplanerPanel extends HTMLElement {
     this._bookings = [];
     this._persons = [];
     this._allocationDrafts = new Map();
+    this._allocationSubmissions = new Set();
+    this._allocationErrors = new Map();
+    this._accountDrafts = new Map();
     this._excelPreview = null;
     this._message = "";
     this._loading = false;
@@ -671,7 +674,10 @@ class FinanzplanerPanel extends HTMLElement {
       }
     }
     for (const bookingId of this._allocationDrafts.keys()) {
-      if (!bookingIds.has(bookingId)) this._allocationDrafts.delete(bookingId);
+      if (!bookingIds.has(bookingId)) {
+        this._allocationDrafts.delete(bookingId);
+        this._allocationErrors.delete(bookingId);
+      }
     }
   }
 
@@ -697,6 +703,20 @@ class FinanzplanerPanel extends HTMLElement {
       }
       this._accounts = accountsResult.accounts || [];
       this._persons = personsResult.persons || [];
+      const accountIds = new Set(this._accounts.map((account) => String(account.id)));
+      for (const account of this._accounts) {
+        const accountId = String(account.id);
+        if (!this._accountDrafts.has(accountId)) {
+          this._accountDrafts.set(accountId, {
+            label: account.label || "",
+            owner_targets: Array.isArray(account.owner_targets) ? [...account.owner_targets] : [],
+            active: account.active !== false,
+          });
+        }
+      }
+      for (const accountId of this._accountDrafts.keys()) {
+        if (!accountIds.has(accountId)) this._accountDrafts.delete(accountId);
+      }
     } catch (error) {
       this._accounts = [];
       this._persons = [];
@@ -711,14 +731,11 @@ class FinanzplanerPanel extends HTMLElement {
   async _handleAccountSave(event) {
     event.preventDefault();
     const form = event.currentTarget;
+    const accountId = String(form.dataset.accountId);
     const button = form.querySelector("[type='submit']");
     const status = form.querySelector("[data-account-save-status]");
-    const ownerTargets = [...form.querySelectorAll("[data-account-owners] option:checked")].map((option) => option.value);
-    const payload = {
-      label: form.querySelector("[data-account-label]")?.value || "",
-      owner_targets: ownerTargets,
-      active: Boolean(form.querySelector("[data-account-active]")?.checked),
-    };
+    const payload = this._captureAccountDraft(form);
+    this._accountDrafts.set(accountId, payload);
     this._message = "";
     const globalStatus = this.shadowRoot.querySelector(".status-message");
     if (globalStatus) globalStatus.textContent = "";
@@ -739,12 +756,34 @@ class FinanzplanerPanel extends HTMLElement {
         throw new Error(apiErrorMessage(accountsResult, "Das Konto wurde gespeichert, konnte aber nicht neu geladen werden."));
       }
       this._accounts = accountsResult.accounts || [];
+      const savedAccount = this._accounts.find((account) => String(account.id) === accountId);
+      this._accountDrafts.delete(accountId);
+      if (savedAccount) {
+        this._accountDrafts.set(accountId, {
+          label: savedAccount.label || "",
+          owner_targets: Array.isArray(savedAccount.owner_targets) ? [...savedAccount.owner_targets] : [],
+          active: savedAccount.active !== false,
+        });
+      }
       this._message = `${payload.label.trim() || "Konto"} wurde gespeichert.`;
       this._render();
     } catch (error) {
       if (status) status.textContent = error.message || "Das Konto konnte nicht gespeichert werden.";
       if (button) button.disabled = false;
     }
+  }
+
+  _captureAccountDraft(form) {
+    return {
+      label: form.querySelector("[data-account-label]")?.value || "",
+      owner_targets: [...form.querySelectorAll("[data-account-owners] option:checked")].map((option) => option.value),
+      active: Boolean(form.querySelector("[data-account-active]")?.checked),
+    };
+  }
+
+  _updateAccountDraft(event) {
+    const form = event.currentTarget.closest("[data-account-form]");
+    if (form) this._accountDrafts.set(String(form.dataset.accountId), this._captureAccountDraft(form));
   }
 
   _updateAccountOwnerStatus(event) {
@@ -773,16 +812,16 @@ class FinanzplanerPanel extends HTMLElement {
     if (!form) return;
     const rows = this._allocationDrafts.get(form.dataset.bookingId) || [];
     const total = Number(form.dataset.bookingTotal) || 0;
-    const submitState = allocationSubmitState(total, rows, form.dataset.submitting === "true");
+    const submitState = allocationSubmitState(total, rows, this._allocationSubmissions.has(form.dataset.bookingId));
     const { remaining } = submitState;
-    const allocated = allocationRemaining(total, [{ amount: remaining }]);
+    const allocated = submitState.invalidAmount ? null : allocationRemaining(total, [{ amount: remaining }]);
     const remainingNode = form.querySelector("[data-allocation-remaining]");
     const allocatedNode = form.querySelector("[data-allocation-allocated]");
     const submit = form.querySelector("[type='submit']");
-    if (allocatedNode) allocatedNode.textContent = formatEuro(allocated);
+    if (allocatedNode) allocatedNode.textContent = allocated === null ? "—" : formatEuro(allocated);
     if (remainingNode) {
-      remainingNode.textContent = formatEuro(remaining);
-      remainingNode.classList.toggle("allocation-summary--open", remaining !== 0);
+      remainingNode.textContent = submitState.invalidAmount ? "—" : formatEuro(remaining);
+      remainingNode.classList.toggle("allocation-summary--open", submitState.invalidAmount || remaining !== 0);
     }
     if (submit) {
       submit.disabled = submitState.disabled;
@@ -800,6 +839,7 @@ class FinanzplanerPanel extends HTMLElement {
       form.dataset.bookingId,
       updateAllocationDraftRow(rows, index, field, input.value),
     );
+    this._allocationErrors.delete(form.dataset.bookingId);
     const status = form.querySelector("[data-allocation-status]");
     if (status) status.textContent = "";
     this._updateAllocationSummary(form);
@@ -814,6 +854,7 @@ class FinanzplanerPanel extends HTMLElement {
       this._allocationDrafts.get(bookingId) || [],
     );
     this._allocationDrafts.set(bookingId, redistributed);
+    this._allocationErrors.delete(bookingId);
     this._render();
     const updatedForm = this._allocationForm(bookingId);
     this._updateAllocationSummary(updatedForm);
@@ -829,6 +870,7 @@ class FinanzplanerPanel extends HTMLElement {
     const index = Number(event.currentTarget.dataset.allocationIndex);
     const rows = removeAllocationDraftRow(this._allocationDrafts.get(bookingId) || [], index);
     this._allocationDrafts.set(bookingId, rows);
+    this._allocationErrors.delete(bookingId);
     this._render();
     const updatedForm = this._allocationForm(bookingId);
     this._updateAllocationSummary(updatedForm);
@@ -843,14 +885,17 @@ class FinanzplanerPanel extends HTMLElement {
   async _handleAssignment(event) {
     event.preventDefault();
     const form = event.currentTarget;
-    if (form.dataset.submitting === "true") return;
-    const rows = this._allocationDrafts.get(form.dataset.bookingId) || [];
+    const bookingId = String(form.dataset.bookingId);
+    if (this._allocationSubmissions.has(bookingId)) return;
+    const rows = this._allocationDrafts.get(bookingId) || [];
     const total = Number(form.dataset.bookingTotal) || 0;
-    const submitState = allocationSubmitState(total, rows, form.dataset.submitting === "true");
+    const submitState = allocationSubmitState(total, rows);
     const { remaining } = submitState;
     const status = form.querySelector("[data-allocation-status]");
     if (submitState.disabled) {
-      if (status) status.textContent = "Bitte wähle für jede Zeile ein Ziel und gleiche den verbleibenden Betrag centgenau aus.";
+      if (status) status.textContent = submitState.invalidAmount
+        ? "Bitte verwende Beträge mit höchstens zwei Nachkommastellen."
+        : "Bitte wähle für jede Zeile ein Ziel und gleiche den verbleibenden Betrag centgenau aus.";
       this._updateAllocationSummary(form);
       return;
     }
@@ -861,7 +906,7 @@ class FinanzplanerPanel extends HTMLElement {
       category: row.category || null,
       project: row.project || null,
     }));
-    form.dataset.submitting = "true";
+    this._allocationSubmissions.add(bookingId);
     form.setAttribute("aria-busy", "true");
     if (status) status.textContent = "Aufteilung wird gespeichert …";
     this._updateAllocationSummary(form);
@@ -874,14 +919,17 @@ class FinanzplanerPanel extends HTMLElement {
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(allocationErrorMessage(response, result));
     } catch (error) {
-      form.dataset.submitting = "false";
+      this._allocationSubmissions.delete(bookingId);
+      this._allocationErrors.set(bookingId, error.message || "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.");
       form.removeAttribute("aria-busy");
-      if (status) status.textContent = error.message || "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.";
+      if (status) status.textContent = this._allocationErrors.get(bookingId);
       this._updateAllocationSummary(form);
       return;
     }
-    this._allocationDrafts.delete(form.dataset.bookingId);
-    this._bookings = this._bookings.filter((booking) => String(booking.id) !== form.dataset.bookingId);
+    this._allocationSubmissions.delete(bookingId);
+    this._allocationErrors.delete(bookingId);
+    this._allocationDrafts.delete(bookingId);
+    this._bookings = this._bookings.filter((booking) => String(booking.id) !== bookingId);
     this._message = "Buchung zugeordnet und aus der Prüfliste entfernt.";
     this._render();
     let reviewRefreshFailed = false;
@@ -912,9 +960,11 @@ class FinanzplanerPanel extends HTMLElement {
       const response = await fetchWithHomeAssistantAuth(this._hass, IMPORT_URL, { method: "POST", body: form });
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Import fehlgeschlagen"));
-      this._message = `${result.format}: ${result.accepted} Buchungen übernommen, ${result.duplicates} Duplikate übersprungen.`;
+      const feedback = `${result.format}: ${result.accepted} Buchungen übernommen, ${result.duplicates} Duplikate übersprungen; ${result.new_accounts || 0} neue Konten, ${result.unconfigured_accounts || 0} ohne konfigurierte Inhaber.`;
       await this._loadOverview();
       await this._openReview();
+      this._message = feedback;
+      this._render();
     } catch (error) {
       this._message = error.message || "Import fehlgeschlagen.";
       this._render();
@@ -1050,12 +1100,14 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-allocation-add]").forEach((button) => button.addEventListener("click", (event) => this._addAllocationRow(event)));
     this.shadowRoot.querySelectorAll("[data-allocation-remove]").forEach((button) => button.addEventListener("click", (event) => this._removeAllocationRow(event)));
     this.shadowRoot.querySelectorAll("[data-account-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAccountSave(event)));
-    this.shadowRoot.querySelectorAll("[data-account-owners]").forEach((select) => select.addEventListener("change", (event) => this._updateAccountOwnerStatus(event)));
-    this.shadowRoot.querySelectorAll("[data-account-active]").forEach((input) => input.addEventListener("change", (event) => this._updateAccountActiveStatus(event)));
+    this.shadowRoot.querySelectorAll("[data-account-label]").forEach((input) => input.addEventListener("input", (event) => this._updateAccountDraft(event)));
+    this.shadowRoot.querySelectorAll("[data-account-owners]").forEach((select) => select.addEventListener("change", (event) => { this._updateAccountDraft(event); this._updateAccountOwnerStatus(event); }));
+    this.shadowRoot.querySelectorAll("[data-account-active]").forEach((input) => input.addEventListener("change", (event) => { this._updateAccountDraft(event); this._updateAccountActiveStatus(event); }));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.nav === "review") this._openReview();
       else if (button.dataset.nav === "accounts") this._openAccounts();
-      else if (button.dataset.nav !== "overview") this._message = `${button.textContent.trim()} ist für die nächste Ausbaustufe vorbereitet.`;
+      else if (button.dataset.nav === "overview") this._view = "overview";
+      else this._message = `${button.textContent.trim()} ist für die nächste Ausbaustufe vorbereitet.`;
       if (!["review", "accounts"].includes(button.dataset.nav)) this._render();
     }));
   }
@@ -1148,22 +1200,28 @@ class FinanzplanerPanel extends HTMLElement {
         ? `<div class="empty-state">Konten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
         : this._accounts.length
       ? `<ul class="account-list" aria-label="Konten">${this._accounts.map((account, index) => {
-        const ownerTargets = Array.isArray(account.owner_targets) ? account.owner_targets : [];
+        const accountId = String(account.id);
+        const draft = this._accountDrafts.get(accountId) || {
+          label: account.label || "",
+          owner_targets: Array.isArray(account.owner_targets) ? account.owner_targets : [],
+          active: account.active !== false,
+        };
+        const ownerTargets = Array.isArray(draft.owner_targets) ? draft.owner_targets : [];
         const ownerStatus = accountOwnerStatus(ownerTargets);
         const labelId = `account-label-${index}`;
         const ownersId = `account-owners-${index}`;
         const ownerStatusId = `account-owner-status-${index}`;
         const activeId = `account-active-${index}`;
         const saveStatusId = `account-save-status-${index}`;
-        const accountLabel = account.label || "Konto";
-        const active = account.active !== false;
+        const accountLabel = draft.label || "Konto";
+        const active = draft.active !== false;
         const maskedReference = account.iban_masked || account.account_reference || "Keine maskierte Kontoreferenz verfügbar";
         return `<li><form class="surface account-card" method="post" data-account-form data-account-id="${escapeHtml(account.id)}" aria-labelledby="account-heading-${index}">
           <div class="account-card-header"><h3 id="account-heading-${index}">${escapeHtml(accountLabel)}</h3><p class="account-reference">${escapeHtml(maskedReference)}</p></div>
-          <label class="account-field" for="${labelId}">Kontoname<input id="${labelId}" name="label" data-account-label type="text" value="${escapeHtml(account.label || "")}" autocomplete="off" required></label>
+          <label class="account-field" for="${labelId}">Kontoname<input id="${labelId}" name="label" data-account-label type="text" value="${escapeHtml(draft.label || "")}" autocomplete="off" required></label>
           <fieldset class="account-owners"><legend>Kontoinhaber</legend><label class="visually-hidden" for="${ownersId}">Kontoinhaber für ${escapeHtml(accountLabel)} auswählen</label><select id="${ownersId}" name="owner_targets" data-account-owners multiple size="4" aria-describedby="${ownerStatusId}">${this._personOptions(ownerTargets)}</select><p class="account-owner-status${ownerTargets.length ? "" : " account-owner-status--missing"}" id="${ownerStatusId}" data-account-owner-status>${escapeHtml(ownerStatus)}</p></fieldset>
           <div class="account-toggle"><label for="${activeId}"><input id="${activeId}" name="active" data-account-active type="checkbox"${active ? " checked" : ""}>Konto aktiv <span class="visually-hidden">(deaktivieren archiviert das Konto)</span></label><span class="account-active-status${active ? "" : " account-active-status--archived"}" data-account-active-status aria-hidden="true">${accountActiveStatus(active)}</span></div>
-          <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit" aria-label="Änderungen für ${escapeHtml(accountLabel)} speichern" aria-describedby="${saveStatusId}">Änderungen speichern</button></div>
+          <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit" aria-label="Änderungen für ${escapeHtml(accountLabel)} (${escapeHtml(maskedReference)}) speichern" aria-describedby="${saveStatusId}">Änderungen speichern</button></div>
         </form></li>`;
       }).join("")}</ul>`
         : `<div class="empty-state">Keine Konten verfügbar. Importiere zuerst eine Bankdatei über „Buchungen prüfen“.</div>`;
@@ -1234,9 +1292,9 @@ class FinanzplanerPanel extends HTMLElement {
     const bookingId = String(booking.id);
     const rows = this._allocationDrafts.get(bookingId) || equalAllocationDraft(booking.amount, ["household"]);
     const total = Math.abs(Number(booking.amount) || 0);
-    const submitState = allocationSubmitState(total, rows);
+    const submitState = allocationSubmitState(total, rows, this._allocationSubmissions.has(bookingId));
     const { remaining } = submitState;
-    const allocated = allocationRemaining(total, [{ amount: remaining }]);
+    const allocated = submitState.invalidAmount ? null : allocationRemaining(total, [{ amount: remaining }]);
     const summaryId = `allocation-summary-${bookingIndex}`;
     const statusId = `allocation-status-${bookingIndex}`;
     const purpose = booking.purpose || booking.counterparty || "Buchung";
@@ -1249,7 +1307,7 @@ class FinanzplanerPanel extends HTMLElement {
       const amount = Number(row.amount);
       return `<li class="allocation-row">
         <label class="allocation-field" for="${targetId}">Ziel<select id="${targetId}" data-allocation-field="target" data-allocation-index="${rowIndex}" required>${this._allocationTargetOptions(row.target)}</select></label>
-        <label class="allocation-field" for="${amountId}">Betrag in Euro<input id="${amountId}" data-allocation-field="amount" data-allocation-index="${rowIndex}" type="text" inputmode="decimal" value="${Number.isFinite(amount) ? amount.toFixed(2) : ""}" required></label>
+        <label class="allocation-field" for="${amountId}">Betrag in Euro<input id="${amountId}" data-allocation-field="amount" data-allocation-index="${rowIndex}" type="text" inputmode="decimal" value="${escapeHtml(row.amount_input ?? (Number.isFinite(amount) ? amount.toFixed(2) : ""))}" required></label>
         <label class="allocation-field" for="${areaId}">Bereich<select id="${areaId}" data-allocation-field="area" data-allocation-index="${rowIndex}"><option value=""${row.area ? "" : " selected"}>Kein Bereich</option><option value="Hunde"${row.area === "Hunde" ? " selected" : ""}>Hunde</option></select></label>
         <label class="allocation-field" for="${categoryId}">Kategorie (optional)<input id="${categoryId}" data-allocation-field="category" data-allocation-index="${rowIndex}" type="text" value="${escapeHtml(row.category || "")}" autocomplete="off"></label>
         <label class="allocation-field" for="${projectId}">Projekt (optional)<input id="${projectId}" data-allocation-field="project" data-allocation-index="${rowIndex}" type="text" value="${escapeHtml(row.project || "")}" autocomplete="off"></label>
@@ -1259,8 +1317,8 @@ class FinanzplanerPanel extends HTMLElement {
     return `<fieldset class="allocation-editor" aria-describedby="${summaryId} ${statusId}">
       <legend>Aufteilung</legend>
       <ul class="allocation-list" aria-label="Aufteilungszeilen">${rowMarkup}</ul>
-      <p class="allocation-summary" id="${summaryId}" aria-live="polite"><span>Gesamt <strong>${formatEuro(total)}</strong></span><span>Zugeordnet <strong data-allocation-allocated>${formatEuro(allocated)}</strong></span><span>Verbleibend <strong data-allocation-remaining class="${remaining === 0 ? "" : "allocation-summary--open"}">${formatEuro(remaining)}</strong></span></p>
-      <div class="allocation-actions"><p class="allocation-status" id="${statusId}" data-allocation-status aria-live="polite"></p><button class="allocation-add" type="button" data-allocation-add>Zeile hinzufügen</button><button class="assign-button" type="submit"${submitState.disabled ? " disabled" : ""}>Aufteilung speichern ${icon("check", 17)}</button></div>
+      <p class="allocation-summary" id="${summaryId}" aria-live="polite"><span>Gesamt <strong>${formatEuro(total)}</strong></span><span>Zugeordnet <strong data-allocation-allocated>${allocated === null ? "—" : formatEuro(allocated)}</strong></span><span>Verbleibend <strong data-allocation-remaining class="${submitState.invalidAmount || remaining !== 0 ? "allocation-summary--open" : ""}">${submitState.invalidAmount ? "—" : formatEuro(remaining)}</strong></span></p>
+      <div class="allocation-actions"><p class="allocation-status" id="${statusId}" data-allocation-status aria-live="polite">${escapeHtml(this._allocationErrors.get(bookingId) || "")}</p><button class="allocation-add" type="button" data-allocation-add aria-label="Zeile für ${escapeHtml(purpose)} hinzufügen">Zeile hinzufügen</button><button class="assign-button" type="submit" aria-label="Aufteilung für ${escapeHtml(purpose)} speichern"${submitState.disabled ? " disabled" : ""}>Aufteilung speichern ${icon("check", 17)}</button></div>
     </fieldset>`;
   }
 

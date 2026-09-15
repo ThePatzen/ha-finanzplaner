@@ -133,19 +133,27 @@ test("updates and removes draft rows without mutating the existing draft", () =>
 test("reports missing targets, remaining cents, and blocks a valid draft while submitting", () => {
   assert.deepEqual(
     utils.allocationSubmitState(10, [{ target: "", amount: 10 }]),
-    { missingTarget: true, remaining: 0, disabled: true },
+    { missingTarget: true, invalidAmount: false, remaining: 0, disabled: true },
   );
   assert.deepEqual(
     utils.allocationSubmitState(-10, [{ target: "household", amount: 9.99 }]),
-    { missingTarget: false, remaining: 0.01, disabled: true },
+    { missingTarget: false, invalidAmount: false, remaining: 0.01, disabled: true },
   );
   assert.deepEqual(
     utils.allocationSubmitState(10, [{ target: "household", amount: 10 }], true),
-    { missingTarget: false, remaining: 0, disabled: true },
+    { missingTarget: false, invalidAmount: false, remaining: 0, disabled: true },
   );
   assert.deepEqual(
     utils.allocationSubmitState(10, [{ target: "household", amount: 10 }]),
-    { missingTarget: false, remaining: 0, disabled: false },
+    { missingTarget: false, invalidAmount: false, remaining: 0, disabled: false },
+  );
+  assert.equal(
+    utils.allocationSubmitState(10, [{ target: "household", amount: 10.004 }]).invalidAmount,
+    true,
+  );
+  assert.equal(
+    utils.allocationSubmitState(33.34, [{ target: "household", amount: 33.34 }]).invalidAmount,
+    false,
   );
 });
 
@@ -187,8 +195,22 @@ test("uses a dedicated contrasting border token for account form controls", () =
 });
 
 test("names each account save action and renders its lifecycle status", () => {
-  assert.match(panelSource, /aria-label="Änderungen für \$\{escapeHtml\(accountLabel\)\} speichern"/);
+  assert.match(panelSource, /aria-label="Änderungen für \$\{escapeHtml\(accountLabel\)\} \(\$\{escapeHtml\(maskedReference\)\}\) speichern"/);
   assert.match(panelSource, /data-account-active-status/);
+});
+
+test("keeps allocation locks and account drafts outside the rendered form", () => {
+  assert.match(panelSource, /this\._allocationSubmissions = new Set\(\)/);
+  assert.match(panelSource, /this\._allocationSubmissions\.has\(bookingId\)/);
+  assert.match(panelSource, /this\._accountDrafts = new Map\(\)/);
+  assert.match(panelSource, /data-account-label.*addEventListener\("input"/s);
+  assert.doesNotMatch(panelSource, /dataset\.submitting/);
+});
+
+test("keeps import account counts in the review feedback after reload", () => {
+  assert.match(panelSource, /result\.new_accounts \|\| 0/);
+  assert.match(panelSource, /result\.unconfigured_accounts \|\| 0/);
+  assert.match(panelSource, /this\._message = feedback/);
 });
 
 test("uses the Home Assistant authenticated request method for protected panel APIs", async () => {

@@ -149,6 +149,40 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(bookings[0].counterparty, "Solarwerk")
         self.assertEqual(bookings[0].reference, "PAY-42")
 
+    def test_camt053_uses_each_statement_account_and_ignores_counterparty_iban(self):
+        core = load_core()
+        raw = """<Document>
+          <BkToCstmrStmt><Stmt><Acct><Id><IBAN>AT111111111111111111</IBAN></Id></Acct>
+            <Ntry><Amt Ccy="EUR">10.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-09-04</Dt></BookgDt>
+              <NtryDtls><TxDtls><RltdPties><DbtrAcct><Id><IBAN>AT999999999999999999</IBAN></Id></DbtrAcct></RltdPties><RmtInf><Ustrd>Erste</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+          </Stmt></BkToCstmrStmt>
+          <BkToCstmrStmt><Stmt><Acct><Id><IBAN>AT222222222222222222</IBAN></Id></Acct>
+            <Ntry><Amt Ccy="EUR">20.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><BookgDt><Dt>2026-09-05</Dt></BookgDt><NtryDtls><TxDtls><RmtInf><Ustrd>Zweite</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+          </Stmt></BkToCstmrStmt>
+          <BkToCstmrStmt><Stmt>
+            <Ntry><Amt Ccy="EUR">30.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-09-06</Dt></BookgDt><NtryDtls><TxDtls><RltdPties><CdtrAcct><Id><IBAN>AT888888888888888888</IBAN></Id></CdtrAcct></RltdPties><RmtInf><Ustrd>Ohne eigenes Konto</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+          </Stmt></BkToCstmrStmt>
+        </Document>"""
+
+        bookings = core.parse_camt053(raw)
+
+        self.assertEqual([booking.account for booking in bookings], [
+            "AT111111111111111111", "AT222222222222222222", ""
+        ])
+
+    def test_mt940_closes_previous_booking_before_new_account_reference(self):
+        core = load_core()
+        raw = (
+            ":25:FIRST-ACCOUNT\n"
+            ":61:2609010901D10,00NTRFONE\n"
+            ":25:SECOND-ACCOUNT\n"
+            ":61:2609020902C20,00NTRFTWO\n"
+        )
+
+        bookings = core.parse_mt940(raw)
+
+        self.assertEqual([booking.account for booking in bookings], ["FIRST-ACCOUNT", "SECOND-ACCOUNT"])
+
     def test_fingerprint_is_stable_for_duplicate_imports(self):
         core = load_core()
         booking = core.Booking(
@@ -160,6 +194,20 @@ class ImportTests(unittest.TestCase):
         )
 
         self.assertEqual(core.booking_fingerprint(booking), core.booking_fingerprint(booking))
+
+    def test_fingerprint_normalizes_formatted_account_references(self):
+        core = load_core()
+        fields = {
+            "booking_date": date(2026, 9, 2),
+            "amount": -42.50,
+            "purpose": "Hundefutter",
+            "reference": "NONREF",
+        }
+
+        self.assertEqual(
+            core.booking_fingerprint(core.Booking(account="AT12 3456 7890 1234 5678", **fields)),
+            core.booking_fingerprint(core.Booking(account="AT123456789012345678", **fields)),
+        )
 
 
 if __name__ == "__main__":

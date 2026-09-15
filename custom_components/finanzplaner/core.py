@@ -340,6 +340,9 @@ def parse_mt940(raw: str) -> list[Booking]:
     for line in raw.splitlines():
         line = line.strip()
         if line.startswith(":25:"):
+            if current is not None:
+                bookings.append(Booking(account=account, **current))
+                current = None
             account = line[4:].strip()
         elif line.startswith(":61:"):
             if current is not None:
@@ -380,36 +383,45 @@ def parse_camt053(raw: str) -> list[Booking]:
     """Parse CAMT.053 entries without binding the UI to a bank-specific namespace."""
 
     root = ET.fromstring(raw)
-    account = _descendant_text(root, "IBAN")
     bookings: list[Booking] = []
-    for entry in root.iter():
-        if _local_name(entry.tag) != "Ntry":
+    for statement in root.iter():
+        if _local_name(statement.tag) != "Stmt":
             continue
-        amount_node = next(
-            (node for node in entry.iter() if _local_name(node.tag) == "Amt"), None
+        account = ""
+        account_node = next(
+            (child for child in statement if _local_name(child.tag) == "Acct"),
+            None,
         )
-        direction = _descendant_text(entry, "CdtDbtInd")
-        date_text = _descendant_text(entry, "Dt")
-        if amount_node is None or not amount_node.text or not date_text:
-            continue
-        try:
-            booking_date = date.fromisoformat(date_text[:10])
-        except ValueError as exc:
-            raise ValueError(f"Unsupported CAMT.053 booking date: {date_text!r}") from exc
-        amount = _parse_amount(amount_node.text)
-        if direction.upper() != "CRDT":
-            amount = -amount
-        bookings.append(
-            Booking(
-                account=account,
-                booking_date=booking_date,
-                amount=amount,
-                purpose=_descendant_text(entry, "Ustrd"),
-                reference=_descendant_text(entry, "EndToEndId"),
-                counterparty=_descendant_text(entry, "Nm"),
-                currency=amount_node.attrib.get("Ccy", "EUR"),
+        if account_node is not None:
+            account = _descendant_text(account_node, "IBAN")
+        for entry in statement.iter():
+            if _local_name(entry.tag) != "Ntry":
+                continue
+            amount_node = next(
+                (node for node in entry if _local_name(node.tag) == "Amt"), None
             )
-        )
+            direction = _descendant_text(entry, "CdtDbtInd")
+            date_text = _descendant_text(entry, "Dt")
+            if amount_node is None or not amount_node.text or not date_text:
+                continue
+            try:
+                booking_date = date.fromisoformat(date_text[:10])
+            except ValueError as exc:
+                raise ValueError(f"Unsupported CAMT.053 booking date: {date_text!r}") from exc
+            amount = _parse_amount(amount_node.text)
+            if direction.upper() != "CRDT":
+                amount = -amount
+            bookings.append(
+                Booking(
+                    account=account,
+                    booking_date=booking_date,
+                    amount=amount,
+                    purpose=_descendant_text(entry, "Ustrd"),
+                    reference=_descendant_text(entry, "EndToEndId"),
+                    counterparty=_descendant_text(entry, "Nm"),
+                    currency=amount_node.attrib.get("Ccy", "EUR"),
+                )
+            )
     return bookings
 
 
@@ -418,7 +430,7 @@ def booking_fingerprint(booking: Booking) -> str:
 
     material = "|".join(
         (
-            booking.account.strip().upper(),
+            normalize_account_reference(booking.account),
             booking.booking_date.isoformat(),
             f"{_money(booking.amount):.2f}",
             booking.reference.strip().upper(),

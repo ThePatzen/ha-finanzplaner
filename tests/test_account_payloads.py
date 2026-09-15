@@ -241,6 +241,40 @@ class AccountViewTests(unittest.TestCase):
         self.assertIs(self.http.AccountsView.requires_auth, True)
         self.assertIs(self.http.AccountView.requires_auth, True)
 
+    def test_dynamic_views_use_home_assistant_route_placeholders(self):
+        self.assertEqual(self.http.AccountView.url, "/api/finanzplaner/accounts/{account_id}")
+        self.assertEqual(self.http.BookingAssignmentView.url, "/api/finanzplaner/bookings/{booking_id}")
+        self.assertEqual(self.http.BookingAllocationsView.url, "/api/finanzplaner/bookings/{booking_id}/allocations")
+
+    def test_account_update_re_resolves_after_request_json_replaces_store_data(self):
+        replacement = {
+            "accounts": [
+                {
+                    "id": "account-1",
+                    "label": "Aktuelles Konto",
+                    "owner_targets": [],
+                    "active": True,
+                }
+            ],
+            "bookings": [],
+        }
+        original = self.coordinator.store.data
+
+        class ReloadingRequest:
+            app = self.app
+
+            async def json(self):
+                self.app["hass"].data[DOMAIN]["entry"].store.data = replacement
+                return {"label": "Nach Reload", "owner_targets": ["person.alex"], "active": False}
+
+        result = asyncio.run(self.http.AccountView().post(ReloadingRequest(), "account-1"))
+
+        self.assertEqual(replacement["accounts"][0]["label"], "Nach Reload")
+        self.assertEqual(replacement["accounts"][0]["owner_targets"], ["person.alex"])
+        self.assertFalse(replacement["accounts"][0]["active"])
+        self.assertEqual(result["account"]["label"], "Nach Reload")
+        self.assertEqual(original["accounts"][0]["label"], "Giro")
+
     def test_get_returns_masked_accounts_without_mutating_store(self):
         before = deepcopy(self.coordinator.store.data)
 

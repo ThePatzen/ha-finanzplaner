@@ -138,6 +138,58 @@ class AccountsAndMigrationTests(unittest.TestCase):
 
         self.assertEqual(loaded["version"], 2)
 
+    def test_finance_store_normalizes_v2_without_rewriting_historical_account_links(self):
+        current_data = {
+            "version": 2,
+            "accounts": [
+                {
+                    "id": "configured-account",
+                    "account_reference": "BANK-ACCOUNT-42",
+                    "owner_targets": ["person.alex"],
+                    "active": False,
+                }
+            ],
+            "bookings": [
+                {
+                    "id": "booking-1",
+                    "account": "DIFFERENT-REFERENCE",
+                    "account_reference": "DIFFERENT-REFERENCE",
+                    "account_id": "configured-account",
+                    "allocations": [],
+                }
+            ],
+        }
+
+        class FakeStore:
+            def __init__(self, hass, version, key):
+                self._async_migrate_func = None
+
+            async def async_load(self):
+                return current_data
+
+            async def async_save(self, data):
+                self.saved = data
+
+        fake_storage = types.ModuleType("homeassistant.helpers.storage")
+        fake_storage.Store = FakeStore
+        fake_homeassistant = types.ModuleType("homeassistant")
+        fake_helpers = types.ModuleType("homeassistant.helpers")
+
+        with patch.dict(
+            sys.modules,
+            {
+                "homeassistant": fake_homeassistant,
+                "homeassistant.helpers": fake_helpers,
+                "homeassistant.helpers.storage": fake_storage,
+            },
+        ):
+            store = FinanceStore(object(), "Testhaushalt")
+            loaded = asyncio.run(store.async_load())
+
+        self.assertEqual(loaded["bookings"][0]["account_id"], "configured-account")
+        self.assertEqual(loaded["accounts"][0]["owner_targets"], ["person.alex"])
+        self.assertFalse(loaded["accounts"][0]["active"])
+
 
 if __name__ == "__main__":
     unittest.main()

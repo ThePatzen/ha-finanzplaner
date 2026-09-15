@@ -24,7 +24,7 @@ def empty_data(household_name: str = DEFAULT_HOUSEHOLD_NAME) -> dict[str, Any]:
 def migrate_store_data(
     stored: dict[str, object] | None, household_name: str
 ) -> dict[str, object]:
-    """Migrate stored data to the current schema without persisting it."""
+    """Migrate version-one data to the current schema without persisting it."""
 
     data: dict[str, Any] = deepcopy(empty_data(household_name))
     if isinstance(stored, dict):
@@ -85,6 +85,61 @@ def migrate_store_data(
     return data
 
 
+def normalize_current_store_data(
+    stored: dict[str, object] | None, household_name: str
+) -> dict[str, object]:
+    """Fill safe defaults in current data while preserving configured links."""
+
+    data: dict[str, Any] = deepcopy(empty_data(household_name))
+    if isinstance(stored, dict):
+        data.update(deepcopy(stored))
+
+    default_settings = empty_data(household_name)["settings"]
+    settings = data.get("settings")
+    data["settings"] = {
+        **default_settings,
+        **(settings if isinstance(settings, dict) else {}),
+    }
+
+    accounts = data.get("accounts")
+    if not isinstance(accounts, list):
+        accounts = []
+        data["accounts"] = accounts
+    account_by_reference: dict[str, dict[str, Any]] = {}
+    for account in accounts:
+        if not isinstance(account, dict):
+            continue
+        reference = normalize_account_reference(account.get("account_reference", ""))
+        if reference:
+            account["account_reference"] = reference
+            account["id"] = account.get("id") or account_id_for_reference(reference)
+            account.setdefault("owner_targets", [])
+            account.setdefault("active", True)
+            account.setdefault("currency", "EUR")
+            account_by_reference.setdefault(reference, account)
+
+    bookings = data.get("bookings")
+    if not isinstance(bookings, list):
+        bookings = []
+        data["bookings"] = bookings
+    for booking in bookings:
+        if not isinstance(booking, dict):
+            continue
+        reference = normalize_account_reference(
+            booking.get("account_reference", booking.get("account", ""))
+        )
+        booking["account_reference"] = reference
+        # A v2 account_id is an explicit historical link. Never recompute it
+        # from a later import's account reference during a normal load.
+        if "account_id" not in booking:
+            account = account_by_reference.get(reference)
+            booking["account_id"] = account.get("id") if account else None
+        booking.setdefault("allocations", [])
+
+    data["version"] = STORAGE_VERSION
+    return data
+
+
 class FinanceStore:
     """Small wrapper that keeps storage access in one place."""
 
@@ -110,7 +165,12 @@ class FinanceStore:
 
     async def async_load(self) -> dict[str, Any]:
         stored = await self._store.async_load()
-        self.data = migrate_store_data(stored, self._household_name)
+        version = stored.get("version") if isinstance(stored, dict) else None
+        self.data = (
+            normalize_current_store_data(stored, self._household_name)
+            if version == STORAGE_VERSION
+            else migrate_store_data(stored, self._household_name)
+        )
         return self.data
 
     async def async_save(self) -> None:

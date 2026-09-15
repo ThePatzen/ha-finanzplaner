@@ -84,6 +84,9 @@ export function addAllocationDraftRow(total, allocations = []) {
       area: current.area ?? null,
       category: current.category ?? null,
       project: current.project ?? null,
+      ...(current && Object.hasOwn(current, "amount_input")
+        ? { amount_input: current.amount_input }
+        : {}),
     } : row;
   });
 }
@@ -93,7 +96,11 @@ export function updateAllocationDraftRow(allocations = [], index, field, value) 
     if (rowIndex !== index) return { ...row };
     if (field === "amount") {
       const amount = Number(String(value).trim().replace(",", "."));
-      return { ...row, amount: Number.isFinite(amount) ? amount : 0 };
+      return {
+        ...row,
+        amount: Number.isFinite(amount) ? amount : 0,
+        amount_input: String(value).trim(),
+      };
     }
     return { ...row, [field]: value || null };
   });
@@ -106,10 +113,17 @@ export function removeAllocationDraftRow(allocations = [], index) {
 export function allocationSubmitState(total, allocations = [], submitting = false) {
   const remaining = allocationRemaining(total, allocations);
   const missingTarget = !allocations.length || allocations.some((row) => !row.target);
+  const invalidAmount = allocations.some((row) => {
+    const value = row?.amount_input ?? row?.amount;
+    const amount = Number(String(value ?? "").trim().replace(",", "."));
+    return !Number.isFinite(amount)
+      || Math.abs(Math.round(amount * 100) - amount * 100) > 1e-7;
+  });
   return {
     missingTarget,
+    invalidAmount,
     remaining,
-    disabled: missingTarget || remaining !== 0 || submitting,
+    disabled: missingTarget || invalidAmount || remaining !== 0 || submitting,
   };
 }
 

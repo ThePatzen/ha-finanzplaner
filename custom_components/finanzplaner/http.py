@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 import hashlib
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -32,6 +33,10 @@ from .importers.excel_template import (
 
 
 EXCEL_MAX_BYTES = 10 * 1024 * 1024
+_IBAN_PATTERN = re.compile(
+    r"(?<![A-Z0-9])([A-Z]{2}\s*\d{2}(?:\s*[A-Z0-9]){11,30})(?![A-Z0-9])",
+    re.IGNORECASE,
+)
 
 
 def _coordinator(hass: Any) -> FinanzplanerCoordinator | None:
@@ -62,6 +67,34 @@ def _booking_payload(
     }
 
 
+def _stored_booking_fingerprints(bookings: object) -> set[str]:
+    """Return stored IDs plus canonical fingerprints for legacy records."""
+
+    fingerprints: set[str] = set()
+    if not isinstance(bookings, list):
+        return fingerprints
+    for item in bookings:
+        if not isinstance(item, dict):
+            continue
+        stored_id = item.get("id")
+        if isinstance(stored_id, str):
+            fingerprints.add(stored_id)
+        try:
+            booking = Booking(
+                account=str(item.get("account_reference", item.get("account", ""))),
+                booking_date=date.fromisoformat(str(item["booking_date"])),
+                amount=float(item["amount"]),
+                purpose=str(item.get("purpose", "")),
+                reference=str(item.get("reference", "")),
+                counterparty=str(item.get("counterparty", "")),
+                currency=str(item.get("currency", "EUR")),
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        fingerprints.add(booking_fingerprint(booking))
+    return fingerprints
+
+
 def _redact_account_value(value: object) -> object:
     """Keep account context without exposing a full account identifier."""
 
@@ -73,6 +106,14 @@ def _redact_account_value(value: object) -> object:
     visible_length = min(4, len(normalized) - 1)
     suffix = normalized[-visible_length:] if visible_length else ""
     return f"…{suffix}"
+
+
+def _mask_iban_occurrences(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        normalized = normalize_account_reference(match.group(1))
+        return f"…{normalized[-4:]}"
+
+    return _IBAN_PATTERN.sub(replace, value)
 
 
 def _response_payload(value: object) -> object:
@@ -90,6 +131,8 @@ def _response_payload(value: object) -> object:
         }
     if isinstance(value, list):
         return [_response_payload(item) for item in value]
+    if isinstance(value, str):
+        return _mask_iban_occurrences(value)
     return value
 
 
@@ -271,7 +314,7 @@ class AccountsView(HomeAssistantView):
 class AccountView(HomeAssistantView):
     """Update the editable fields of one locally discovered account."""
 
-    url = "/api/finanzplaner/accounts/<account_id>"
+    url = "/api/finanzplaner/accounts/{account_id}"
     name = "api:finanzplaner:account"
     requires_auth = True
 
@@ -279,17 +322,6 @@ class AccountView(HomeAssistantView):
         coordinator = _coordinator(request.app["hass"])
         if coordinator is None:
             raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
-
-        account = next(
-            (
-                item
-                for item in coordinator.store.data.get("accounts", [])
-                if isinstance(item, dict) and item.get("id") == account_id
-            ),
-            None,
-        )
-        if account is None:
-            raise web.HTTPNotFound(text="Konto nicht gefunden.")
 
         try:
             payload = await request.json()
@@ -310,6 +342,17 @@ class AccountView(HomeAssistantView):
             update = validate_account_update(payload, valid_targets)
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        account = next(
+            (
+                item
+                for item in coordinator.store.data.get("accounts", [])
+                if isinstance(item, dict) and item.get("id") == account_id
+            ),
+            None,
+        )
+        if account is None:
+            raise web.HTTPNotFound(text="Konto nicht gefunden.")
 
         account.update(update)
         account["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -335,7 +378,7 @@ class UnresolvedBookingsView(HomeAssistantView):
 class BookingAssignmentView(HomeAssistantView):
     """Resolve one booking against live Home Assistant persons or the household."""
 
-    url = "/api/finanzplaner/bookings/<booking_id>"
+    url = "/api/finanzplaner/bookings/{booking_id}"
     name = "api:finanzplaner:booking"
     requires_auth = True
 
@@ -412,7 +455,7 @@ class BookingAssignmentView(HomeAssistantView):
 class BookingAllocationsView(HomeAssistantView):
     """Persist a custom cent-exact allocation for one booking."""
 
-    url = "/api/finanzplaner/bookings/<booking_id>/allocations"
+    url = "/api/finanzplaner/bookings/{booking_id}/allocations"
     name = "api:finanzplaner:booking:allocations"
     requires_auth = True
 
@@ -511,7 +554,9 @@ class ImportView(HomeAssistantView):
         except Exception as exc:
             raise web.HTTPBadRequest(text=f"Import konnte nicht gelesen werden: {exc}") from exc
 
-        existing = {booking.get("id") for booking in coordinator.store.data.get("bookings", [])}
+        existing = _stored_booking_fingerprints(
+            coordinator.store.data.get("bookings", [])
+        )
         accepted = []
         duplicates = 0
         new_account_ids: set[str] = set()

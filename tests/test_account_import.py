@@ -194,7 +194,9 @@ class BankImportViewTests(unittest.TestCase):
             "account": "AT12 3456 7890 1234 5678",
             "account_reference": "AT123456789012345678",
             "account_id": "account-1",
-            "purpose": "Testkauf",
+            "purpose": "Überweisung von AT12 3456 7890 1234 5678 für Hunde",
+            "reference": "IBAN AT123456789012345678",
+            "label": "Konto AT123456789012345678",
         }
 
         response = self.http._response_payload(
@@ -203,7 +205,9 @@ class BankImportViewTests(unittest.TestCase):
 
         self.assertEqual(response["last_unresolved"]["account"], "…5678")
         self.assertEqual(response["bookings"][0]["account_reference"], "…5678")
-        self.assertEqual(response["booking"]["purpose"], "Testkauf")
+        self.assertNotIn("AT123456789012345678", response["booking"]["purpose"])
+        self.assertNotIn("AT123456789012345678", response["booking"]["reference"])
+        self.assertNotIn("AT123456789012345678", response["booking"]["label"])
         self.assertEqual(booking["account"], "AT12 3456 7890 1234 5678")
         self.assertEqual(booking["account_reference"], "AT123456789012345678")
 
@@ -270,6 +274,24 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(len(self.coordinator.store.data["accounts"]), 1)
         self.assertEqual(len(self.coordinator.store.data["bookings"]), 1)
         self.assertEqual(self.coordinator.store.data["bookings"][0]["id"], booking_id)
+
+    def test_import_deduplicates_spaced_and_compact_iban_forms(self):
+        spaced = (
+            "<?xml version=\"1.0\"?><Document><BkToCstmrStmt><Stmt>"
+            "<Acct><Id><IBAN>AT12 3456 7890 1234 5678</IBAN></Id></Acct>"
+            "<Ntry><Amt Ccy=\"EUR\">12.50</Amt><CdtDbtInd>DBIT</CdtDbtInd>"
+            "<BookgDt><Dt>2026-09-04</Dt></BookgDt><NtryDtls><TxDtls>"
+            "<Refs><EndToEndId>REF-42</EndToEndId></Refs><RmtInf><Ustrd>Testkauf</Ustrd></RmtInf>"
+            "</TxDtls></NtryDtls></Ntry></Stmt></BkToCstmrStmt></Document>"
+        )
+        compact = spaced.replace("AT12 3456 7890 1234 5678", "AT123456789012345678")
+
+        self.assertEqual(self._import("spaced.xml", spaced)["accepted"], 1)
+        result = self._import("compact.xml", compact)
+
+        self.assertEqual(result["accepted"], 0)
+        self.assertEqual(result["duplicates"], 1)
+        self.assertEqual(len(self.coordinator.store.data["bookings"]), 1)
 
     def test_parser_error_does_not_mutate_accounts_or_imports(self):
         before = deepcopy(self.coordinator.store.data)
