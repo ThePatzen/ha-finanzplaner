@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 import hashlib
 from typing import Any
 from uuid import uuid4
@@ -84,6 +84,7 @@ def _response_payload(value: object) -> object:
             key: (
                 _redact_account_value(item)
                 if key in {"account", "account_reference"}
+                and isinstance(item, str)
                 else _response_payload(item)
             )
             for key, item in value.items()
@@ -91,6 +92,55 @@ def _response_payload(value: object) -> object:
     if isinstance(value, list):
         return [_response_payload(item) for item in value]
     return value
+
+
+def account_payload(account: dict[str, object]) -> dict[str, object]:
+    """Return an account record without exposing its full IBAN."""
+
+    payload = dict(account)
+    iban = normalize_account_reference(payload.pop("iban", ""))
+    if "account_reference" in payload:
+        payload["account_reference"] = _redact_account_value(
+            payload["account_reference"]
+        )
+    payload["iban_masked"] = f"•••• {iban[-4:]}" if iban else None
+    return payload
+
+
+def validate_account_update(
+    payload: object, valid_targets: set[str]
+) -> dict[str, object]:
+    """Validate and normalize the editable fields of an account."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("Die Kontodaten müssen ein Objekt sein.")
+
+    label = payload.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError("Bitte einen Kontonamen eingeben.")
+
+    owner_targets = payload.get("owner_targets")
+    if not isinstance(owner_targets, list) or not all(
+        isinstance(target, str) for target in owner_targets
+    ):
+        raise ValueError("Die Kontoinhaber müssen eine Liste gültiger Ziele sein.")
+    normalized_targets = [target.strip() for target in owner_targets]
+    if (
+        any(not target for target in normalized_targets)
+        or len(set(normalized_targets)) != len(normalized_targets)
+        or any(target not in valid_targets for target in normalized_targets)
+    ):
+        raise ValueError("Ein Kontoinhaber verweist nicht auf eine bekannte Person.")
+
+    active = payload.get("active")
+    if not isinstance(active, bool):
+        raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
+
+    return {
+        "label": label.strip(),
+        "owner_targets": normalized_targets,
+        "active": active,
+    }
 
 
 def _demo_overview() -> dict[str, Any]:
@@ -190,6 +240,83 @@ class PersonsView(HomeAssistantView):
         ]
         persons.sort(key=lambda item: item["name"].casefold())
         return self.json({"persons": persons})
+
+
+class AccountsView(HomeAssistantView):
+    """List locally discovered accounts with masked identifiers."""
+
+    url = "/api/finanzplaner/accounts"
+    name = "api:finanzplaner:accounts"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        accounts = (
+            []
+            if coordinator is None
+            else coordinator.store.data.get("accounts", [])
+        )
+        return self.json(
+            _response_payload(
+                {
+                    "accounts": [
+                        account_payload(account)
+                        for account in accounts
+                        if isinstance(account, dict)
+                    ]
+                }
+            )
+        )
+
+
+class AccountView(HomeAssistantView):
+    """Update the editable fields of one locally discovered account."""
+
+    url = "/api/finanzplaner/accounts/<account_id>"
+    name = "api:finanzplaner:account"
+    requires_auth = True
+
+    async def post(self, request: web.Request, account_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+
+        account = next(
+            (
+                item
+                for item in coordinator.store.data.get("accounts", [])
+                if isinstance(item, dict) and item.get("id") == account_id
+            ),
+            None,
+        )
+        if account is None:
+            raise web.HTTPNotFound(text="Konto nicht gefunden.")
+
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(
+                text="Die Kontodaten sind kein gültiges JSON."
+            ) from exc
+
+        valid_targets = {
+            "household",
+            *(
+                state.entity_id
+                for state in request.app["hass"].states.async_all()
+                if state.domain == "person"
+            ),
+        }
+        try:
+            update = validate_account_update(payload, valid_targets)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        account.update(update)
+        account["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"account": account_payload(account)}))
 
 
 class UnresolvedBookingsView(HomeAssistantView):

@@ -26,6 +26,8 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
     """Register the API views once; setup itself is completed by the config entry."""
 
     from .http import (
+        AccountsView,
+        AccountView,
         BookingAssignmentView,
         ExcelConfirmView,
         ExcelPreviewView,
@@ -38,6 +40,8 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.http.register_view(OverviewView)
     hass.http.register_view(PersonsView)
+    hass.http.register_view(AccountsView)
+    hass.http.register_view(AccountView)
     hass.http.register_view(UnresolvedBookingsView)
     hass.http.register_view(BookingAssignmentView)
     hass.http.register_view(ImportView)
