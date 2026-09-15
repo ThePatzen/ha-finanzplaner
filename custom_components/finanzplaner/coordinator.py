@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN
 from .core import overview_values
+from .importers.excel_template import ExcelImportPreview
 from .storage import FinanceStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ class FinanzplanerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def __init__(self, hass: Any, store: FinanceStore) -> None:
         self.store = store
+        self.pending_excel_previews: dict[str, ExcelImportPreview] = {}
         super().__init__(
             hass,
             logger=_LOGGER,

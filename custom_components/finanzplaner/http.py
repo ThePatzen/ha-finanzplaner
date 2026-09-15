@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 import hashlib
 from typing import Any
+from uuid import uuid4
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
@@ -19,6 +20,15 @@ from .core import (
     split_amount,
 )
 from .coordinator import FinanzplanerCoordinator
+from .importers.excel_template import (
+    XlsxImportError,
+    confirm_suggestions,
+    preview_payload,
+    preview_template,
+)
+
+
+EXCEL_MAX_BYTES = 10 * 1024 * 1024
 
 
 def _coordinator(hass: Any) -> FinanzplanerCoordinator | None:
@@ -285,5 +295,90 @@ class ImportView(HomeAssistantView):
                 "accepted": len(accepted),
                 "duplicates": duplicates,
                 "preview": accepted,
+            }
+        )
+
+
+class ExcelPreviewView(HomeAssistantView):
+    """Analyze an uploaded workbook without persisting its bytes or suggestions."""
+
+    url = "/api/finanzplaner/excel/preview"
+    name = "api:finanzplaner:excel:preview"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        form = await request.post()
+        upload = form.get("file")
+        if not isinstance(upload, web.FileField):
+            raise web.HTTPBadRequest(text="Bitte eine XLSX-Datei auswählen.")
+        filename = upload.filename or ""
+        if not filename.lower().endswith(".xlsx"):
+            raise web.HTTPBadRequest(text="Bitte eine XLSX-Datei auswählen.")
+        raw_bytes = upload.file.read(EXCEL_MAX_BYTES + 1)
+        if len(raw_bytes) > EXCEL_MAX_BYTES:
+            raise web.HTTPBadRequest(text="Die XLSX-Datei darf höchstens 10 MiB groß sein.")
+        try:
+            preview = preview_template(raw_bytes, uuid4().hex)
+        except XlsxImportError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+        coordinator.pending_excel_previews[preview.preview_id] = preview
+        return self.json(preview_payload(preview))
+
+
+class ExcelConfirmView(HomeAssistantView):
+    """Persist only the explicitly selected items from a transient preview."""
+
+    url = "/api/finanzplaner/excel/confirm"
+    name = "api:finanzplaner:excel:confirm"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Bestätigung ist kein gültiges JSON.") from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Bestätigung muss ein Objekt sein.")
+        preview_id = payload.get("preview_id")
+        if not isinstance(preview_id, str) or not preview_id:
+            raise web.HTTPBadRequest(text="Eine gültige Vorschau-ID ist erforderlich.")
+        preview = coordinator.pending_excel_previews.get(preview_id)
+        if preview is None:
+            raise web.HTTPNotFound(text="Die Excel-Vorschau wurde nicht gefunden.")
+        try:
+            selected_ids = payload.get("selected_ids")
+            overrides = payload.get("overrides")
+            items, skipped = confirm_suggestions(preview, selected_ids, overrides)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        import_id = uuid4().hex
+        for item in items:
+            item["import_id"] = import_id
+        coordinator.store.data.setdefault("plan_items", []).extend(items)
+        coordinator.store.data.setdefault("imports", []).append(
+            {
+                "format": "XLSX",
+                "import_id": import_id,
+                "accepted": len(items),
+                "skipped": skipped,
+                "source_sheets": sorted({item["source_sheet"] for item in items}),
+                "warning_count": len(preview.warnings),
+            }
+        )
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        coordinator.pending_excel_previews.pop(preview_id, None)
+        return self.json(
+            {
+                "import_id": import_id,
+                "accepted": len(items),
+                "skipped": skipped,
             }
         )

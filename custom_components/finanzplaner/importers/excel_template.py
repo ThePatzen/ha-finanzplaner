@@ -544,3 +544,117 @@ def preview_template(raw: bytes, preview_id: str) -> ExcelImportPreview:
         skipped_rows=skipped_rows,
         historical_rows=historical_rows,
     )
+
+
+def _json_number(value: Decimal | None) -> float | None:
+    return float(value) if value is not None else None
+
+
+def _suggestion_payload(suggestion: PlanItemSuggestion) -> dict[str, object]:
+    """Convert one immutable suggestion to the JSON-safe preview shape."""
+
+    return {
+        "id": suggestion.id,
+        "direction": suggestion.direction,
+        "name": suggestion.name,
+        "category": suggestion.category,
+        "area": suggestion.area,
+        "project": suggestion.project,
+        "amount": float(suggestion.amount),
+        "frequency_months": suggestion.frequency_months,
+        "normalized_monthly": _json_number(suggestion.normalized_monthly),
+        "annual_amount": _json_number(suggestion.annual_amount),
+        "person_hint": suggestion.person_hint,
+        "source_sheet": suggestion.source_sheet,
+        "source_row": suggestion.source_row,
+        "source_columns": list(suggestion.source_columns),
+        "source_formula": suggestion.source_formula,
+        "warnings": list(suggestion.warnings),
+    }
+
+
+def preview_payload(preview: ExcelImportPreview) -> dict[str, object]:
+    """Build a JSON-safe preview without retaining the uploaded workbook."""
+
+    return {
+        "preview_id": preview.preview_id,
+        "suggestions": [_suggestion_payload(item) for item in preview.suggestions],
+        "warnings": [
+            {
+                "code": warning.code,
+                "message": warning.message,
+                "sheet": warning.sheet,
+                "row": warning.row,
+            }
+            for warning in preview.warnings
+        ],
+        "skipped_rows": preview.skipped_rows,
+        "historical_rows": preview.historical_rows,
+    }
+
+
+def confirm_suggestions(
+    preview: ExcelImportPreview,
+    selected_ids: list[str],
+    overrides: dict[str, dict[str, object]] | None,
+) -> tuple[list[dict[str, object]], int]:
+    """Validate and materialize selected suggestions for persistent storage."""
+
+    suggestion_by_id = {item.id: item for item in preview.suggestions}
+    if not isinstance(selected_ids, list) or not all(
+        isinstance(item_id, str) for item_id in selected_ids
+    ):
+        raise ValueError("selected_ids muss eine Liste von IDs sein.")
+    if len(set(selected_ids)) != len(selected_ids):
+        raise ValueError("selected_ids darf keine doppelten IDs enthalten.")
+    unknown_ids = set(selected_ids) - set(suggestion_by_id)
+    if unknown_ids:
+        raise ValueError("Die Vorschau enthält eine unbekannte Auswahl-ID.")
+    if overrides is None:
+        overrides = {}
+    if not isinstance(overrides, dict):
+        raise ValueError("overrides muss ein Objekt sein.")
+    unknown_override_ids = set(overrides) - set(suggestion_by_id)
+    if unknown_override_ids:
+        raise ValueError("overrides enthält eine unbekannte Auswahl-ID.")
+
+    allowed = {"direction", "category", "area", "project", "person_hint"}
+    normalized_overrides: dict[str, dict[str, object]] = {}
+    for suggestion_id, values in overrides.items():
+        if not isinstance(values, dict) or not set(values).issubset(allowed):
+            raise ValueError("Es dürfen nur Planposten-Zuordnungen überschrieben werden.")
+        if "direction" in values and values["direction"] not in {"income", "expense", "saving"}:
+            raise ValueError("Die Richtung des Planpostens ist ungültig.")
+        for key in ("category", "area", "project", "person_hint"):
+            if key in values and values[key] is not None and not isinstance(values[key], str):
+                raise ValueError("Planposten-Zuordnungen müssen Text oder leer sein.")
+        normalized_overrides[suggestion_id] = values
+
+    selected = set(selected_ids)
+    materialized: list[dict[str, object]] = []
+    for suggestion in preview.suggestions:
+        if suggestion.id not in selected:
+            continue
+        values: dict[str, object] = {
+            "id": suggestion.id,
+            "active": True,
+            "direction": suggestion.direction,
+            "name": suggestion.name,
+            "category": suggestion.category,
+            "area": suggestion.area,
+            "project": suggestion.project,
+            "amount": float(abs(suggestion.amount)),
+            "remaining_amount": float(abs(suggestion.amount)),
+            "frequency_months": suggestion.frequency_months,
+            "normalized_monthly": _json_number(suggestion.normalized_monthly),
+            "annual_amount": _json_number(suggestion.annual_amount),
+            "person_hint": suggestion.person_hint,
+            "source_sheet": suggestion.source_sheet,
+            "source_row": suggestion.source_row,
+            "source_columns": list(suggestion.source_columns),
+            "source_formula": suggestion.source_formula,
+            "warnings": list(suggestion.warnings),
+        }
+        values.update(normalized_overrides.get(suggestion.id, {}))
+        materialized.append(values)
+    return materialized, len(preview.suggestions) - len(selected_ids)
