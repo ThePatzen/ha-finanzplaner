@@ -822,9 +822,10 @@ class FinanzplanerPanel extends HTMLElement {
   async _handleAssignment(event) {
     event.preventDefault();
     const form = event.currentTarget;
+    if (form.dataset.submitting === "true") return;
     const rows = this._allocationDrafts.get(form.dataset.bookingId) || [];
     const total = Number(form.dataset.bookingTotal) || 0;
-    const submitState = allocationSubmitState(total, rows);
+    const submitState = allocationSubmitState(total, rows, form.dataset.submitting === "true");
     const { remaining } = submitState;
     const status = form.querySelector("[data-allocation-status]");
     if (submitState.disabled) {

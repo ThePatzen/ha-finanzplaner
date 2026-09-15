@@ -118,7 +118,7 @@ test("updates and removes draft rows without mutating the existing draft", () =>
   assert.deepEqual(utils.removeAllocationDraftRow(edited, 1), [edited[0]]);
 });
 
-test("reports missing targets, remaining cents, and submitting state", () => {
+test("reports missing targets, remaining cents, and blocks a valid draft while submitting", () => {
   assert.deepEqual(
     utils.allocationSubmitState(10, [{ target: "", amount: 10 }]),
     { missingTarget: true, remaining: 0, disabled: true },
