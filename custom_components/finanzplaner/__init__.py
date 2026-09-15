@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
-from .const import CONF_HOUSEHOLD_NAME, DEFAULT_HOUSEHOLD_NAME, DOMAIN, PLATFORMS
+from .const import (
+    CONF_HOUSEHOLD_NAME,
+    DEFAULT_HOUSEHOLD_NAME,
+    DOMAIN,
+    PLATFORMS,
+    panel_static_path,
+)
+
+
+def _integration_version() -> str:
+    """Read the release version used to isolate frontend module caches."""
+
+    manifest_path = Path(__file__).with_name("manifest.json")
+    return json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
 
 
 async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
@@ -49,8 +63,9 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     static_dir = Path(__file__).parent / "frontend"
+    static_url = panel_static_path(_integration_version())
     await hass.http.async_register_static_paths(
-        [StaticPathConfig("/api/finanzplaner/static", str(static_dir), False)]
+        [StaticPathConfig(static_url, str(static_dir), False)]
     )
     frontend.async_register_built_in_panel(
         hass,
@@ -61,7 +76,7 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
         config={
             "_panel_custom": {
                 "name": "finanzplaner-panel",
-                "module_url": "/api/finanzplaner/static/panel.js",
+                "module_url": f"{static_url}/panel.js",
                 "embed_iframe": False,
             }
         },

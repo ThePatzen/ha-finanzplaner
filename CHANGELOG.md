@@ -8,6 +8,10 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.2.3] – 2026-09-15
+
+- statische Panel-Dateien je Release über einen eigenen URL-Pfad ausgeliefert, damit Browser- und Proxy-Caches keine ältere Oberfläche weiterverwenden
+
 ## [0.2.2] – 2026-09-15
 
 - authentifizierte Panel-API-Aufrufe für Excel-, Bankimport und Prüfliste repariert
@@ -46,3 +50,4 @@ Erste vorbereitete vertikale Version:
 [0.2.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.0
 [0.2.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.1
 [0.2.2]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.2
+[0.2.3]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.3

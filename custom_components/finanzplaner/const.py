@@ -8,3 +8,9 @@ PLATFORMS = ["sensor"]
 
 CONF_HOUSEHOLD_NAME = "household_name"
 DEFAULT_HOUSEHOLD_NAME = "Gemeinsamer Haushalt"
+
+
+def panel_static_path(version: str) -> str:
+    """Return a release-scoped URL root for cached panel modules."""
+
+    return f"/api/{DOMAIN}/static/{version}"
