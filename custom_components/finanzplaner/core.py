@@ -140,6 +140,89 @@ def validate_allocations(total: float, allocations: list[Allocation]) -> list[st
     return [] if allocated == expected else ["amount_mismatch"]
 
 
+def parse_allocation_payload(
+    payload: object,
+    total: float,
+    valid_targets: set[str],
+) -> list[Allocation]:
+    """Validate a custom allocation payload without rounding monetary input."""
+
+    if not isinstance(payload, list) or not payload:
+        raise ValueError("Die Aufteilung muss eine nicht leere Liste sein.")
+
+    normalized: list[dict[str, object]] = []
+    targets: set[str] = set()
+    allocated_total = Decimal("0.00")
+    for item in payload:
+        if not isinstance(item, dict):
+            raise ValueError("Jeder Anteil muss ein Objekt sein.")
+
+        target = item.get("target")
+        if not isinstance(target, str) or not target.strip():
+            raise ValueError("Jeder Anteil benötigt ein gültiges Ziel.")
+        target = target.strip()
+        if target not in valid_targets:
+            raise ValueError("Eine Zuordnung verweist nicht auf eine bekannte Person.")
+        if target in targets:
+            raise ValueError("Jedes Zuordnungsziel darf nur einmal vorkommen.")
+        targets.add(target)
+
+        value = item.get("amount")
+        if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+            raise ValueError("Jeder Anteil benötigt einen positiven Eurobetrag.")
+        try:
+            amount = Decimal(str(value))
+        except InvalidOperation as exc:
+            raise ValueError("Jeder Anteil benötigt einen positiven Eurobetrag.") from exc
+        if not amount.is_finite() or amount <= 0 or amount.as_tuple().exponent < -2:
+            raise ValueError(
+                "Beträge müssen positiv sein und dürfen höchstens zwei Nachkommastellen haben."
+            )
+
+        area = item.get("area")
+        if area not in (None, "Hunde"):
+            raise ValueError("Dieser Bereich ist noch nicht verfügbar.")
+        category = item.get("category")
+        project = item.get("project")
+        if category is not None and not isinstance(category, str):
+            raise ValueError("Die Kategorie muss eine Zeichenfolge sein.")
+        if project is not None and not isinstance(project, str):
+            raise ValueError("Das Projekt muss eine Zeichenfolge sein.")
+
+        allocated_total += amount
+        normalized.append(
+            {
+                "target": target,
+                "amount": amount,
+                "area": area,
+                "category": category,
+                "project": project,
+            }
+        )
+
+    try:
+        expected_total = abs(Decimal(str(total)))
+    except InvalidOperation as exc:
+        raise ValueError(
+            "Die Aufteilung deckt den Buchungsbetrag nicht centgenau ab."
+        ) from exc
+    if not expected_total.is_finite() or allocated_total != expected_total:
+        raise ValueError(
+            "Die Aufteilung deckt den Buchungsbetrag nicht centgenau ab."
+        )
+
+    return [
+        Allocation(
+            target=str(item["target"]),
+            amount=float(item["amount"]),
+            area=item["area"],
+            category=item["category"],
+            project=item["project"],
+        )
+        for item in normalized
+    ]
+
+
 def split_amount(total: float, targets: list[str]) -> list[Allocation]:
     """Split a booking amount into positive cent-exact shares for its targets."""
 

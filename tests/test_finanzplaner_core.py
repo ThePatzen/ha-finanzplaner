@@ -37,6 +37,27 @@ class AllocationRulesTests(unittest.TestCase):
         self.assertEqual([item.amount for item in allocations], [33.34, 33.33, 33.33])
         self.assertEqual(core.validate_allocations(-100, allocations), [])
 
+    def test_custom_allocation_payload_is_cent_exact(self):
+        core = load_core()
+
+        allocations = core.parse_allocation_payload(
+            [
+                {"target": "person.alex", "amount": 33.34},
+                {"target": "person.sam", "amount": 33.33},
+                {
+                    "target": "household",
+                    "amount": 33.33,
+                    "area": "Hunde",
+                },
+            ],
+            -100.00,
+            {"person.alex", "person.sam", "household"},
+        )
+
+        self.assertEqual([allocation.amount for allocation in allocations], [33.34, 33.33, 33.33])
+        self.assertEqual(allocations[-1].target, "household")
+        self.assertEqual(allocations[-1].area, "Hunde")
+
 
 class ForecastTests(unittest.TestCase):
     def test_signed_plan_amount_uses_direction_for_positive_imports(self):

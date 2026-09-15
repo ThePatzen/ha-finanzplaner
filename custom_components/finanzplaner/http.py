@@ -17,6 +17,7 @@ from .core import (
     ensure_account,
     normalize_account_reference,
     overview_values,
+    parse_allocation_payload,
     parse_camt053,
     parse_mt940,
     split_amount,
@@ -352,7 +353,6 @@ class BookingAssignmentView(HomeAssistantView):
         targets = payload.get("targets")
         if not isinstance(targets, list) or not all(isinstance(target, str) for target in targets):
             raise web.HTTPBadRequest(text="Bitte mindestens ein gültiges Zuordnungsziel auswählen.")
-        targets = [target.strip() for target in targets if target.strip()]
         valid_targets = {
             "household",
             *(
@@ -361,17 +361,6 @@ class BookingAssignmentView(HomeAssistantView):
                 if state.domain == "person"
             ),
         }
-        if (
-            not targets
-            or len(set(targets)) != len(targets)
-            or any(target not in valid_targets for target in targets)
-        ):
-            raise web.HTTPBadRequest(text="Eine Zuordnung verweist nicht auf eine bekannte Person.")
-
-        area = payload.get("area") or None
-        if area not in (None, "Hunde"):
-            raise web.HTTPBadRequest(text="Dieser Bereich ist noch nicht verfügbar.")
-
         booking = next(
             (
                 item
@@ -383,20 +372,102 @@ class BookingAssignmentView(HomeAssistantView):
         if booking is None:
             raise web.HTTPNotFound(text="Buchung nicht gefunden.")
 
-        allocations = split_amount(float(booking.get("amount", 0)), targets)
+        area = payload.get("area") or None
+        category = payload.get("category")
+        project = payload.get("project")
+        try:
+            split = split_amount(float(booking.get("amount", 0)), targets)
+            allocations = parse_allocation_payload(
+                [
+                    {
+                        "target": allocation.target,
+                        "amount": allocation.amount,
+                        "area": area,
+                        "category": category,
+                        "project": project,
+                    }
+                    for allocation in split
+                ],
+                float(booking.get("amount", 0)),
+                valid_targets,
+            )
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
         booking["allocations"] = [
             {
                 "target": allocation.target,
                 "amount": allocation.amount,
-                "area": area,
-                "category": None,
-                "project": None,
+                "area": allocation.area,
+                "category": allocation.category,
+                "project": allocation.project,
             }
             for allocation in allocations
         ]
         booking["status"] = "resolved"
         await coordinator.store.async_save()
-        await coordinator.async_refresh_data()
+        await coordinator.async_refresh()
+        return self.json(_response_payload({"booking": booking}))
+
+
+class BookingAllocationsView(HomeAssistantView):
+    """Persist a custom cent-exact allocation for one booking."""
+
+    url = "/api/finanzplaner/bookings/<booking_id>/allocations"
+    name = "api:finanzplaner:booking:allocations"
+    requires_auth = True
+
+    async def post(self, request: web.Request, booking_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(
+                text="Die Aufteilung ist kein gültiges JSON."
+            ) from exc
+
+        booking = next(
+            (
+                item
+                for item in coordinator.store.data.get("bookings", [])
+                if isinstance(item, dict) and item.get("id") == booking_id
+            ),
+            None,
+        )
+        if booking is None:
+            raise web.HTTPNotFound(text="Buchung nicht gefunden.")
+
+        valid_targets = {
+            "household",
+            *(
+                state.entity_id
+                for state in request.app["hass"].states.async_all()
+                if state.domain == "person"
+            ),
+        }
+        try:
+            allocations = parse_allocation_payload(
+                payload,
+                float(booking.get("amount", 0)),
+                valid_targets,
+            )
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        booking["allocations"] = [
+            {
+                "target": allocation.target,
+                "amount": allocation.amount,
+                "area": allocation.area,
+                "category": allocation.category,
+                "project": allocation.project,
+            }
+            for allocation in allocations
+        ]
+        booking["status"] = "resolved"
+        await coordinator.store.async_save()
+        await coordinator.async_refresh()
         return self.json(_response_payload({"booking": booking}))
 
 
