@@ -76,13 +76,21 @@ def _redact_account_value(value: object) -> object:
     return value
 
 
-def _import_preview_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    preview = dict(payload)
-    preview["account"] = _redact_account_value(preview.get("account"))
-    preview["account_reference"] = _redact_account_value(
-        preview.get("account_reference")
-    )
-    return preview
+def _response_payload(value: object) -> object:
+    """Copy JSON data while redacting IBANs at every response boundary."""
+
+    if isinstance(value, dict):
+        return {
+            key: (
+                _redact_account_value(item)
+                if key in {"account", "account_reference"}
+                else _response_payload(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_response_payload(item) for item in value]
+    return value
 
 
 def _demo_overview() -> dict[str, Any]:
@@ -159,7 +167,7 @@ class OverviewView(HomeAssistantView):
     async def get(self, request: web.Request) -> web.Response:
         coordinator = _coordinator(request.app["hass"])
         data = coordinator.data if coordinator and coordinator.data else {}
-        return self.json(_overview(data, request.query.get("month")))
+        return self.json(_response_payload(_overview(data, request.query.get("month"))))
 
 
 class PersonsView(HomeAssistantView):
@@ -195,7 +203,7 @@ class UnresolvedBookingsView(HomeAssistantView):
         coordinator = _coordinator(request.app["hass"])
         bookings = [] if not coordinator or not coordinator.data else coordinator.data.get("bookings", [])
         unresolved = [booking for booking in bookings if booking.get("status") != "resolved"]
-        return self.json({"bookings": unresolved})
+        return self.json(_response_payload({"bookings": unresolved}))
 
 
 class BookingAssignmentView(HomeAssistantView):
@@ -264,7 +272,7 @@ class BookingAssignmentView(HomeAssistantView):
         booking["status"] = "resolved"
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
-        return self.json({"booking": booking})
+        return self.json(_response_payload({"booking": booking}))
 
 
 class ImportView(HomeAssistantView):
@@ -336,14 +344,16 @@ class ImportView(HomeAssistantView):
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
         return self.json(
-            {
-                "format": format_name,
-                "accepted": len(accepted),
-                "duplicates": duplicates,
-                "new_accounts": len(new_account_ids),
-                "unconfigured_accounts": len(unconfigured_account_ids),
-                "preview": [_import_preview_payload(item) for item in accepted],
-            }
+            _response_payload(
+                {
+                    "format": format_name,
+                    "accepted": len(accepted),
+                    "duplicates": duplicates,
+                    "new_accounts": len(new_account_ids),
+                    "unconfigured_accounts": len(unconfigured_account_ids),
+                    "preview": accepted,
+                }
+            )
         )
 
 

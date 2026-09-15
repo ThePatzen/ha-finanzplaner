@@ -189,6 +189,24 @@ class BankImportViewTests(unittest.TestCase):
     def _import(self, filename, raw):
         return asyncio.run(self.http.ImportView().post(self._request(filename, raw)))
 
+    def test_response_serializer_redacts_booking_accounts_without_mutating_store(self):
+        booking = {
+            "account": "AT12 3456 7890 1234 5678",
+            "account_reference": "AT123456789012345678",
+            "account_id": "account-1",
+            "purpose": "Testkauf",
+        }
+
+        response = self.http._response_payload(
+            {"last_unresolved": booking, "bookings": [booking], "booking": booking}
+        )
+
+        self.assertEqual(response["last_unresolved"]["account"], "…5678")
+        self.assertEqual(response["bookings"][0]["account_reference"], "…5678")
+        self.assertEqual(response["booking"]["purpose"], "Testkauf")
+        self.assertEqual(booking["account"], "AT12 3456 7890 1234 5678")
+        self.assertEqual(booking["account_reference"], "AT123456789012345678")
+
     def test_camt_import_discovers_account_and_links_booking(self):
         raw = """<?xml version="1.0" encoding="UTF-8"?>
         <Document><BkToCstmrStmt><Stmt>
