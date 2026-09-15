@@ -1,6 +1,6 @@
 ---
 name: ha-finanzplaner
-description: Projekt-Skill für die Weiterentwicklung des Home-Assistant-Finanzplaners im HACS-Repository ThePatzen/ha-finanzplaner. Verwenden bei Änderungen an Konten, Bank-/Excel-Importen, Personen- und Haushaltszuordnungen, Hunde-Bereichen, Planposten, Prognosen, Buchungen, Sensoren, Panel-UI, Storage-Migrationen, Releases oder der Produkt-Roadmap.
+description: Projekt-Skill für die Weiterentwicklung des Home-Assistant-Finanzplaners im HACS-Repository ThePatzen/ha-finanzplaner. Verwenden bei Änderungen an Konten, Bank-/Excel-Importen, Personen-, Haushalts- und Tierzuordnungen, Haustier-Bereichen, Planposten, Prognosen, Buchungen, Sensoren, Panel-UI, Storage-Migrationen, Releases oder der Produkt-Roadmap.
 ---
 
 # HA Finanzplaner
@@ -25,8 +25,15 @@ und echte Finanzdaten dürfen nicht in das öffentliche Repository gelangen.
   Zahlungsquelle und weist Buchungen niemals automatisch diesen Personen zu.
 - Buchungen einer Person, mehreren Personen oder dem gemeinsamen Ziel
   `household` zuordnen.
-- Gemeinsame Hundekosten mit `area="Hunde"` modellieren, typischerweise mit
-  `target="household"`. Keine einzelnen Hunde als Personen anlegen.
+- Bereiche, Kategorien und Projekte werden generell manuell durch den Nutzer
+  verwaltet. `Haustiere` ist eine mögliche Bereichsbezeichnung, aber kein
+  fest verdrahteter Sonderfall und kein technisch vorgeschriebener Wert.
+  Gemeinsame Tierkosten können typischerweise mit einem manuell angelegten
+  Bereich `Haustiere` und `target="household"` modelliert werden. Einzelne
+  Tiere wie Fio dürfen künftig zusätzlich über eine eigene Tier-Referenz
+  (`pet_id`) und optional einen Tier-Typ zugeordnet werden. Tiere sind niemals
+  künstliche `person.*`-Entitäten und ersetzen keine Haushalts- oder
+  Personen-Zuordnung.
 - Gehalt als `Einnahmen / Erwerbseinkommen / Gehalt` führen.
 - PV-Erlöse als `Einnahmen / Energieerlöse / PV-Erlöse` mit Projekt
   `PV-Anlage` führen. Wartung, Versicherung und Finanzierung der PV-Anlage als
@@ -57,13 +64,15 @@ Bereits geliefert:
   Response-Daten maskieren IBANs; keine vollständigen IBANs in Logs oder
   öffentlichen Dateien.
 - Prüfliste für ungeklärte Buchungen mit manueller, centgenauer Aufteilung auf
-  Personen oder Haushalt sowie Bereich `Hunde`, Kategorie und Projekt.
+  Personen oder Haushalt sowie Bereich `Haustiere`, Kategorie und Projekt.
 - Planposten-Ansicht mit authentifiziertem CRUD-API für Einnahmen, Ausgaben und
   Rücklagen; wiederkehrende und einmalige Rhythmen, Fälligkeit, Gültigkeit,
   Zielperson/Haushalt sowie reversible Archivierung.
+- Individuelle Tier-Zuordnung und verbrauchsbasierte Futterprognose sind noch
+  nicht umgesetzt; die fachlichen Anforderungen dafür stehen unten fest.
 - HA-Personen und authentifizierte Panel-API-Aufrufe über
   `hass.fetchWithAuth()`.
-- 75 Python- und 21 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
+- 86 Python- und 21 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
   für den aktuellen Stand.
 
 Aktuelle Release-Situation:
@@ -104,6 +113,69 @@ normalisierten Buchungsfelder, `allocations` und `status`.
 - Beim Ändern eines Kontos nur editierbare Werte ändern. Eine leere/fehlende
   IBAN darf die bestehende lokale IBAN nicht löschen.
 
+## Fachlicher Ausbau: Manuelle Bereiche, Tiere und Futterverbrauch
+
+Bereiche, Kategorien und Projekte benötigen eine eigene, lokal persistierte
+Verwaltung mit stabiler ID, Anzeigename, Sortierung und Aktivstatus. Nutzer
+müssen sie im Panel anlegen, bearbeiten, archivieren und wieder aktivieren
+können. Bestehende Planposten und Aufteilungen referenzieren die ID und
+bewahren zusätzlich einen Namen-Snapshot für historische Ansichten. Ein
+archivierter Bereich darf historische Daten nicht unlesbar machen und darf
+neue Zuordnungen nicht mehr als aktive Auswahl anbieten.
+
+`Haustiere` ist dabei ein möglicher manuell angelegter Bereich, aber die
+Bereichslogik darf weder `Haustiere` noch andere Namen im Backend fest
+einprogrammieren. Importer dürfen anhand von Begriffen einen Vorschlag
+markieren; die Bestätigung muss auf einen vorhandenen Bereich zeigen oder
+dessen Anlage ausdrücklich anbieten. Unbekannte Bereiche dürfen nicht still
+verworfen werden.
+
+Zusätzlich bekommt ein Planposten oder eine Buchungsaufteilung
+optional eine `pet_id` mit stabilem lokalem Schlüssel, Anzeigename-Snapshot und
+optionalem `pet_type`, zum Beispiel `pet-fio` / `Fio` / `Hund`. `target` bleibt
+davon unabhängig `household` oder eine Person. So kann ein Sack Futter Fio
+zugeordnet werden, ohne Fio als Person in Home Assistant anzulegen. Dasselbe
+Modell muss später auch Katze, Kaninchen oder andere Haustiere unterstützen.
+Historische Buchungen behalten ihre gespeicherte Tier-Referenz und den
+damaligen Namen, auch wenn ein Profil später archiviert wird.
+
+Für Futter wird ein eigenes Verbrauchsprofil beziehungsweise ein erweiterter
+Planposten benötigt. Es soll mindestens abbilden:
+
+- Tier (`pet_id`, Anzeigename, optionaler Tier-Typ und Aktivstatus)
+- Futter beziehungsweise Produkt und Verpackungseinheit, zum Beispiel
+  `Trockenfutter · 1 Sack`
+- erwartete Kosten pro Kauf
+- Verbrauchsintervall in Wochen, zum Beispiel ein Sack reicht durchschnittlich
+  fünf Wochen
+- Datum des letzten bestätigten Kaufs und daraus berechnetes nächstes
+  voraussichtliches Kaufdatum
+- Quelle der Schätzung: manuelles Intervall oder Durchschnitt aus bestätigten
+  Futterkäufen
+
+Die Prognose verwendet das letzte bestätigte Kaufdatum plus das wirksame
+Intervall. Gibt es mehrere bestätigte Käufe, wird der durchschnittliche Abstand
+zwischen den Käufen als Vorschlag berechnet; ein ausdrücklich gepflegtes
+manuelles Intervall bleibt als Override erhalten. Der erwartete Betrag wird am
+voraussichtlichen Kaufdatum als konkrete Ausgabe eingeplant und darf neben dem
+normalisierten Monatsbudget nicht doppelt gezählt werden.
+
+Der Erinnerungsstatus wird aus dem voraussichtlichen Kaufdatum abgeleitet:
+`planned`, `due_soon` (konfigurierbares Vorwarnfenster, zum Beispiel 14 Tage),
+`due` oder `overdue`. Im Panel sollen Tier, Produkt, erwartetes Datum, Betrag
+und Berechnungsgrund sichtbar sein. Für Home Assistant werden zunächst ein
+lesbarer Status beziehungsweise ein Sensor und eine vom Nutzer aktivierbare
+Benachrichtigung vorgesehen; es gibt keine stille automatische Buchung oder
+ungefragte Benachrichtigungsflut. Bestätigt der Nutzer einen neuen Kauf, wird
+das letzte Kaufdatum fortgeschrieben und die nächste Schätzung neu berechnet.
+
+Eine Buchung wie „Tierfutter“ wird daher beispielsweise als
+`target="household"`, `area="Haustiere"`, `pet_id="pet-fio"` und Kategorie
+`Futter` gespeichert, sofern der Nutzer diesen Bereich angelegt oder bestätigt
+hat. Mehrere Tiere in einer gemeinsamen Zahlung bleiben über mehrere positive
+Aufteilungszeilen mit jeweils eigener `pet_id` centgenau trennbar. Die
+Tier-Referenz darf nicht vom gewählten Bereichsnamen abhängen.
+
 ## Offene Implementierungsschritte
 
 Die folgenden Schritte sind die verbleibende Roadmap. Nach Möglichkeit in dieser
@@ -127,8 +199,15 @@ Reihenfolge umsetzen:
 - Als nächstes Planposten nach Monat und Fälligkeit in der Prognose verwenden
   und die CRUD-Strecke im echten Home-Assistant-Laufzeittest prüfen.
 - Monats-, jährliche und einmalige Planungen aus der Excel-Struktur abbilden.
-- Gehalt, PV-Erlöse, Hunde, Urlaubsgeld und EMX sauber als fachliche Werte
+- Gehalt, PV-Erlöse, Haustierkosten, Urlaubsgeld und EMX sauber als fachliche Werte
   darstellen, nicht nur als Importwarnung.
+- Futterplanposten um eine optionale `pet_id`, einen Tier-Typ,
+  Verpackungseinheit,
+  Verbrauchsintervall und erwartete Kaufkosten erweitern; die Zuordnung soll
+  auch bei `target="household"` unabhängig erhalten bleiben.
+- Eine allgemeine Verwaltungsansicht für Bereiche, Kategorien und Projekte
+  ergänzen; keine feste Whitelist für `Haustiere` oder andere Bezeichnungen
+  verwenden.
 - Planposten-CRUD mit Storage-Migration, API-Validierung und Panel-Draft-State
   testen.
 
@@ -141,8 +220,14 @@ Reihenfolge umsetzen:
 - Monats-, Jahres- und Cashflow-Sicht ergänzen.
 - Plan-Ist-Vergleiche nach Kategorie, Bereich, Projekt, Person und Konto
   liefern.
+- Tier-Futterkäufe als eigene Auswertungsdimension neben dem manuell gewählten
+  Bereich, häufig `Haustiere`,
+  führen und nicht mit einer Personenzuordnung verwechseln.
 - Einnahmen, Ausgaben, Rücklagen, Sonderzahlungen und verfügbaren Saldo
   konsistent definieren.
+- Nächsten Futterkauf je Tier aus letztem Kauf und Verbrauchsintervall
+  schätzen; bei ausreichend Historie den durchschnittlichen Kaufabstand
+  anzeigen und den manuellen Override respektieren.
 - Bereiche und Kategorien in Live-Daten statt nur in Demo-Daten füllen.
 
 ### 4. Vollständiger Buchungsworkflow
@@ -152,6 +237,10 @@ Reihenfolge umsetzen:
   und Projekt filtern.
 - Gespeicherte Aufteilungen nachträglich bearbeiten, ohne Kontoinhaber zu
   verändern.
+- Buchungsaufteilungen für Tierfutter um `pet_id` ergänzen und historische
+  Tier-Namen bei archivierten oder nicht mehr verfügbaren Profilen bewahren.
+- Manuell verwaltete Bereiche, Kategorien und Projekte in allen Filtern,
+  Importvorschlägen und Auswertungen verwenden.
 - Importhistorie und Duplikatentscheidungen nachvollziehbar anzeigen.
 - Fehlerhafte oder nicht mehr auflösbare `person.*`-Referenzen markieren und
   eine Reparatur anbieten, ohne historische Beträge zu verlieren.
@@ -171,9 +260,13 @@ Reihenfolge umsetzen:
 
 - Sensoren für Plan, Ist, Prognose, offenen Betrag, Anzahl ungeklärter
   Buchungen, nächste größere Zahlung und Haushalts-Saldo vervollständigen.
+- Futterstatus je Tier als nächste Kaufprognose mit Datum, Betrag, Intervall
+  und Status `due_soon` beziehungsweise `overdue` bereitstellen.
 - Monats-/Jahresberichte, Kategorien, Bereiche, Projekte und PV-Auswertung
   als Panel-Sichten ergänzen.
-- Optional wiederkehrende Reports und Home-Assistant-Benachrichtigungen bauen.
+- Eine vom Nutzer aktivierbare Home-Assistant-Erinnerung für fällige oder bald
+  fällige Futterkäufe ergänzen; Vorwarnfenster und Benachrichtigungsempfänger
+  müssen konfigurierbar bleiben.
 
 ### 7. Spätere Ausbaustufen
 
@@ -227,7 +320,16 @@ Planposten-, Prognose- und Buchungshistorie noch fehlen.
 - Mehrere Personen als Kontoinhaber und mehrere Buchungsziele bleiben möglich.
 - Kontoinhaber verändern niemals automatisch historische oder neue
   Buchungsaufteilungen.
-- `Hunde` bleibt ein gemeinsamer Bereich und keine künstliche Person.
+- Bereiche, Kategorien und Projekte sind manuell verwaltbar; `Haustiere` ist
+  lediglich ein möglicher Nutzerwert und keine feste Backend-Whitelist.
+- Eine Tier-Zuordnung verwendet eine separate stabile `pet_id` und optional
+  einen Tier-Typ; sie darf niemals als Home-Assistant-`person.*`-Referenz
+  gespeichert werden.
+- Futterprognosen berücksichtigen letztes Kaufdatum, Verbrauchsintervall,
+  durchschnittlichen Kaufabstand, Betrag und Vorwarnfenster; ein bestätigter
+  neuer Kauf verschiebt die nächste Schätzung.
+- Ein erwarteter Futterkauf wird in Plan und Forecast höchstens einmal
+  berücksichtigt und bleibt als Schätzung nachvollziehbar.
 - Importfehler verändern den Store nicht; Duplikate erzeugen keine zweite
   Buchung.
 - v2-Reloads bewahren IDs, Owner, Bank, IBAN und historische Aufteilungen.
