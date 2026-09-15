@@ -11,6 +11,18 @@ try {
   assert.fail(`Panel utility module is required: ${error.message}`);
 }
 
+test("reads API responses according to their content type", async () => {
+  const jsonResponse = new Response(JSON.stringify({ accepted: 2 }), {
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+  const textResponse = new Response("  Dienst nicht erreichbar\n", {
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+
+  assert.deepEqual(await utils.readApiResponse(jsonResponse), { accepted: 2 });
+  assert.equal(await utils.readApiResponse(textResponse), "  Dienst nicht erreichbar\n");
+});
+
 test("formats euro amounts with German separators and sign", () => {
   assert.equal(utils.formatEuro(3285.4), "3.285,40 €");
   assert.equal(utils.formatEuro(-278.64), "−278,64 €");
@@ -139,15 +151,15 @@ test("reports missing targets, remaining cents, and blocks a valid draft while s
 
 test("reads allocation errors from JSON messages and plain text", async () => {
   assert.equal(
-    await utils.allocationErrorMessage({ status: 400, text: async () => '{"message":"Centbetrag stimmt nicht"}' }),
+    utils.allocationErrorMessage({ status: 400 }, { message: "Centbetrag stimmt nicht" }),
     "Centbetrag stimmt nicht",
   );
   assert.equal(
-    await utils.allocationErrorMessage({ status: 500, text: async () => "Dienst vorübergehend nicht erreichbar" }),
+    utils.allocationErrorMessage({ status: 500 }, "Dienst vorübergehend nicht erreichbar"),
     "Dienst vorübergehend nicht erreichbar",
   );
   assert.equal(
-    await utils.allocationErrorMessage({ status: 400, text: async () => "" }),
+    utils.allocationErrorMessage({ status: 400 }, ""),
     "Die Aufteilung wurde nicht akzeptiert. Bitte prüfe Ziele und Centbeträge.",
   );
 });

@@ -183,7 +183,24 @@ class AccountViewTests(unittest.TestCase):
                             "created_at": "2026-09-01T00:00:00+00:00",
                             "updated_at": "2026-09-01T00:00:00+00:00",
                         }
-                    ]
+                    ],
+                    "bookings": [
+                        {
+                            "id": "booking-1",
+                            "account_id": "account-1",
+                            "amount": -25.0,
+                            "allocations": [
+                                {
+                                    "target": "household",
+                                    "amount": 25.0,
+                                    "area": "Hunde",
+                                    "category": "Tierbedarf",
+                                    "project": None,
+                                }
+                            ],
+                            "status": "resolved",
+                        }
+                    ],
                 }
                 self.save_count = 0
 
@@ -259,6 +276,30 @@ class AccountViewTests(unittest.TestCase):
         self.assertNotIn("iban", result["account"])
         self.assertNotIn("AT123456789012345678", str(result))
 
+    def test_changing_shared_account_owners_preserves_existing_booking_allocation(self):
+        allocation_before = deepcopy(
+            self.coordinator.store.data["bookings"][0]["allocations"]
+        )
+
+        asyncio.run(
+            self.http.AccountView().post(
+                self._request(
+                    {
+                        "label": "Gemeinsames Girokonto",
+                        "owner_targets": ["person.alex", "household"],
+                        "active": True,
+                    }
+                ),
+                "account-1",
+            )
+        )
+
+        booking = self.coordinator.store.data["bookings"][0]
+        self.assertEqual(booking["allocations"], allocation_before)
+        self.assertEqual(len(booking["allocations"]), 1)
+        self.assertEqual(booking["allocations"][0]["target"], "household")
+        self.assertEqual(booking["allocations"][0]["area"], "Hunde")
+
     def test_post_rejects_unknown_account_without_saving(self):
         before = deepcopy(self.coordinator.store.data)
 
@@ -299,7 +340,7 @@ class AccountViewTests(unittest.TestCase):
 
 
 class AccountViewRegistrationTests(unittest.TestCase):
-    def test_async_setup_registers_both_account_views(self):
+    def test_async_setup_registers_authenticated_release_views(self):
         http, _, _, _ = _load_http_module()
         registered = []
         hass = types.SimpleNamespace(
@@ -310,8 +351,18 @@ class AccountViewRegistrationTests(unittest.TestCase):
         with patch.dict(sys.modules, {"custom_components.finanzplaner.http": http}):
             asyncio.run(finanzplaner.async_setup(hass, {}))
 
-        self.assertIn(http.AccountsView, registered)
-        self.assertIn(http.AccountView, registered)
+        release_views = (
+            http.AccountsView,
+            http.AccountView,
+            http.ImportView,
+            http.ExcelPreviewView,
+            http.ExcelConfirmView,
+            http.BookingAllocationsView,
+        )
+        for view in release_views:
+            with self.subTest(view=view.__name__):
+                self.assertIn(view, registered)
+                self.assertIs(view.requires_auth, True)
 
 
 if __name__ == "__main__":

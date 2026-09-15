@@ -74,6 +74,33 @@ class AccountsAndMigrationTests(unittest.TestCase):
             migrated["bookings"][0]["account_id"], "legacy-account"
         )
 
+    def test_shared_account_does_not_assign_booking_to_its_owners(self):
+        migrated = migrate_store_data(
+            {
+                "version": 1,
+                "accounts": [
+                    {
+                        "id": "account-1",
+                        "account_reference": "BANK-ACCOUNT-42",
+                        "owner_targets": ["person.alex", "person.sam"],
+                    }
+                ],
+                "bookings": [
+                    {
+                        "id": "booking-1",
+                        "account": "BANK-ACCOUNT-42",
+                        "amount": -100.0,
+                        "allocations": [],
+                        "status": "unresolved",
+                    }
+                ],
+            },
+            "Testhaushalt",
+        )
+
+        self.assertEqual(migrated["bookings"][0]["account_id"], "account-1")
+        self.assertEqual(migrated["bookings"][0]["allocations"], [])
+
     def test_finance_store_forwards_legacy_version_to_store_migration_hook(self):
         legacy_data = {
             "version": 1,

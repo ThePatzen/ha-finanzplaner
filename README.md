@@ -6,15 +6,18 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Die erste vertikale Scheibe ist vorbereitet:
+Version 0.3.0 liefert die erste durchgängige Konten- und Aufteilungsstrecke:
 
 - HACS-fähige Custom Integration mit Config Flow
 - native Home-Assistant-Seitenleiste mit schneller Monatsübersicht
 - Plan · Prognose · Ist und offene Buchungen als zentrale Sicht
 - Home-Assistant-`person.*`-Entitäten als Personenquelle
 - MT940- und CAMT.053-Upload mit Duplikatfingerprint
+- automatische Kontoerkennung aus CAMT.053-IBAN beziehungsweise MT940-Kontoangabe
+- Kontenpflege mit Anzeigename, mehreren Kontoinhabern und Archivstatus
 - Excel-Vorlage als prüfbare Vorschau mit Auswahl und Zuordnungsänderungen
-- gemeinsame Zuordnungen wie `Haushalt` und `Hunde` im Datenmodell
+- centgenaue, bestätigungspflichtige Aufteilungen auf Personen oder `Haushalt`
+- gemeinsame Zuordnungen wie `Haushalt` mit dem Bereich `Hunde`
 - lokale Versionierung über Home Assistants persistenten Store
 - ausgewählte Übersichtswerte als HA-Sensoren
 
@@ -30,6 +33,16 @@ Die Integration zeigt bei einem leeren Workspace klar markierte synthetische Dem
 
 Danach erscheint Finanzplaner in der Home-Assistant-Seitenleiste. MT940- und CAMT.053-Dateien werden bewusst manuell in der Prüfliste hochgeladen; Originaldateien werden nicht dauerhaft gespeichert.
 
+## Konten und Bankimport
+
+Beim Import einer CAMT.053- oder MT940-Datei erkennt Finanzplaner das verwendete Konto automatisch und verknüpft neue Buchungen mit diesem Konto. Vollständige IBANs bleiben ausschließlich im lokalen Speicher; die Oberfläche und API-Antworten zeigen nur maskierte Kontoangaben. Unbekannte Konten werden ohne automatische Zuordnung angelegt und können anschließend in der Ansicht `Konten` benannt, archiviert und mit mehreren Kontoinhabern gepflegt werden.
+
+Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`person.*`-Entitäten; zusätzlich steht `Haushalt` für gemeinsame Konten und Ausgaben bereit. Kontoinhaber beschreiben nur die Zahlungsquelle. Sie werden nicht automatisch auf bestehende oder neue Buchungen übertragen.
+
+## Buchungen aufteilen
+
+Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Bereich, Kategorie und Projekt tragen; eine gemeinsame Hundeausgabe wird beispielsweise als Ziel `Haushalt` mit Bereich `Hunde` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Automatische Regelvorschläge sind nicht Bestandteil dieser Version.
+
 ## Excel-Plan übernehmen
 
 1. Finanzplaner öffnen und `Buchungen prüfen` auswählen.
@@ -41,7 +54,7 @@ Die Arbeitsblätter `Einnahmen`, `Ausgaben` und `Sparen  und Rücklagen` werden 
 
 ## Fachliche Leitplanken
 
-Ein Konto kann mehreren Personen gehören. Das beschreibt die Zahlungsquelle, nicht automatisch die fachliche Zuordnung. Jede Buchung kann auf eine oder mehrere Personen, `Haushalt`, den gemeinsamen Bereich `Hunde`, Kategorien und Projekte aufgeteilt werden. Gehalt wird als `Einnahmen / Erwerbseinkommen / Gehalt` geführt; PV-Erlöse als `Einnahmen / Energieerlöse / PV-Erlöse` im Projekt `PV-Anlage`.
+Ein Konto kann mehreren Personen gehören. Das beschreibt die Zahlungsquelle, nicht automatisch die fachliche Zuordnung. Jede Buchung kann auf eine oder mehrere Personen oder `Haushalt` verteilt und je Aufteilungszeile mit dem gemeinsamen Bereich `Hunde`, Kategorien und Projekten ergänzt werden. Gehalt wird als `Einnahmen / Erwerbseinkommen / Gehalt` geführt; PV-Erlöse als `Einnahmen / Energieerlöse / PV-Erlöse` im Projekt `PV-Anlage`.
 
 ## Entwicklung
 

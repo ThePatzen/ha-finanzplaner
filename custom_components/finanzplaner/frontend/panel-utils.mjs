@@ -40,6 +40,12 @@ export function selectedSuggestionSummary(suggestions = []) {
   );
 }
 
+export async function readApiResponse(response) {
+  const contentType = response.headers?.get?.("Content-Type") || "";
+  const mediaType = contentType.split(";", 1)[0].trim().toLowerCase();
+  return mediaType === "application/json" ? response.json() : response.text();
+}
+
 function euroToCents(value) {
   const amount = Number(value);
   return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
@@ -107,24 +113,12 @@ export function allocationSubmitState(total, allocations = [], submitting = fals
   };
 }
 
-export async function allocationErrorMessage(response) {
+export function allocationErrorMessage(response, body) {
   const fallback = response.status === 400
     ? "Die Aufteilung wurde nicht akzeptiert. Bitte prüfe Ziele und Centbeträge."
     : "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.";
-  try {
-    const body = (await response.text()).trim();
-    if (!body) return fallback;
-    try {
-      const parsed = JSON.parse(body);
-      return typeof parsed?.message === "string" && parsed.message.trim()
-        ? parsed.message.trim()
-        : fallback;
-    } catch {
-      return body;
-    }
-  } catch {
-    return fallback;
-  }
+  if (typeof body === "string") return body || fallback;
+  return typeof body?.message === "string" && body.message ? body.message : fallback;
 }
 
 export function accountOwnerStatus(ownerTargets = []) {

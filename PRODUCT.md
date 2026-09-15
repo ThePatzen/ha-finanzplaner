@@ -26,11 +26,21 @@ Der Finanzplaner verbindet die strukturierte Planung wiederkehrender Zahlungen m
 
 ## Operating Context
 
-Die Anwendung läuft in einer privaten Home-Assistant-Installation und wird über HACS installiert und aktualisiert. Nutzer pflegen Planposten und Regeln in der Finanzansicht und laden exportierte Bankdateien bewusst zur Verarbeitung hoch.
+Die Anwendung läuft in einer privaten Home-Assistant-Installation und wird über HACS installiert und aktualisiert. Nutzer pflegen Planposten, Konten und bestätigte Buchungsaufteilungen in der Finanzansicht und laden exportierte Bankdateien bewusst zur Verarbeitung hoch.
 
 Die bestehende Excel-Datei dient als fachliche Referenz und als Quelle für eine einmalige Migration. Sie enthält Einnahmen, Ausgaben, Rücklagen, Urlaubsgeld und projektbezogene Kostenverrechnung für EMX. Bereiche wie „Hunde“ und Projekte wie „PV-Anlage“ gehören zum fachlichen Modell.
 
 ## Capabilities and Constraints
+
+Mit Version 0.3.0 geliefert:
+
+- automatische lokale Kontoerkennung aus CAMT.053 und MT940
+- Kontenpflege mit mehreren Home-Assistant-Personen oder `Haushalt` als Kontoinhaber
+- klare Trennung von Kontoinhabern und fachlichen Buchungszielen
+- eine oder mehrere bestätigungspflichtige, centgenaue Aufteilungen pro Buchung
+- gemeinsame Aufteilungen mit `target="household"` und optional `area="Hunde"`
+
+Weitere Produktfähigkeiten und Leitplanken:
 
 - Unterstützung eines gemeinsamen Haushalts mit mehreren Personen
 - Personenreferenzen aus Home-Assistant-`person.*`-Entitäten
@@ -43,7 +53,6 @@ Die bestehende Excel-Datei dient als fachliche Referenz und als Quelle für eine
 - PV-Erlöse und zugehörige Kosten im Projekt „PV-Anlage“
 - manuelle Importe von MT940 und CAMT.053
 - Duplikaterkennung, Importhistorie und Prüfliste
-- regelbasierte Zuordnung von Buchungen
 - Excel-Migration aus der bereitgestellten Vorlage
 - Monats-, Jahres- und Cashflow-Auswertungen
 - Kennzahlen als Home-Assistant-Sensoren
@@ -53,6 +62,7 @@ Die bestehende Excel-Datei dient als fachliche Referenz und als Quelle für eine
 - keine direkte Open-Banking-Anbindung in der ersten Version
 - keine automatische Überwachung eines Dateiordners in der ersten Version
 - keine echten Finanzdaten im öffentlichen Repository
+- regelbasierte Vorschläge und automatische Zuordnung von Buchungen sind noch nicht geliefert
 
 Die Begriffe „Planposten“, „Buchung“, „Aufteilung“, „Bereich“, „Kategorie“, „Projekt“, „Person“ und „Haushalt“ bilden die zentrale Fachsprache der Anwendung.
 

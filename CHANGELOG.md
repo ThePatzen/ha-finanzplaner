@@ -8,6 +8,14 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.3.0] – 2026-09-15
+
+- Konten bei CAMT.053- und MT940-Importen automatisch erkannt und bestehenden Buchungen stabil zugeordnet
+- Kontenansicht für Anzeigename, mehrere Home-Assistant-Kontoinhaber und Archivstatus ergänzt
+- bestätigungspflichtige Buchungsaufteilungen mit frei änderbaren, centgenauen Beträgen sowie Ziel, Bereich, Kategorie und Projekt eingeführt
+- gemeinsame Ausgaben als `household` mit optionalem Bereich `Hunde` modelliert, ohne Kontoinhaber automatisch als Buchungsziele zu übernehmen
+- vollständige IBANs an API-Grenzen maskiert und Klartextfehler im Panel lesbar gemacht
+
 ## [0.2.3] – 2026-09-15
 
 - statische Panel-Dateien je Release über einen eigenen URL-Pfad ausgeliefert, damit Browser- und Proxy-Caches keine ältere Oberfläche weiterverwenden
@@ -51,3 +59,4 @@ Erste vorbereitete vertikale Version:
 [0.2.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.1
 [0.2.2]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.2
 [0.2.3]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.3
+[0.3.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.0

@@ -1,4 +1,4 @@
-import { accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, removeAllocationDraftRow, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, readApiResponse, removeAllocationDraftRow, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
@@ -10,6 +10,11 @@ const EXCEL_PREVIEW_URL = "/api/finanzplaner/excel/preview";
 const EXCEL_CONFIRM_URL = "/api/finanzplaner/excel/confirm";
 const PAPER_TEXTURE_PATH = "assets/plates/main-paper-sample.png";
 const PAPER_TEXTURE_URL = new URL(PAPER_TEXTURE_PATH, import.meta.url).href;
+
+function apiErrorMessage(body, fallback) {
+  if (typeof body === "string") return body || fallback;
+  return typeof body?.message === "string" && body.message ? body.message : fallback;
+}
 
 const iconPaths = {
   home: "M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1Z",
@@ -616,12 +621,13 @@ class FinanzplanerPanel extends HTMLElement {
     this._loading = true;
     try {
       const response = await fetchWithHomeAssistantAuth(this._hass, `${OVERVIEW_URL}?month=${this._month.toISOString().slice(0, 7)}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      this._data = dataWithDefaults(await response.json());
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+      this._data = dataWithDefaults(result);
       this._message = "";
     } catch (error) {
       this._data = dataWithDefaults(fallbackOverview);
-      this._message = "Demo-Ansicht aktiv: Die Finanzplaner-API ist noch nicht erreichbar.";
+      this._message = `Demo-Ansicht aktiv: ${error.message || "Die Finanzplaner-API ist noch nicht erreichbar."}`;
     } finally {
       this._loading = false;
       if (this.isConnected) this._render();
@@ -638,7 +644,7 @@ class FinanzplanerPanel extends HTMLElement {
     } catch (error) {
       this._bookings = [];
       this._persons = [];
-      this._message = "Die Prüfliste konnte nicht geladen werden.";
+      this._message = error.message || "Die Prüfliste konnte nicht geladen werden.";
     }
     this._render();
   }
@@ -648,9 +654,15 @@ class FinanzplanerPanel extends HTMLElement {
       fetchWithHomeAssistantAuth(this._hass, REVIEW_URL),
       fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
     ]);
-    if (!bookingResponse.ok) throw new Error(`HTTP ${bookingResponse.status}`);
-    this._bookings = (await bookingResponse.json()).bookings || [];
-    this._persons = personsResponse.ok ? ((await personsResponse.json()).persons || []) : [];
+    const [bookingResult, personsResult] = await Promise.all([
+      readApiResponse(bookingResponse),
+      readApiResponse(personsResponse),
+    ]);
+    if (!bookingResponse.ok) {
+      throw new Error(apiErrorMessage(bookingResult, `HTTP ${bookingResponse.status}`));
+    }
+    this._bookings = bookingResult.bookings || [];
+    this._persons = personsResponse.ok ? (personsResult.persons || []) : [];
     const bookingIds = new Set(this._bookings.map((booking) => String(booking.id)));
     for (const booking of this._bookings) {
       const bookingId = String(booking.id);
@@ -675,11 +687,16 @@ class FinanzplanerPanel extends HTMLElement {
         fetchWithHomeAssistantAuth(this._hass, ACCOUNTS_URL),
         fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
       ]);
+      const [accountsResult, personsResult] = await Promise.all([
+        readApiResponse(accountsResponse),
+        readApiResponse(personsResponse),
+      ]);
       if (!accountsResponse.ok || !personsResponse.ok) {
-        throw new Error("Konten oder Personen konnten nicht geladen werden.");
+        const failedResult = !accountsResponse.ok ? accountsResult : personsResult;
+        throw new Error(apiErrorMessage(failedResult, "Konten oder Personen konnten nicht geladen werden."));
       }
-      this._accounts = (await accountsResponse.json()).accounts || [];
-      this._persons = (await personsResponse.json()).persons || [];
+      this._accounts = accountsResult.accounts || [];
+      this._persons = personsResult.persons || [];
     } catch (error) {
       this._accounts = [];
       this._persons = [];
@@ -713,11 +730,15 @@ class FinanzplanerPanel extends HTMLElement {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!response.ok) throw new Error("Das Konto konnte nicht gespeichert werden.");
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Das Konto konnte nicht gespeichert werden."));
       if (status) status.textContent = "Konto gespeichert. Kontenliste wird aktualisiert …";
       const accountsResponse = await fetchWithHomeAssistantAuth(this._hass, ACCOUNTS_URL);
-      if (!accountsResponse.ok) throw new Error("Das Konto wurde gespeichert, konnte aber nicht neu geladen werden.");
-      this._accounts = (await accountsResponse.json()).accounts || [];
+      const accountsResult = await readApiResponse(accountsResponse);
+      if (!accountsResponse.ok) {
+        throw new Error(apiErrorMessage(accountsResult, "Das Konto wurde gespeichert, konnte aber nicht neu geladen werden."));
+      }
+      this._accounts = accountsResult.accounts || [];
       this._message = `${payload.label.trim() || "Konto"} wurde gespeichert.`;
       this._render();
     } catch (error) {
@@ -850,7 +871,8 @@ class FinanzplanerPanel extends HTMLElement {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ allocations }),
       });
-      if (!response.ok) throw new Error(await allocationErrorMessage(response));
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(allocationErrorMessage(response, result));
     } catch (error) {
       form.dataset.submitting = "false";
       form.removeAttribute("aria-busy");
@@ -888,8 +910,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._render();
     try {
       const response = await fetchWithHomeAssistantAuth(this._hass, IMPORT_URL, { method: "POST", body: form });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Import fehlgeschlagen");
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Import fehlgeschlagen"));
       this._message = `${result.format}: ${result.accepted} Buchungen übernommen, ${result.duplicates} Duplikate übersprungen.`;
       await this._loadOverview();
       await this._openReview();
@@ -906,8 +928,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._render();
     try {
       const response = await fetchWithHomeAssistantAuth(this._hass, EXCEL_PREVIEW_URL, { method: "POST", body: form });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Excel-Import fehlgeschlagen");
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Excel-Import fehlgeschlagen"));
       this._excelPreview = {
         ...result,
         suggestions: (result.suggestions || []).map((suggestion) => ({ ...suggestion, selected: true })),
@@ -976,8 +998,8 @@ class FinanzplanerPanel extends HTMLElement {
           overrides,
         }),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Excel-Import konnte nicht bestätigt werden");
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Excel-Import konnte nicht bestätigt werden"));
       this._excelPreview = null;
       this._message = `${result.accepted} Planposten übernommen, ${result.skipped} abgewählt.`;
       await this._loadOverview();
