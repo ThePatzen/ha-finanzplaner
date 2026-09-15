@@ -13,6 +13,21 @@ import xml.etree.ElementTree as ET
 MONEY_QUANT = Decimal("0.01")
 
 
+def normalize_account_reference(value: str) -> str:
+    """Normalize an imported account reference for matching."""
+
+    return "".join(str(value or "").split()).upper()
+
+
+def account_id_for_reference(value: str) -> str | None:
+    """Return the stable local account ID for a normalized reference."""
+
+    normalized = normalize_account_reference(value)
+    if not normalized:
+        return None
+    return f"account-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]}"
+
+
 @dataclass(frozen=True, slots=True)
 class Allocation:
     """A booking share assigned to a person or shared household target."""

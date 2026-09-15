@@ -1,7 +1,7 @@
 """Constants for the Finanzplaner Home Assistant integration."""
 
 DOMAIN = "finanzplaner"
-STORAGE_VERSION = 1
+STORAGE_VERSION = 2
 STORAGE_KEY = f"{DOMAIN}.data"
 PANEL_URL = DOMAIN
 PLATFORMS = ["sensor"]
