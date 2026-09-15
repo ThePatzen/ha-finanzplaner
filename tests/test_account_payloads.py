@@ -88,6 +88,20 @@ class AccountPayloadTests(unittest.TestCase):
         self.assertEqual(payload["account_reference"], "…5678")
         self.assertNotIn("AT123456789012345678", str(payload))
 
+    def test_account_payload_masks_non_iban_reference_without_mutating_store(self):
+        account = {
+            "label": "Importkonto",
+            "iban": None,
+            "account_reference": "BANK-ACCOUNT-42",
+        }
+
+        payload = self.http.account_payload(account)
+
+        self.assertEqual(payload["label"], "Importkonto")
+        self.assertEqual(payload["account_reference"], "…T-42")
+        self.assertNotIn("BANK-ACCOUNT-42", str(payload))
+        self.assertEqual(account["account_reference"], "BANK-ACCOUNT-42")
+
     def test_account_payload_does_not_mutate_internal_account(self):
         account = {"id": "account-1", "iban": "AT123456789012345678"}
 

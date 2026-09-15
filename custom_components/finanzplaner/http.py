@@ -62,18 +62,16 @@ def _booking_payload(
 
 
 def _redact_account_value(value: object) -> object:
-    """Keep account context in import previews without exposing a full IBAN."""
+    """Keep account context without exposing a full account identifier."""
 
     if not isinstance(value, str):
         return value
     normalized = normalize_account_reference(value)
-    if (
-        len(normalized) >= 15
-        and normalized[:2].isalpha()
-        and normalized[2:4].isdigit()
-    ):
-        return f"…{normalized[-4:]}"
-    return value
+    if not normalized:
+        return normalized
+    visible_length = min(4, len(normalized) - 1)
+    suffix = normalized[-visible_length:] if visible_length else ""
+    return f"…{suffix}"
 
 
 def _response_payload(value: object) -> object:
