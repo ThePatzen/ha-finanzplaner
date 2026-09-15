@@ -1,9 +1,10 @@
-import { accountActiveStatus, accountOwnerStatus, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
+import { accountActiveStatus, accountOwnerStatus, allocationRemaining, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
+const BOOKINGS_URL = "/api/finanzplaner/bookings";
 const IMPORT_URL = "/api/finanzplaner/import";
 const EXCEL_PREVIEW_URL = "/api/finanzplaner/excel/preview";
 const EXCEL_CONFIRM_URL = "/api/finanzplaner/excel/confirm";
@@ -324,13 +325,23 @@ const styles = `
   .booking-purpose { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .booking-account { color: var(--fp-muted); font-size: 0.75rem; }
   .booking-amount { color: var(--fp-coral); font-family: var(--fp-data); font-weight: 700; white-space: nowrap; }
-  .booking-assignment { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(12rem, 1fr) 9rem auto; align-items: end; gap: 0.7rem; padding-block-start: 0.75rem; border-block-start: 1px solid var(--fp-line); }
-  .assignment-field { display: grid; gap: 0.3rem; color: var(--fp-muted); font-size: 0.72rem; font-weight: 700; }
-  .assignment-field select { min-block-size: 2.35rem; inline-size: 100%; padding: 0.35rem 0.45rem; border: 1px solid var(--fp-line); border-radius: 0.4rem; color: var(--fp-ink); background: var(--fp-paper-strong); }
-  .assignment-field select[multiple] { min-block-size: 4.6rem; }
+  .allocation-editor { grid-column: 1 / -1; min-inline-size: 0; margin: 0; padding: 0.85rem 0 0; border: 0; border-block-start: 1px solid var(--fp-line); }
+  .allocation-editor legend { padding: 0; color: var(--fp-ink); font-size: 0.82rem; font-weight: 800; }
+  .allocation-list { display: grid; gap: 0.65rem; margin: 0.7rem 0 0; padding: 0; list-style: none; }
+  .allocation-row { min-inline-size: 0; display: grid; grid-template-columns: minmax(9rem, 1.2fr) minmax(7rem, 0.65fr) minmax(7rem, 0.8fr) minmax(7rem, 1fr) minmax(7rem, 1fr) auto; align-items: end; gap: 0.55rem; }
+  .allocation-field { min-inline-size: 0; display: grid; gap: 0.3rem; color: var(--fp-muted); font-size: 0.72rem; font-weight: 700; }
+  .allocation-field input, .allocation-field select { min-inline-size: 0; inline-size: 100%; min-block-size: 2.5rem; padding: 0.4rem 0.5rem; border: 1px solid var(--fp-control-border); border-radius: 0.4rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .allocation-remove { min-block-size: 2.5rem; padding: 0.4rem 0.65rem; border: 1px solid var(--fp-control-border); border-radius: 0.4rem; color: var(--fp-coral); background: var(--fp-paper-strong); font-size: 0.78rem; font-weight: 800; }
+  .allocation-remove:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .allocation-summary { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin: 0.8rem 0 0; padding: 0.65rem 0.75rem; border-radius: 0.45rem; color: var(--fp-muted); background: rgb(23 40 62 / 0.06); font-size: 0.78rem; }
+  .allocation-summary strong { color: var(--fp-ink); font-family: var(--fp-data); }
+  .allocation-summary [data-allocation-remaining].allocation-summary--open { color: var(--fp-coral); }
+  .allocation-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.6rem; margin-block-start: 0.7rem; }
+  .allocation-status { flex: 1 1 18rem; margin: 0; color: var(--fp-coral); font-size: 0.78rem; overflow-wrap: anywhere; }
+  .allocation-add { min-block-size: 2.35rem; padding: 0.45rem 0.7rem; border: 1px solid var(--fp-navy); border-radius: 0.4rem; color: var(--fp-navy); background: var(--fp-paper-strong); font-size: 0.78rem; font-weight: 800; }
   .assign-button { min-block-size: 2.35rem; padding: 0.45rem 0.7rem; border: 1px solid var(--fp-navy); border-radius: 0.4rem; color: var(--fp-paper); background: var(--fp-navy); font-size: 0.78rem; font-weight: 800; }
   .assign-button:hover { background: var(--fp-navy-deep); }
-  .assign-button:disabled { cursor: wait; opacity: 0.55; }
+  .assign-button:disabled { cursor: not-allowed; opacity: 0.55; }
   .accounts-view { max-inline-size: 68rem; padding-block: 1.8rem; }
   .accounts-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .accounts-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
@@ -382,6 +393,8 @@ const styles = `
     .metric:nth-child(3) { border-inline-start: 0; padding-inline-start: 0; }
     .metric:nth-child(4) { border-inline-start: 1px solid var(--fp-line); }
     .summary-sentence { grid-column: 1 / -1; }
+    .allocation-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .allocation-remove { inline-size: 100%; }
   }
 
   @media (max-width: 45rem) {
@@ -423,11 +436,13 @@ const styles = `
     .booking-row { grid-template-columns: 1fr auto; gap: 0.35rem 0.8rem; }
     .booking-date, .booking-account { grid-column: 1; }
     .booking-amount { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
-    .booking-assignment { grid-template-columns: 1fr; align-items: stretch; }
+    .allocation-row { grid-template-columns: 1fr; }
+    .allocation-actions { align-items: stretch; flex-direction: column; }
+    .allocation-status, .allocation-add, .assign-button { inline-size: 100%; }
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .allocation-field input, .allocation-field select, .allocation-remove { border: 1px solid CanvasText; box-shadow: none; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -570,6 +585,26 @@ function dataWithDefaults(data) {
   };
 }
 
+async function allocationErrorMessage(response) {
+  const fallback = response.status === 400
+    ? "Die Aufteilung wurde nicht akzeptiert. Bitte prüfe Ziele und Centbeträge."
+    : "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.";
+  try {
+    const body = (await response.text()).trim();
+    if (!body) return fallback;
+    try {
+      const parsed = JSON.parse(body);
+      return typeof parsed?.message === "string" && parsed.message.trim()
+        ? parsed.message.trim()
+        : fallback;
+    } catch {
+      return body;
+    }
+  } catch {
+    return fallback;
+  }
+}
+
 class FinanzplanerPanel extends HTMLElement {
   constructor() {
     super();
@@ -582,6 +617,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._accountsLoadFailed = false;
     this._bookings = [];
     this._persons = [];
+    this._allocationDrafts = new Map();
     this._excelPreview = null;
     this._message = "";
     this._loading = false;
@@ -635,6 +671,16 @@ class FinanzplanerPanel extends HTMLElement {
     if (!bookingResponse.ok) throw new Error(`HTTP ${bookingResponse.status}`);
     this._bookings = (await bookingResponse.json()).bookings || [];
     this._persons = personsResponse.ok ? ((await personsResponse.json()).persons || []) : [];
+    const bookingIds = new Set(this._bookings.map((booking) => String(booking.id)));
+    for (const booking of this._bookings) {
+      const bookingId = String(booking.id);
+      if (!this._allocationDrafts.has(bookingId)) {
+        this._allocationDrafts.set(bookingId, equalAllocationDraft(booking.amount, ["household"]));
+      }
+    }
+    for (const bookingId of this._allocationDrafts.keys()) {
+      if (!bookingIds.has(bookingId)) this._allocationDrafts.delete(bookingId);
+    }
   }
 
   async _openAccounts() {
@@ -717,33 +763,144 @@ class FinanzplanerPanel extends HTMLElement {
     status.classList.toggle("account-active-status--archived", !input.checked);
   }
 
+  _allocationForm(bookingId) {
+    return [...this.shadowRoot.querySelectorAll("[data-assignment-form]")]
+      .find((form) => form.dataset.bookingId === String(bookingId));
+  }
+
+  _updateAllocationSummary(form) {
+    if (!form) return;
+    const rows = this._allocationDrafts.get(form.dataset.bookingId) || [];
+    const total = Number(form.dataset.bookingTotal) || 0;
+    const remaining = allocationRemaining(total, rows);
+    const allocated = allocationRemaining(total, [{ amount: remaining }]);
+    const remainingNode = form.querySelector("[data-allocation-remaining]");
+    const allocatedNode = form.querySelector("[data-allocation-allocated]");
+    const submit = form.querySelector("[type='submit']");
+    if (allocatedNode) allocatedNode.textContent = formatEuro(allocated);
+    if (remainingNode) {
+      remainingNode.textContent = formatEuro(remaining);
+      remainingNode.classList.toggle("allocation-summary--open", remaining !== 0);
+    }
+    if (submit) {
+      const missingTarget = !rows.length || rows.some((row) => !row.target);
+      submit.disabled = missingTarget || remaining !== 0 || form.dataset.submitting === "true";
+    }
+  }
+
+  _updateAllocationField(event) {
+    const input = event.currentTarget;
+    const form = input.closest("[data-assignment-form]");
+    const rows = this._allocationDrafts.get(form?.dataset.bookingId);
+    const row = rows?.[Number(input.dataset.allocationIndex)];
+    if (!form || !row) return;
+    const field = input.dataset.allocationField;
+    if (field === "amount") {
+      const normalized = input.value.trim().replace(",", ".");
+      const amount = Number(normalized);
+      row.amount = Number.isFinite(amount) ? amount : 0;
+    } else {
+      row[field] = input.value || null;
+    }
+    const status = form.querySelector("[data-allocation-status]");
+    if (status) status.textContent = "";
+    this._updateAllocationSummary(form);
+  }
+
+  _addAllocationRow(event) {
+    const form = event.currentTarget.closest("[data-assignment-form]");
+    if (!form) return;
+    const bookingId = form.dataset.bookingId;
+    const currentRows = this._allocationDrafts.get(bookingId) || [];
+    const redistributed = equalAllocationDraft(
+      Number(form.dataset.bookingTotal) || 0,
+      [...currentRows.map((row) => row.target || ""), ""],
+    ).map((row, index) => index < currentRows.length ? {
+      ...row,
+      area: currentRows[index].area,
+      category: currentRows[index].category,
+      project: currentRows[index].project,
+    } : row);
+    this._allocationDrafts.set(bookingId, redistributed);
+    this._render();
+    const updatedForm = this._allocationForm(bookingId);
+    this._updateAllocationSummary(updatedForm);
+    const status = updatedForm?.querySelector("[data-allocation-status]");
+    if (status) status.textContent = "Zeile hinzugefügt. Die Beträge wurden gleichmäßig verteilt.";
+    updatedForm?.querySelector(`[data-allocation-index="${redistributed.length - 1}"][data-allocation-field="target"]`)?.focus();
+  }
+
+  _removeAllocationRow(event) {
+    const form = event.currentTarget.closest("[data-assignment-form]");
+    if (!form) return;
+    const bookingId = form.dataset.bookingId;
+    const index = Number(event.currentTarget.dataset.allocationIndex);
+    const rows = [...(this._allocationDrafts.get(bookingId) || [])];
+    rows.splice(index, 1);
+    this._allocationDrafts.set(bookingId, rows);
+    this._render();
+    const updatedForm = this._allocationForm(bookingId);
+    this._updateAllocationSummary(updatedForm);
+    const status = updatedForm?.querySelector("[data-allocation-status]");
+    if (status) status.textContent = "Zeile entfernt. Prüfe den verbleibenden Betrag.";
+    const focusIndex = Math.min(index, rows.length - 1);
+    (focusIndex >= 0
+      ? updatedForm?.querySelector(`[data-allocation-index="${focusIndex}"][data-allocation-remove]`)
+      : updatedForm?.querySelector("[data-allocation-add]"))?.focus();
+  }
+
   async _handleAssignment(event) {
     event.preventDefault();
     const form = event.currentTarget;
-    const targets = [...form.querySelectorAll("[data-targets] option:checked")].map((option) => option.value);
-    const area = form.querySelector("[data-area]")?.value || null;
-    if (!targets.length) {
-      this._message = "Bitte mindestens ein Zuordnungsziel auswählen.";
-      this._render();
+    const rows = this._allocationDrafts.get(form.dataset.bookingId) || [];
+    const total = Number(form.dataset.bookingTotal) || 0;
+    const remaining = allocationRemaining(total, rows);
+    const status = form.querySelector("[data-allocation-status]");
+    if (!rows.length || rows.some((row) => !row.target) || remaining !== 0) {
+      if (status) status.textContent = "Bitte wähle für jede Zeile ein Ziel und gleiche den verbleibenden Betrag centgenau aus.";
+      this._updateAllocationSummary(form);
       return;
     }
-    const button = form.querySelector("[type='submit']");
-    if (button) button.disabled = true;
+    const allocations = rows.map((row) => ({
+      target: row.target,
+      amount: row.amount,
+      area: row.area || null,
+      category: row.category || null,
+      project: row.project || null,
+    }));
+    form.dataset.submitting = "true";
+    form.setAttribute("aria-busy", "true");
+    if (status) status.textContent = "Aufteilung wird gespeichert …";
+    this._updateAllocationSummary(form);
     try {
-      const response = await fetchWithHomeAssistantAuth(this._hass, `${REVIEW_URL.replace("/unresolved", "")}/${encodeURIComponent(form.dataset.bookingId)}`, {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${BOOKINGS_URL}/${encodeURIComponent(form.dataset.bookingId)}/allocations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targets, area }),
+        body: JSON.stringify({ allocations }),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Zuordnung fehlgeschlagen");
-      this._message = "Buchung zugeordnet und aus der Prüfliste entfernt.";
-      await this._loadReviewData();
-      await this._loadOverview();
+      if (!response.ok) throw new Error(await allocationErrorMessage(response));
     } catch (error) {
-      this._message = error.message || "Zuordnung fehlgeschlagen.";
-      this._render();
+      form.dataset.submitting = "false";
+      form.removeAttribute("aria-busy");
+      if (status) status.textContent = error.message || "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.";
+      this._updateAllocationSummary(form);
+      return;
     }
+    this._allocationDrafts.delete(form.dataset.bookingId);
+    this._bookings = this._bookings.filter((booking) => String(booking.id) !== form.dataset.bookingId);
+    this._message = "Buchung zugeordnet und aus der Prüfliste entfernt.";
+    this._render();
+    let reviewRefreshFailed = false;
+    try {
+      await this._loadReviewData();
+    } catch {
+      reviewRefreshFailed = true;
+    }
+    await this._loadOverview();
+    this._message = reviewRefreshFailed
+      ? "Buchung gespeichert. Die Prüfliste konnte danach nicht neu geladen werden."
+      : "Buchung zugeordnet und aus der Prüfliste entfernt.";
+    this._render();
   }
 
   async _handleImport(event) {
@@ -895,6 +1052,9 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-excel-select]").forEach((input) => input.addEventListener("change", (event) => this._updateExcelSelection(event)));
     this.shadowRoot.querySelectorAll("[data-excel-field]").forEach((input) => input.addEventListener("change", (event) => this._updateExcelField(event)));
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAssignment(event)));
+    this.shadowRoot.querySelectorAll("[data-allocation-field]").forEach((input) => input.addEventListener("input", (event) => this._updateAllocationField(event)));
+    this.shadowRoot.querySelectorAll("[data-allocation-add]").forEach((button) => button.addEventListener("click", (event) => this._addAllocationRow(event)));
+    this.shadowRoot.querySelectorAll("[data-allocation-remove]").forEach((button) => button.addEventListener("click", (event) => this._removeAllocationRow(event)));
     this.shadowRoot.querySelectorAll("[data-account-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAccountSave(event)));
     this.shadowRoot.querySelectorAll("[data-account-owners]").forEach((select) => select.addEventListener("change", (event) => this._updateAccountOwnerStatus(event)));
     this.shadowRoot.querySelectorAll("[data-account-active]").forEach((input) => input.addEventListener("change", (event) => this._updateAccountActiveStatus(event)));
@@ -1068,8 +1228,52 @@ class FinanzplanerPanel extends HTMLElement {
     </section>`;
   }
 
+  _allocationTargetOptions(selectedTarget) {
+    return [
+      `<option value=""${selectedTarget ? "" : " selected"}>Ziel auswählen</option>`,
+      `<option value="household"${selectedTarget === "household" ? " selected" : ""}>Haushalt</option>`,
+      ...this._persons.map((person) => `<option value="${escapeHtml(person.entity_id)}"${selectedTarget === person.entity_id ? " selected" : ""}>${escapeHtml(person.name || person.entity_id)}</option>`),
+    ].join("");
+  }
+
+  _allocationEditorTemplate(booking, bookingIndex) {
+    const bookingId = String(booking.id);
+    const rows = this._allocationDrafts.get(bookingId) || equalAllocationDraft(booking.amount, ["household"]);
+    const total = Math.abs(Number(booking.amount) || 0);
+    const remaining = allocationRemaining(total, rows);
+    const allocated = allocationRemaining(total, [{ amount: remaining }]);
+    const summaryId = `allocation-summary-${bookingIndex}`;
+    const statusId = `allocation-status-${bookingIndex}`;
+    const purpose = booking.purpose || booking.counterparty || "Buchung";
+    const rowMarkup = rows.map((row, rowIndex) => {
+      const targetId = `allocation-target-${bookingIndex}-${rowIndex}`;
+      const amountId = `allocation-amount-${bookingIndex}-${rowIndex}`;
+      const areaId = `allocation-area-${bookingIndex}-${rowIndex}`;
+      const categoryId = `allocation-category-${bookingIndex}-${rowIndex}`;
+      const projectId = `allocation-project-${bookingIndex}-${rowIndex}`;
+      const amount = Number(row.amount);
+      return `<li class="allocation-row">
+        <label class="allocation-field" for="${targetId}">Ziel<select id="${targetId}" data-allocation-field="target" data-allocation-index="${rowIndex}" required>${this._allocationTargetOptions(row.target)}</select></label>
+        <label class="allocation-field" for="${amountId}">Betrag in Euro<input id="${amountId}" data-allocation-field="amount" data-allocation-index="${rowIndex}" type="text" inputmode="decimal" value="${Number.isFinite(amount) ? amount.toFixed(2) : ""}" required></label>
+        <label class="allocation-field" for="${areaId}">Bereich<select id="${areaId}" data-allocation-field="area" data-allocation-index="${rowIndex}"><option value=""${row.area ? "" : " selected"}>Kein Bereich</option><option value="Hunde"${row.area === "Hunde" ? " selected" : ""}>Hunde</option></select></label>
+        <label class="allocation-field" for="${categoryId}">Kategorie (optional)<input id="${categoryId}" data-allocation-field="category" data-allocation-index="${rowIndex}" type="text" value="${escapeHtml(row.category || "")}" autocomplete="off"></label>
+        <label class="allocation-field" for="${projectId}">Projekt (optional)<input id="${projectId}" data-allocation-field="project" data-allocation-index="${rowIndex}" type="text" value="${escapeHtml(row.project || "")}" autocomplete="off"></label>
+        <button class="allocation-remove" type="button" data-allocation-remove data-allocation-index="${rowIndex}" aria-label="Zeile ${rowIndex + 1} aus der Aufteilung für ${escapeHtml(purpose)} entfernen">Entfernen</button>
+      </li>`;
+    }).join("");
+    return `<fieldset class="allocation-editor" aria-describedby="${summaryId} ${statusId}">
+      <legend>Aufteilung</legend>
+      <ul class="allocation-list" aria-label="Aufteilungszeilen">${rowMarkup}</ul>
+      <p class="allocation-summary" id="${summaryId}" aria-live="polite"><span>Gesamt <strong>${formatEuro(total)}</strong></span><span>Zugeordnet <strong data-allocation-allocated>${formatEuro(allocated)}</strong></span><span>Verbleibend <strong data-allocation-remaining class="${remaining === 0 ? "" : "allocation-summary--open"}">${formatEuro(remaining)}</strong></span></p>
+      <div class="allocation-actions"><p class="allocation-status" id="${statusId}" data-allocation-status aria-live="polite"></p><button class="allocation-add" type="button" data-allocation-add>Zeile hinzufügen</button><button class="assign-button" type="submit"${!rows.length || rows.some((row) => !row.target) || remaining !== 0 ? " disabled" : ""}>Aufteilung speichern ${icon("check", 17)}</button></div>
+    </fieldset>`;
+  }
+
   _reviewTemplate() {
-    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person, dem Haushalt oder dem Bereich Hunde zu. Mehrere Ziele teilen den Betrag centgenau.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 für Buchungen · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking) => `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${escapeHtml(booking.purpose || booking.counterparty || "Ohne Verwendungszweck")}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span><div class="booking-assignment"><label class="assignment-field">Zuordnung <select data-targets multiple size="2" aria-label="Ziele für Buchung auswählen">${this._personOptions()}</select></label><label class="assignment-field">Bereich <select data-area aria-label="Bereich für Buchung auswählen"><option value="">Kein Bereich</option><option value="Hunde">Hunde</option></select></label><button class="assign-button" type="submit">Zuordnen ${icon("check", 17)}</button></div></form></li>`).join("")}</ul>` : `<div class="empty-state">Noch keine importierten Buchungen in der Prüfliste. Lade eine Bankdatei hoch oder importiere eine Excel-Vorlage.</div>`}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 für Buchungen · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking, index) => {
+      const total = Math.abs(Number(booking.amount) || 0);
+      return `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${escapeHtml(booking.purpose || booking.counterparty || "Ohne Verwendungszweck")}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._allocationEditorTemplate(booking, index)}</form></li>`;
+    }).join("")}</ul>` : `<div class="empty-state">Noch keine importierten Buchungen in der Prüfliste. Lade eine Bankdatei hoch oder importiere eine Excel-Vorlage.</div>`}</div></main>`;
     return this._shellTemplate(content);
   }
 }

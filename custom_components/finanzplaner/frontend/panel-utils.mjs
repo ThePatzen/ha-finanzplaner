@@ -40,6 +40,33 @@ export function selectedSuggestionSummary(suggestions = []) {
   );
 }
 
+function euroToCents(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+}
+
+export function equalAllocationDraft(total, targets = []) {
+  if (!targets.length) return [];
+  const totalCents = Math.abs(euroToCents(total));
+  const centsPerTarget = Math.floor(totalCents / targets.length);
+  const firstRowRemainder = totalCents - (centsPerTarget * targets.length);
+  return targets.map((target, index) => ({
+    target,
+    amount: (centsPerTarget + (index === 0 ? firstRowRemainder : 0)) / 100,
+    area: null,
+    category: null,
+    project: null,
+  }));
+}
+
+export function allocationRemaining(total, allocations = []) {
+  const allocatedCents = allocations.reduce(
+    (sum, allocation) => sum + euroToCents(allocation?.amount),
+    0,
+  );
+  return (euroToCents(total) - allocatedCents) / 100;
+}
+
 export function accountOwnerStatus(ownerTargets = []) {
   if (!ownerTargets.length) return "Inhaber noch nicht konfiguriert";
   return `${ownerTargets.length} Kontoinhaber`;

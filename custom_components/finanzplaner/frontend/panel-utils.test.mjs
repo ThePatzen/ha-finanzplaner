@@ -53,6 +53,35 @@ test("summarizes selected excel suggestions", () => {
   );
 });
 
+test("distributes equal allocations in cents with the remainder in the first row", () => {
+  assert.deepEqual(
+    utils.equalAllocationDraft(100, ["person.alex", "person.sam", "household"]),
+    [
+      { target: "person.alex", amount: 33.34, area: null, category: null, project: null },
+      { target: "person.sam", amount: 33.33, area: null, category: null, project: null },
+      { target: "household", amount: 33.33, area: null, category: null, project: null },
+    ],
+  );
+  assert.deepEqual(
+    utils.equalAllocationDraft(-0.05, ["person.alex", "household"]),
+    [
+      { target: "person.alex", amount: 0.03, area: null, category: null, project: null },
+      { target: "household", amount: 0.02, area: null, category: null, project: null },
+    ],
+  );
+});
+
+test("calculates the remaining allocation amount in cents", () => {
+  assert.equal(
+    utils.allocationRemaining(100, [{ amount: 60 }, { amount: 20 }]),
+    20,
+  );
+  assert.equal(
+    utils.allocationRemaining(0.3, [{ amount: 0.1 }, { amount: 0.2 }]),
+    0,
+  );
+});
+
 test("labels an account without owners as not configured", () => {
   assert.equal(utils.accountOwnerStatus([]), "Inhaber noch nicht konfiguriert");
   assert.equal(utils.accountOwnerStatus(["person.alex", "person.sam"]), "2 Kontoinhaber");
