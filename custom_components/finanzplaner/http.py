@@ -145,8 +145,28 @@ def account_payload(account: dict[str, object]) -> dict[str, object]:
         payload["account_reference"] = _redact_account_value(
             payload["account_reference"]
         )
+    for key, value in tuple(payload.items()):
+        if isinstance(value, str) and key not in {"account", "account_reference"}:
+            payload[key] = _mask_iban_occurrences(value)
+    payload.setdefault("bank", None)
     payload["iban_masked"] = f"•••• {iban[-4:]}" if iban else None
     return payload
+
+
+def _normalize_iban(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("Die IBAN muss als Text angegeben werden.")
+    normalized = normalize_account_reference(value)
+    if not re.fullmatch(r"[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}", normalized):
+        raise ValueError("Bitte eine gültige IBAN eingeben.")
+    rearranged = normalized[4:] + normalized[:4]
+    numeric = "".join(
+        str(ord(character) - ord("A") + 10) if character.isalpha() else character
+        for character in rearranged
+    )
+    if int(numeric) % 97 != 1:
+        raise ValueError("Bitte eine gültige IBAN eingeben.")
+    return normalized
 
 
 def validate_account_update(
@@ -178,11 +198,23 @@ def validate_account_update(
     if not isinstance(active, bool):
         raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
 
-    return {
+    update: dict[str, object] = {
         "label": label.strip(),
         "owner_targets": normalized_targets,
         "active": active,
     }
+    if "bank" in payload:
+        bank = payload["bank"]
+        if bank is not None and not isinstance(bank, str):
+            raise ValueError("Der Bankname muss als Text angegeben werden.")
+        update["bank"] = bank.strip() if isinstance(bank, str) and bank.strip() else None
+    if "iban" in payload:
+        iban = payload["iban"]
+        if iban is not None and not isinstance(iban, str):
+            raise ValueError("Die IBAN muss als Text angegeben werden.")
+        if isinstance(iban, str) and iban.strip():
+            update["iban"] = _normalize_iban(iban)
+    return update
 
 
 def _demo_overview() -> dict[str, Any]:

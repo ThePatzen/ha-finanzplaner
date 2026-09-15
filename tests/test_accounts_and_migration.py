@@ -51,6 +51,7 @@ class AccountsAndMigrationTests(unittest.TestCase):
             "AT123456789012345678",
         )
         self.assertEqual(migrated["accounts"][0]["owner_targets"], [])
+        self.assertIsNone(migrated["accounts"][0]["bank"])
 
     def test_migration_uses_existing_account_id_for_bookings(self):
         migrated = migrate_store_data(
@@ -70,6 +71,7 @@ class AccountsAndMigrationTests(unittest.TestCase):
         )
 
         self.assertEqual(migrated["accounts"][0]["id"], "legacy-account")
+        self.assertIsNone(migrated["accounts"][0]["bank"])
         self.assertEqual(
             migrated["bookings"][0]["account_id"], "legacy-account"
         )

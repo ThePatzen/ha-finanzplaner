@@ -207,6 +207,17 @@ test("keeps allocation locks and account drafts outside the rendered form", () =
   assert.doesNotMatch(panelSource, /dataset\.submitting/);
 });
 
+test("renders bank and masked IBAN fields and keeps IBAN optional on submit", () => {
+  assert.match(panelSource, /data-account-bank/);
+  assert.match(panelSource, /data-account-iban/);
+  assert.match(panelSource, /Gespeichert: \$\{escapeHtml\(account\.iban_masked\)\}/);
+  assert.match(panelSource, /leer lassen, wenn sie unverändert bleiben soll/);
+  assert.match(panelSource, /bank: account\.bank \|\| ""/);
+  assert.match(panelSource, /iban: ""/);
+  assert.match(panelSource, /if \(draft\.iban\.trim\(\)\) payload\.iban = draft\.iban\.trim\(\)/);
+  assert.match(panelSource, /data-account-label\], \[data-account-bank\], \[data-account-iban\]/);
+});
+
 test("keeps import account counts in the review feedback after reload", () => {
   assert.match(panelSource, /result\.new_accounts \|\| 0/);
   assert.match(panelSource, /result\.unconfigured_accounts \|\| 0/);

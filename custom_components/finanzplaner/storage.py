@@ -49,6 +49,7 @@ def migrate_store_data(
         if reference:
             account["account_reference"] = reference
             account["id"] = account.get("id") or account_id_for_reference(reference)
+            account.setdefault("bank", None)
             account_by_reference.setdefault(reference, account)
 
     bookings = data.get("bookings")
@@ -74,6 +75,7 @@ def migrate_store_data(
                 "label": f"Konto · {reference[-4:]}",
                 "iban": None,
                 "account_reference": reference,
+                "bank": None,
                 "currency": "EUR",
                 "owner_targets": [],
                 "active": True,
@@ -116,6 +118,7 @@ def normalize_current_store_data(
             account.setdefault("owner_targets", [])
             account.setdefault("active", True)
             account.setdefault("currency", "EUR")
+            account.setdefault("bank", None)
             account_by_reference.setdefault(reference, account)
 
     bookings = data.get("bookings")

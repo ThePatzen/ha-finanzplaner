@@ -69,11 +69,13 @@ class AccountPayloadTests(unittest.TestCase):
             {
                 "id": "account-1",
                 "label": "Giro",
+                "bank": "Erste Bank",
                 "iban": " at12 3456 7890 1234 5678 ",
             }
         )
 
         self.assertEqual(payload["label"], "Giro")
+        self.assertEqual(payload["bank"], "Erste Bank")
         self.assertEqual(payload["iban_masked"], "•••• 5678")
         self.assertNotIn("iban", payload)
 
@@ -125,6 +127,33 @@ class AccountPayloadTests(unittest.TestCase):
             ["person.alex", "person.sam", "household"],
         )
         self.assertIs(result["active"], True)
+
+    def test_account_update_accepts_bank_and_valid_iban(self):
+        result = self.http.validate_account_update(
+            {
+                "label": "Giro",
+                "bank": " Erste Bank ",
+                "iban": "DE89 3704 0044 0532 0130 00",
+                "owner_targets": [],
+                "active": True,
+            },
+            {"household"},
+        )
+
+        self.assertEqual(result["bank"], "Erste Bank")
+        self.assertEqual(result["iban"], "DE89370400440532013000")
+
+    def test_account_update_rejects_malformed_iban(self):
+        with self.assertRaises(ValueError):
+            self.http.validate_account_update(
+                {
+                    "label": "Giro",
+                    "iban": "DE89370400440532013001",
+                    "owner_targets": [],
+                    "active": True,
+                },
+                {"household"},
+            )
 
     def test_account_update_rejects_unknown_target(self):
         with self.assertRaises(ValueError):
@@ -309,6 +338,49 @@ class AccountViewTests(unittest.TestCase):
         self.assertEqual(self.coordinator.refresh_count, 1)
         self.assertNotIn("iban", result["account"])
         self.assertNotIn("AT123456789012345678", str(result))
+
+    def test_post_persists_bank_and_new_iban_without_returning_full_iban(self):
+        result = asyncio.run(
+            self.http.AccountView().post(
+                self._request(
+                    {
+                        "label": "Giro",
+                        "bank": " Erste Bank ",
+                        "iban": "DE89 3704 0044 0532 0130 00",
+                        "owner_targets": [],
+                        "active": True,
+                    }
+                ),
+                "account-1",
+            )
+        )
+
+        account = self.coordinator.store.data["accounts"][0]
+        self.assertEqual(account["bank"], "Erste Bank")
+        self.assertEqual(account["iban"], "DE89370400440532013000")
+        self.assertEqual(result["account"]["bank"], "Erste Bank")
+        self.assertEqual(result["account"]["iban_masked"], "•••• 3000")
+        self.assertNotIn("DE89370400440532013000", str(result))
+
+    def test_post_with_empty_iban_preserves_existing_iban(self):
+        asyncio.run(
+            self.http.AccountView().post(
+                self._request(
+                    {
+                        "label": "Giro",
+                        "bank": "Neue Bank",
+                        "iban": "",
+                        "owner_targets": [],
+                        "active": True,
+                    }
+                ),
+                "account-1",
+            )
+        )
+
+        account = self.coordinator.store.data["accounts"][0]
+        self.assertEqual(account["bank"], "Neue Bank")
+        self.assertEqual(account["iban"], "AT123456789012345678")
 
     def test_changing_shared_account_owners_preserves_existing_booking_allocation(self):
         allocation_before = deepcopy(

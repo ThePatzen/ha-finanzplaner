@@ -69,6 +69,7 @@ def ensure_account(
             None,
         )
     if matching_account is not None:
+        matching_account.setdefault("bank", None)
         if normalized_iban and not normalize_account_reference(
             matching_account.get("iban", "")
         ):
@@ -82,6 +83,7 @@ def ensure_account(
         "label": f"Konto · {normalized_reference[-4:]}",
         "iban": normalized_iban or None,
         "account_reference": normalized_reference,
+        "bank": None,
         "currency": "EUR",
         "owner_targets": [],
         "active": True,
