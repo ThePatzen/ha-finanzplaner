@@ -39,3 +39,10 @@ export function selectedSuggestionSummary(suggestions = []) {
     { count: 0, amount: 0 },
   );
 }
+
+export function fetchWithHomeAssistantAuth(hass, path, options = {}) {
+  if (typeof hass?.fetchWithAuth !== "function") {
+    throw new Error("Die Home-Assistant-Anmeldung ist noch nicht bereit.");
+  }
+  return hass.fetchWithAuth(path, options);
+}

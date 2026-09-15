@@ -49,3 +49,22 @@ test("summarizes selected excel suggestions", () => {
     { count: 2, amount: 15 },
   );
 });
+
+test("uses the Home Assistant authenticated request method for protected panel APIs", async () => {
+  const hass = {
+    fetchWithAuth: async (path, options) => {
+      if (path === "/api/finanzplaner/excel/preview" && options.method === "POST") {
+        return { status: 200 };
+      }
+      return { status: 401 };
+    },
+  };
+
+  const response = await utils.fetchWithHomeAssistantAuth(
+    hass,
+    "/api/finanzplaner/excel/preview",
+    { method: "POST" },
+  );
+
+  assert.equal(response.status, 200);
+});

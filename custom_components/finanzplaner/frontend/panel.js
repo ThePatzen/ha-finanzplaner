@@ -1,4 +1,4 @@
-import { formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
+import { fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const PERSONS_URL = "/api/finanzplaner/persons";
@@ -563,7 +563,7 @@ class FinanzplanerPanel extends HTMLElement {
   async _loadOverview() {
     this._loading = true;
     try {
-      const response = await fetch(`${OVERVIEW_URL}?month=${this._month.toISOString().slice(0, 7)}`, { credentials: "same-origin" });
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${OVERVIEW_URL}?month=${this._month.toISOString().slice(0, 7)}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       this._data = dataWithDefaults(await response.json());
       this._message = "";
@@ -593,8 +593,8 @@ class FinanzplanerPanel extends HTMLElement {
 
   async _loadReviewData() {
     const [bookingResponse, personsResponse] = await Promise.all([
-      fetch(REVIEW_URL, { credentials: "same-origin" }),
-      fetch(PERSONS_URL, { credentials: "same-origin" }),
+      fetchWithHomeAssistantAuth(this._hass, REVIEW_URL),
+      fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
     ]);
     if (!bookingResponse.ok) throw new Error(`HTTP ${bookingResponse.status}`);
     this._bookings = (await bookingResponse.json()).bookings || [];
@@ -614,10 +614,9 @@ class FinanzplanerPanel extends HTMLElement {
     const button = form.querySelector("[type='submit']");
     if (button) button.disabled = true;
     try {
-      const response = await fetch(`${REVIEW_URL.replace("/unresolved", "")}/${encodeURIComponent(form.dataset.bookingId)}`, {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${REVIEW_URL.replace("/unresolved", "")}/${encodeURIComponent(form.dataset.bookingId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
         body: JSON.stringify({ targets, area }),
       });
       const result = await response.json();
@@ -643,7 +642,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._message = "Import wird geprüft …";
     this._render();
     try {
-      const response = await fetch(IMPORT_URL, { method: "POST", body: form, credentials: "same-origin" });
+      const response = await fetchWithHomeAssistantAuth(this._hass, IMPORT_URL, { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Import fehlgeschlagen");
       this._message = `${result.format}: ${result.accepted} Buchungen übernommen, ${result.duplicates} Duplikate übersprungen.`;
@@ -661,7 +660,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._message = "Excel-Datei wird geprüft …";
     this._render();
     try {
-      const response = await fetch(EXCEL_PREVIEW_URL, { method: "POST", body: form, credentials: "same-origin" });
+      const response = await fetchWithHomeAssistantAuth(this._hass, EXCEL_PREVIEW_URL, { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Excel-Import fehlgeschlagen");
       this._excelPreview = {
@@ -723,10 +722,9 @@ class FinanzplanerPanel extends HTMLElement {
       person_hint: suggestion.person_hint,
     }]));
     try {
-      const response = await fetch(EXCEL_CONFIRM_URL, {
+      const response = await fetchWithHomeAssistantAuth(this._hass, EXCEL_CONFIRM_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
         body: JSON.stringify({
           preview_id: this._excelPreview.preview_id,
           selected_ids: selected.map((suggestion) => suggestion.id),
