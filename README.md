@@ -2,6 +2,8 @@
 
 Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echten Bankbuchungen und nachvollziehbaren Zuordnungen.
 
+![Finanzplaner – gemeinsamer Haushaltsüberblick](assets/finanzplaner-hacs.png)
+
 ## Aktueller Stand
 
 Die erste vertikale Scheibe ist vorbereitet:
