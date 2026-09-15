@@ -48,6 +48,7 @@ def migrate_store_data(
         reference = normalize_account_reference(account.get("account_reference", ""))
         if reference:
             account["account_reference"] = reference
+            account["id"] = account.get("id") or account_id_for_reference(reference)
             account_by_reference.setdefault(reference, account)
 
     bookings = data.get("bookings")
@@ -61,7 +62,10 @@ def migrate_store_data(
             booking.get("account_reference", booking.get("account", ""))
         )
         booking["account_reference"] = reference
-        booking["account_id"] = account_id_for_reference(reference)
+        account = account_by_reference.get(reference)
+        booking["account_id"] = (
+            account["id"] if account is not None else account_id_for_reference(reference)
+        )
         if "allocations" not in booking:
             booking["allocations"] = []
         if reference and reference not in account_by_reference:
@@ -87,7 +91,20 @@ class FinanceStore:
     def __init__(self, hass: Any, household_name: str = DEFAULT_HOUSEHOLD_NAME) -> None:
         from homeassistant.helpers.storage import Store
 
-        self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        class MigratingStore(Store):
+            async def _async_migrate_func(
+                self,
+                old_major_version: int,
+                old_minor_version: int,
+                old_data: dict[str, object],
+            ) -> dict[str, object]:
+                if old_major_version != 1:
+                    raise NotImplementedError(
+                        f"Unsupported store major version: {old_major_version}"
+                    )
+                return migrate_store_data(old_data, household_name)
+
+        self._store = MigratingStore(hass, STORAGE_VERSION, STORAGE_KEY)
         self._household_name = household_name
         self.data: dict[str, Any] = empty_data(household_name)
 
