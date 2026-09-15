@@ -40,6 +40,13 @@ Mit Version 0.3.0 geliefert:
 - eine oder mehrere bestätigungspflichtige, centgenaue Aufteilungen pro Buchung
 - gemeinsame Aufteilungen mit `target="household"` und optional `area="Hunde"`
 
+Im aktuellen Arbeitsstand zusätzlich umgesetzt, aber noch nicht als Release
+veröffentlicht:
+
+- eigene Planposten-Verwaltung mit Einnahmen, Ausgaben und Rücklagen
+- wiederkehrende und einmalige Planungen mit Fälligkeit und Gültigkeitszeitraum
+- authentifizierte Planposten-API mit reversibler Archivierung
+
 Weitere Produktfähigkeiten und Leitplanken:
 
 - Unterstützung eines gemeinsamen Haushalts mit mehreren Personen

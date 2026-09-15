@@ -34,12 +34,16 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
         ExcelPreviewView,
         ImportView,
         OverviewView,
+        PlanItemView,
+        PlanItemsView,
         PersonsView,
         UnresolvedBookingsView,
     )
 
     hass.data.setdefault(DOMAIN, {})
     hass.http.register_view(OverviewView)
+    hass.http.register_view(PlanItemsView)
+    hass.http.register_view(PlanItemView)
     hass.http.register_view(PersonsView)
     hass.http.register_view(AccountsView)
     hass.http.register_view(AccountView)

@@ -182,6 +182,23 @@ test("labels the visible account lifecycle state", () => {
   assert.equal(utils.accountActiveStatus(false), "Archiviert");
 });
 
+test("labels recurring and one-time plan item rhythms", () => {
+  assert.equal(utils.planItemFrequencyLabel(1), "monatlich");
+  assert.equal(utils.planItemFrequencyLabel(3), "vierteljährlich");
+  assert.equal(utils.planItemFrequencyLabel(null), "einmalig");
+  assert.equal(utils.planItemStatus(false), "Archiviert");
+});
+
+test("exposes the authenticated plan item editor routes and form states", () => {
+  assert.match(panelSource, /const PLAN_ITEMS_URL = "\/api\/finanzplaner\/plan-items"/);
+  assert.match(panelSource, /this\._openPlanItems\(\)/);
+  assert.match(panelSource, /data-plan-item-form/);
+  assert.match(panelSource, /data-plan-item-archive/);
+  assert.match(panelSource, /method: "DELETE"/);
+  assert.match(panelSource, /aria-busy/);
+  assert.match(panelSource, /data-action="accounts" aria-label="Konten verwalten"/);
+});
+
 test("renders a skip link to focusable main content and reveals it on keyboard focus", () => {
   assert.match(panelSource, /class="skip-link visually-hidden" href="#content" data-skip-link/);
   assert.match(panelSource, /\.skip-link:focus-visible\s*\{[^}]*clip-path:\s*none\s*!important/s);

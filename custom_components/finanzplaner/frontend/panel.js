@@ -1,6 +1,7 @@
-import { accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, readApiResponse, removeAllocationDraftRow, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
+const PLAN_ITEMS_URL = "/api/finanzplaner/plan-items";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
@@ -374,6 +375,38 @@ const styles = `
   .account-save { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-paper); background: var(--fp-navy); font-weight: 800; }
   .account-save:hover { background: var(--fp-navy-deep); }
   .account-save:disabled { cursor: wait; opacity: 0.55; }
+  .plan-items-view { max-inline-size: 76rem; padding-block: 1.8rem; }
+  .plan-items-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .plan-items-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
+  .plan-items-view-header p { max-inline-size: 58rem; margin: 0.5rem 0 0; color: var(--fp-muted); }
+  .plan-item-list { display: grid; gap: 1rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+  .plan-item-card { display: grid; gap: 1rem; padding: 1.1rem; }
+  .plan-item-card--archived { background: rgb(247 247 244 / 0.7); }
+  .plan-item-card-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-block-end: 0.75rem; border-block-end: 1px solid var(--fp-line); }
+  .plan-item-card-header h3 { min-inline-size: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--fp-display); font-size: 1.3rem; line-height: 1; }
+  .plan-item-card-header p { flex: 0 0 auto; margin: 0; color: var(--fp-muted); font-size: 0.76rem; }
+  .plan-item-fields { display: grid; grid-template-columns: minmax(12rem, 1.5fr) repeat(4, minmax(8rem, 1fr)); gap: 0.75rem; }
+  .plan-item-field { min-inline-size: 0; display: grid; align-content: start; gap: 0.3rem; color: var(--fp-muted); font-size: 0.75rem; font-weight: 700; }
+  .plan-item-field--wide { grid-column: span 2; }
+  .plan-item-field input, .plan-item-field select { inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-control-border); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .plan-item-field input:user-invalid, .plan-item-field select:user-invalid { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .plan-item-field small { color: var(--fp-muted); font-size: 0.7rem; font-weight: 400; line-height: 1.35; }
+  .plan-item-target { grid-column: span 2; }
+  .plan-item-schedule { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(5, minmax(8rem, 1fr)); gap: 0.75rem; margin: 0; padding: 0.85rem 0 0; border: 0; border-block-start: 1px solid var(--fp-line); }
+  .plan-item-schedule legend { grid-column: 1 / -1; padding: 0; color: var(--fp-ink); font-size: 0.82rem; font-weight: 800; }
+  .plan-item-status { display: inline-flex; align-items: center; min-block-size: 1.8rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem; color: var(--fp-navy); background: var(--fp-cyan-soft); font-size: 0.72rem; font-weight: 800; }
+  .plan-item-status--archived { color: var(--fp-ink); background: var(--fp-amber-soft); }
+  .plan-item-card-actions { display: flex; align-items: center; gap: 0.8rem; padding-block-start: 0.75rem; border-block-start: 1px solid var(--fp-line); }
+  .plan-item-save-status { flex: 1; min-block-size: 1.2rem; margin: 0; color: var(--fp-muted); font-size: 0.78rem; overflow-wrap: anywhere; }
+  .plan-item-save-status--error { color: var(--fp-coral); font-weight: 700; }
+  .plan-item-save, .plan-item-archive, .plan-item-new { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; font-weight: 800; }
+  .plan-item-save, .plan-item-new { color: var(--fp-paper); background: var(--fp-navy); }
+  .plan-item-save:hover, .plan-item-new:hover { background: var(--fp-navy-deep); }
+  .plan-item-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
+  .plan-item-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .plan-item-save:disabled { cursor: wait; opacity: 0.55; }
+  .plan-item-new-row { display: flex; justify-content: flex-end; margin-block-start: 1rem; }
+  .plan-item-help { max-inline-size: 70ch; margin: 0.8rem 0 0; color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
   .empty-state { margin-block-start: 1rem; padding: 2rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); text-align: center; }
 
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
@@ -401,6 +434,9 @@ const styles = `
     .summary-sentence { grid-column: 1 / -1; }
     .allocation-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .allocation-remove { inline-size: 100%; }
+    .plan-item-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .plan-item-field--wide, .plan-item-target { grid-column: span 2; }
+    .plan-item-schedule { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
   @media (max-width: 45rem) {
@@ -431,12 +467,17 @@ const styles = `
     .statusbar { display: block; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
-    .review-view-header, .accounts-view-header, .import-strip, .excel-review-header { display: block; }
+    .review-view-header, .accounts-view-header, .plan-items-view-header, .import-strip, .excel-review-header { display: block; }
     .back-button { margin-block-start: 1rem; }
     .accounts-actions { margin-block-start: 1rem; }
     .account-card { grid-template-columns: 1fr; }
     .account-card-header, .account-card-actions { grid-column: 1; }
     .account-card-header, .account-card-actions { align-items: stretch; flex-direction: column; }
+    .plan-item-card-header, .plan-item-card-actions { align-items: stretch; flex-direction: column; }
+    .plan-item-fields, .plan-item-schedule { grid-template-columns: 1fr; }
+    .plan-item-field--wide, .plan-item-target { grid-column: 1; }
+    .plan-item-save, .plan-item-archive, .plan-item-new { inline-size: 100%; }
+    .plan-item-new-row { display: block; }
     .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
     .excel-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .booking-row { grid-template-columns: 1fr auto; gap: 0.35rem 0.8rem; }
@@ -448,7 +489,7 @@ const styles = `
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .allocation-field input, .allocation-field select, .allocation-remove { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select { border: 1px solid CanvasText; box-shadow: none; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -601,6 +642,12 @@ class FinanzplanerPanel extends HTMLElement {
     this._accounts = [];
     this._accountsLoading = false;
     this._accountsLoadFailed = false;
+    this._planItems = [];
+    this._planItemsLoading = false;
+    this._planItemsLoadFailed = false;
+    this._planItemDrafts = new Map();
+    this._planItemSubmissions = new Set();
+    this._planItemErrors = new Map();
     this._bookings = [];
     this._persons = [];
     this._allocationDrafts = new Map();
@@ -729,6 +776,225 @@ class FinanzplanerPanel extends HTMLElement {
       this._accountsLoading = false;
     }
     this._render();
+  }
+
+  _newPlanItemDraft() {
+    return {
+      name: "",
+      direction: "expense",
+      category: "",
+      area: "",
+      project: "",
+      amount: "",
+      amount_input: "",
+      frequency_months: 1,
+      due_day: "",
+      due_date: "",
+      start_date: "",
+      end_date: "",
+      target: "household",
+      active: true,
+    };
+  }
+
+  _planItemDraftFromItem(item) {
+    const numericAmount = Number(item.amount);
+    return {
+      name: item.name || "",
+      direction: item.direction || (numericAmount >= 0 ? "income" : "expense"),
+      category: item.category || "",
+      area: item.area || "",
+      project: item.project || "",
+      amount: Math.abs(numericAmount) || 0,
+      amount_input: Number.isFinite(numericAmount) ? Math.abs(numericAmount).toFixed(2) : "",
+      frequency_months: item.frequency_months ?? 1,
+      due_day: item.due_day ?? "",
+      due_date: item.due_date || "",
+      start_date: item.start_date || "",
+      end_date: item.end_date || "",
+      target: item.target || "",
+      active: item.active !== false,
+    };
+  }
+
+  async _loadPlanItems() {
+    const [planResponse, personsResponse] = await Promise.all([
+      fetchWithHomeAssistantAuth(this._hass, PLAN_ITEMS_URL),
+      fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
+    ]);
+    const [planResult, personsResult] = await Promise.all([
+      readApiResponse(planResponse),
+      readApiResponse(personsResponse),
+    ]);
+    if (!planResponse.ok || !personsResponse.ok) {
+      const failedResult = !planResponse.ok ? planResult : personsResult;
+      throw new Error(apiErrorMessage(failedResult, "Planposten oder Personen konnten nicht geladen werden."));
+    }
+    this._planItems = Array.isArray(planResult.plan_items) ? planResult.plan_items : [];
+    this._persons = Array.isArray(personsResult.persons) ? personsResult.persons : [];
+    if (!this._planItemDrafts.has("new")) this._planItemDrafts.set("new", this._newPlanItemDraft());
+    const itemIds = new Set(this._planItems.map((item) => String(item.id)));
+    for (const item of this._planItems) {
+      const itemId = String(item.id);
+      if (!this._planItemDrafts.has(itemId)) {
+        this._planItemDrafts.set(itemId, this._planItemDraftFromItem(item));
+      }
+    }
+    for (const itemId of this._planItemDrafts.keys()) {
+      if (itemId !== "new" && !itemIds.has(itemId)) this._planItemDrafts.delete(itemId);
+    }
+  }
+
+  async _openPlanItems() {
+    this._view = "plan_items";
+    this._message = "";
+    this._planItemsLoading = true;
+    this._planItemsLoadFailed = false;
+    this._render();
+    this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
+    try {
+      await this._loadPlanItems();
+    } catch (error) {
+      this._planItems = [];
+      this._persons = [];
+      this._planItemsLoadFailed = true;
+      this._message = error.message || "Planposten konnten nicht geladen werden.";
+    } finally {
+      this._planItemsLoading = false;
+    }
+    this._render();
+  }
+
+  _capturePlanItemDraft(form) {
+    const value = (field) => form.querySelector(`[data-plan-item-field="${field}"]`)?.value ?? "";
+    return {
+      name: value("name"),
+      direction: value("direction") || "expense",
+      category: value("category"),
+      area: value("area"),
+      project: value("project"),
+      amount: value("amount"),
+      amount_input: value("amount"),
+      frequency_months: value("frequency_months") === "" ? null : Number(value("frequency_months")),
+      due_day: value("due_day"),
+      due_date: value("due_date"),
+      start_date: value("start_date"),
+      end_date: value("end_date"),
+      target: value("target"),
+      active: Boolean(form.querySelector("[data-plan-item-field='active']")?.checked),
+    };
+  }
+
+  _updatePlanItemDraft(event) {
+    const form = event.currentTarget.closest("[data-plan-item-form]");
+    if (!form) return;
+    const itemId = String(form.dataset.planItemId);
+    const draft = this._capturePlanItemDraft(form);
+    this._planItemDrafts.set(itemId, draft);
+    this._planItemErrors.delete(itemId);
+    const status = form.querySelector("[data-plan-item-save-status]");
+    status?.classList.remove("plan-item-save-status--error");
+    if (status) status.textContent = "";
+  }
+
+  _planItemPayload(draft) {
+    const optional = (value) => String(value ?? "").trim() || null;
+    const frequency = draft.frequency_months === "" || draft.frequency_months == null
+      ? null
+      : Number(draft.frequency_months);
+    const dueDay = String(draft.due_day ?? "").trim();
+    return {
+      name: draft.name,
+      direction: draft.direction,
+      category: optional(draft.category),
+      area: optional(draft.area),
+      project: optional(draft.project),
+      amount: String(draft.amount_input ?? draft.amount ?? "").trim(),
+      frequency_months: frequency,
+      due_day: dueDay ? Number(dueDay) : null,
+      due_date: optional(draft.due_date),
+      start_date: optional(draft.start_date),
+      end_date: optional(draft.end_date),
+      target: optional(draft.target),
+      active: draft.active !== false,
+    };
+  }
+
+  async _handlePlanItemSave(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const itemId = String(form.dataset.planItemId);
+    if (this._planItemSubmissions.has(itemId)) return;
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+    const draft = this._capturePlanItemDraft(form);
+    this._planItemDrafts.set(itemId, draft);
+    const button = form.querySelector("[type='submit']");
+    const status = form.querySelector("[data-plan-item-save-status]");
+    const payload = this._planItemPayload(draft);
+    const url = itemId === "new"
+      ? PLAN_ITEMS_URL
+      : `${PLAN_ITEMS_URL}/${encodeURIComponent(itemId)}`;
+    this._planItemSubmissions.add(itemId);
+    form.setAttribute("aria-busy", "true");
+    if (button) button.disabled = true;
+    if (status) status.textContent = "Planposten wird gespeichert …";
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Der Planposten konnte nicht gespeichert werden."));
+      this._planItemDrafts.delete(itemId);
+      this._planItemErrors.delete(itemId);
+      this._message = itemId === "new" ? "Planposten angelegt." : "Planposten gespeichert.";
+      await this._loadPlanItems();
+      this._render();
+    } catch (error) {
+      this._planItemErrors.set(itemId, error.message || "Der Planposten konnte nicht gespeichert werden.");
+      if (status) {
+        status.textContent = this._planItemErrors.get(itemId);
+        status.classList.add("plan-item-save-status--error");
+      }
+      if (button) button.disabled = false;
+      form.removeAttribute("aria-busy");
+    } finally {
+      this._planItemSubmissions.delete(itemId);
+    }
+  }
+
+  async _archivePlanItem(event) {
+    const button = event.currentTarget;
+    const itemId = String(button.dataset.planItemId);
+    const item = this._planItems.find((candidate) => String(candidate.id) === itemId);
+    if (!item || !window.confirm(`„${item.name || "Planposten"}“ archivieren?`)) return;
+    if (this._planItemSubmissions.has(itemId)) return;
+    const form = button.closest("[data-plan-item-form]");
+    const status = form?.querySelector("[data-plan-item-save-status]");
+    this._planItemSubmissions.add(itemId);
+    button.disabled = true;
+    if (status) status.textContent = "Planposten wird archiviert …";
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${PLAN_ITEMS_URL}/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Der Planposten konnte nicht archiviert werden."));
+      this._planItemDrafts.delete(itemId);
+      this._message = "Planposten archiviert. Du kannst ihn über den Aktiv-Schalter wieder einschalten.";
+      await this._loadPlanItems();
+      this._render();
+    } catch (error) {
+      if (status) {
+        status.textContent = error.message || "Der Planposten konnte nicht archiviert werden.";
+        status.classList.add("plan-item-save-status--error");
+      }
+      button.disabled = false;
+    } finally {
+      this._planItemSubmissions.delete(itemId);
+    }
   }
 
   async _handleAccountSave(event) {
@@ -1093,9 +1359,11 @@ class FinanzplanerPanel extends HTMLElement {
   _render() {
     const template = this._view === "review"
       ? this._reviewTemplate()
-      : this._view === "accounts"
-        ? this._accountsTemplate()
-        : this._overviewTemplate();
+      : this._view === "plan_items"
+        ? this._planItemsTemplate()
+        : this._view === "accounts"
+          ? this._accountsTemplate()
+          : this._overviewTemplate();
     this.shadowRoot.innerHTML = `<style>${styles}</style>${template}`;
     this._bindEvents();
   }
@@ -1108,6 +1376,7 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelector("[data-action='previous-month']")?.addEventListener("click", () => this._shiftMonth(-1));
     this.shadowRoot.querySelector("[data-action='next-month']")?.addEventListener("click", () => this._shiftMonth(1));
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
+    this.shadowRoot.querySelector("[data-action='accounts']")?.addEventListener("click", () => this._openAccounts());
     this.shadowRoot.querySelector("[data-action='back']")?.addEventListener("click", () => { this._view = "overview"; this._render(); this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true }); });
     this.shadowRoot.querySelector("[data-import]")?.addEventListener("change", (event) => this._handleImport(event));
     this.shadowRoot.querySelector("[data-excel-confirm]")?.addEventListener("click", () => this._confirmExcelImport());
@@ -1122,8 +1391,15 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-account-label], [data-account-bank], [data-account-iban]").forEach((input) => input.addEventListener("input", (event) => this._updateAccountDraft(event)));
     this.shadowRoot.querySelectorAll("[data-account-owners]").forEach((select) => select.addEventListener("change", (event) => { this._updateAccountDraft(event); this._updateAccountOwnerStatus(event); }));
     this.shadowRoot.querySelectorAll("[data-account-active]").forEach((input) => input.addEventListener("change", (event) => { this._updateAccountDraft(event); this._updateAccountActiveStatus(event); }));
+    this.shadowRoot.querySelectorAll("[data-plan-item-form]").forEach((form) => form.addEventListener("submit", (event) => this._handlePlanItemSave(event)));
+    this.shadowRoot.querySelectorAll("[data-plan-item-field]").forEach((input) => {
+      input.addEventListener("input", (event) => this._updatePlanItemDraft(event));
+      input.addEventListener("change", (event) => this._updatePlanItemDraft(event));
+    });
+    this.shadowRoot.querySelectorAll("[data-plan-item-archive]").forEach((button) => button.addEventListener("click", (event) => this._archivePlanItem(event)));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.nav === "review") this._openReview();
+      else if (button.dataset.nav === "plan_items") this._openPlanItems();
       else if (button.dataset.nav === "accounts") this._openAccounts();
       else if (button.dataset.nav === "overview") this._view = "overview";
       else this._message = `${button.textContent.trim()} ist für die nächste Ausbaustufe vorbereitet.`;
@@ -1135,7 +1411,7 @@ class FinanzplanerPanel extends HTMLElement {
     const items = [
       ["overview", "overview", "Übersicht"],
       ["energy", "energy", "Energie"],
-      ["planner", "planner", "Finanzplaner"],
+      ["planner", "planner", "Planposten"],
       ["calendar", "calendar", "Kalender"],
       ["tasks", "tasks", "Aufgaben"],
       ["household", "household", "Haushalt"],
@@ -1143,8 +1419,8 @@ class FinanzplanerPanel extends HTMLElement {
       ["accounts", "settings", "Konten"],
     ];
     return items.map(([id, iconName, label]) => {
-      const target = id === "planner" ? "overview" : id;
-      const current = (this._view === "overview" && id === "planner") || this._view === id;
+      const target = id === "planner" ? "plan_items" : id;
+      const current = (this._view === "plan_items" && id === "planner") || this._view === id;
       return `<button class="nav-item" data-nav="${target}"${current ? ' aria-current="page"' : ""} type="button">${icon(iconName, 22)}<span>${label}</span></button>`;
     }).join("");
   }
@@ -1167,7 +1443,7 @@ class FinanzplanerPanel extends HTMLElement {
       <div class="toolbar-actions">
         <div class="month-control" aria-label="Monat auswählen"><button type="button" data-action="previous-month" aria-label="Vorheriger Monat">${icon("chevronLeft", 20)}</button><span class="month-label">${monthLabel(this._month)} ${icon("calendarSmall", 16)}</span><button type="button" data-action="next-month" aria-label="Nächster Monat">${icon("chevronRight", 20)}</button></div>
         <button class="review-pill" type="button" data-action="review">${icon("warning", 17)}<span>Buchungen prüfen</span><span class="count">${escapeHtml(this._data.unresolved_count)}</span></button>
-        <button class="icon-button" type="button" aria-label="Einstellungen">${icon("settings", 21)}</button>
+        <button class="icon-button" type="button" data-action="accounts" aria-label="Konten verwalten">${icon("settings", 21)}</button>
       </div>
     </header>`;
   }
@@ -1210,6 +1486,77 @@ class FinanzplanerPanel extends HTMLElement {
       `<option value="household"${selected.has("household") ? " selected" : ""}>Haushalt</option>`,
       ...this._persons.map((person) => `<option value="${escapeHtml(person.entity_id)}"${selected.has(person.entity_id) ? " selected" : ""}>${escapeHtml(person.name || person.entity_id)}</option>`),
     ].join("");
+  }
+
+  _planItemFrequencyOptions(selectedFrequency) {
+    return [
+      ["", "Einmalig"],
+      [1, "Monatlich"],
+      [2, "Alle 2 Monate"],
+      [3, "Vierteljährlich"],
+      [6, "Halbjährlich"],
+      [12, "Jährlich"],
+    ].map(([value, label]) => `<option value="${value}"${String(selectedFrequency ?? "") === String(value) ? " selected" : ""}>${label}</option>`).join("");
+  }
+
+  _planItemTargetOptions(selectedTarget) {
+    const targets = [
+      ["", "Kein festes Ziel"],
+      ["household", "Haushalt"],
+      ...this._persons.map((person) => [person.entity_id, person.name || person.entity_id]),
+    ];
+    if (selectedTarget && !targets.some(([value]) => value === selectedTarget)) {
+      targets.splice(2, 0, [selectedTarget, `Nicht mehr verfügbar: ${selectedTarget}`]);
+    }
+    return targets.map(([value, label]) => `<option value="${escapeHtml(value)}"${String(selectedTarget || "") === String(value) ? " selected" : ""}>${escapeHtml(label)}</option>`).join("");
+  }
+
+  _planItemFormTemplate(item, index, isNew = false) {
+    const itemId = isNew ? "new" : String(item.id);
+    const draft = this._planItemDrafts.get(itemId)
+      || (isNew ? this._newPlanItemDraft() : this._planItemDraftFromItem(item));
+    const active = draft.active !== false;
+    const title = isNew ? "Neuen Planposten anlegen" : (draft.name || "Planposten");
+    const source = !isNew && item.source_sheet
+      ? `${item.source_sheet} · Zeile ${item.source_row || "?"}`
+      : "Manuell angelegt";
+    const action = isNew
+      ? PLAN_ITEMS_URL
+      : `${PLAN_ITEMS_URL}/${encodeURIComponent(itemId)}`;
+    const idPart = `${isNew ? "new" : index}`;
+    const fieldId = (field) => `plan-item-${field}-${idPart}`;
+    const error = this._planItemErrors.get(itemId) || "";
+    return `<form class="surface plan-item-card${active ? "" : " plan-item-card--archived"}" action="${escapeHtml(action)}" method="post" data-plan-item-form data-plan-item-id="${escapeHtml(itemId)}" aria-labelledby="${fieldId("heading")}"${this._planItemSubmissions.has(itemId) ? " aria-busy=\"true\"" : ""}>
+      <div class="plan-item-card-header"><h3 id="${fieldId("heading")}">${escapeHtml(title)}</h3><span class="plan-item-status${active ? "" : " plan-item-status--archived"}">${planItemStatus(active)}</span><p>${escapeHtml(`${source} · ${planItemFrequencyLabel(draft.frequency_months)}`)}</p></div>
+      <div class="plan-item-fields">
+        <label class="plan-item-field plan-item-field--wide" for="${fieldId("name")}">Bezeichnung<input id="${fieldId("name")}" name="name" data-plan-item-field="name" type="text" value="${escapeHtml(draft.name || "")}" maxlength="120" autocomplete="off" required></label>
+        <label class="plan-item-field" for="${fieldId("direction")}">Richtung<select id="${fieldId("direction")}" name="direction" data-plan-item-field="direction" required><option value="income"${draft.direction === "income" ? " selected" : ""}>Einnahme</option><option value="expense"${draft.direction === "expense" ? " selected" : ""}>Ausgabe</option><option value="saving"${draft.direction === "saving" ? " selected" : ""}>Rücklage</option></select></label>
+        <label class="plan-item-field" for="${fieldId("amount")}">Betrag pro Zahlung<input id="${fieldId("amount")}" name="amount" data-plan-item-field="amount" type="text" inputmode="decimal" value="${escapeHtml(draft.amount_input ?? draft.amount ?? "")}" placeholder="z. B. 125,50" aria-describedby="${fieldId("amount-help")}" required><small id="${fieldId("amount-help")}">Positive Eurobeträge, maximal 2 Nachkommastellen</small></label>
+        <label class="plan-item-field" for="${fieldId("category")}">Kategorie<input id="${fieldId("category")}" name="category" data-plan-item-field="category" type="text" value="${escapeHtml(draft.category || "")}" maxlength="120" autocomplete="off"></label>
+        <label class="plan-item-field" for="${fieldId("area")}">Bereich<input id="${fieldId("area")}" name="area" data-plan-item-field="area" type="text" value="${escapeHtml(draft.area || "")}" maxlength="120" autocomplete="off" placeholder="z. B. Hunde"></label>
+        <label class="plan-item-field" for="${fieldId("project")}">Projekt<input id="${fieldId("project")}" name="project" data-plan-item-field="project" type="text" value="${escapeHtml(draft.project || "")}" maxlength="120" autocomplete="off" placeholder="optional"></label>
+        <label class="plan-item-field plan-item-target" for="${fieldId("target")}">Planungsziel<select id="${fieldId("target")}" name="target" data-plan-item-field="target">${this._planItemTargetOptions(draft.target)}</select></label>
+      </div>
+      <fieldset class="plan-item-schedule"><legend>Rhythmus und Gültigkeit</legend>
+        <label class="plan-item-field" for="${fieldId("frequency_months")}">Rhythmus<select id="${fieldId("frequency_months")}" name="frequency_months" data-plan-item-field="frequency_months">${this._planItemFrequencyOptions(draft.frequency_months)}</select></label>
+        <label class="plan-item-field" for="${fieldId("due_day")}">Fälligkeitstag<input id="${fieldId("due_day")}" name="due_day" data-plan-item-field="due_day" type="number" inputmode="numeric" min="1" max="31" step="1" value="${escapeHtml(draft.due_day ?? "")}" placeholder="z. B. 1"><small>Bei wiederkehrenden Zahlungen</small></label>
+        <label class="plan-item-field" for="${fieldId("due_date")}">Fälligkeitsdatum<input id="${fieldId("due_date")}" name="due_date" data-plan-item-field="due_date" type="date" value="${escapeHtml(draft.due_date || "")}"><small>Für einmalige Zahlungen</small></label>
+        <label class="plan-item-field" for="${fieldId("start_date")}">Gültig ab<input id="${fieldId("start_date")}" name="start_date" data-plan-item-field="start_date" type="date" value="${escapeHtml(draft.start_date || "")}"></label>
+        <label class="plan-item-field" for="${fieldId("end_date")}">Gültig bis<input id="${fieldId("end_date")}" name="end_date" data-plan-item-field="end_date" type="date" value="${escapeHtml(draft.end_date || "")}"></label>
+      </fieldset>
+      <div class="plan-item-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-plan-item-field="active" type="checkbox"${active ? " checked" : ""}>Planposten aktiv</label><p class="plan-item-save-status${error ? " plan-item-save-status--error" : ""}" data-plan-item-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="plan-item-archive" type="button" data-plan-item-archive data-plan-item-id="${escapeHtml(itemId)}">Archivieren</button>` : ""}<button class="plan-item-save" type="submit"${this._planItemSubmissions.has(itemId) ? " disabled" : ""}>${isNew ? "Planposten anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
+    </form>`;
+  }
+
+  _planItemsTemplate() {
+    const list = this._planItemsLoading
+      ? `<div class="empty-state">Planposten werden geladen …</div>`
+      : this._planItemsLoadFailed
+        ? `<div class="empty-state">Planposten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
+        : `<ul class="plan-item-list" aria-label="Planposten"><li>${this._planItemFormTemplate({}, 0, true)}</li>${this._planItems.map((item, index) => `<li>${this._planItemFormTemplate(item, index + 1)}</li>`).join("")}</ul>`;
+    const activeCount = this._planItems.filter((item) => item.active !== false).length;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="plan-items-view"><div class="plan-items-view-header"><div><h2>Planposten verwalten</h2><p>Ersetze deine Excel-Planung Schritt für Schritt: Betrag, Richtung, Rhythmus, Fälligkeit und fachliche Zuordnung bleiben direkt bearbeitbar.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Planposten</strong> · Einnahmen werden positiv, Ausgaben und Rücklagen negativ in der Übersicht berücksichtigt. Archivierte Einträge bleiben erhalten und können wieder aktiviert werden.</p>${list}</div></main>`;
+    return this._shellTemplate(content);
   }
 
   _accountsTemplate() {

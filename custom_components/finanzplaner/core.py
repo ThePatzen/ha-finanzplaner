@@ -11,6 +11,25 @@ import xml.etree.ElementTree as ET
 
 
 MONEY_QUANT = Decimal("0.01")
+PLAN_DIRECTIONS = frozenset({"income", "expense", "saving"})
+PLAN_FREQUENCIES = frozenset({None, 1, 2, 3, 6, 12})
+PLAN_ITEM_FIELDS = frozenset(
+    {
+        "name",
+        "direction",
+        "category",
+        "area",
+        "project",
+        "amount",
+        "frequency_months",
+        "due_day",
+        "due_date",
+        "start_date",
+        "end_date",
+        "target",
+        "active",
+    }
+)
 
 
 def normalize_account_reference(value: str) -> str:
@@ -26,6 +45,165 @@ def account_id_for_reference(value: str) -> str | None:
     if not normalized:
         return None
     return f"account-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _optional_plan_text(
+    value: object,
+    label: str,
+    *,
+    max_length: int = 120,
+) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{label} muss als Text angegeben werden.")
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if len(normalized) > max_length:
+        raise ValueError(f"{label} darf höchstens {max_length} Zeichen enthalten.")
+    return normalized
+
+
+def _plan_date(value: object, label: str) -> str | None:
+    normalized = _optional_plan_text(value, label, max_length=10)
+    if normalized is None:
+        return None
+    try:
+        parsed = date.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"{label} muss ein gültiges Datum sein.") from exc
+    if parsed.isoformat() != normalized:
+        raise ValueError(f"{label} muss im Format JJJJ-MM-TT angegeben werden.")
+    return normalized
+
+
+def _plan_amount(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal, str)):
+        raise ValueError("Der Planbetrag muss ein positiver Eurobetrag sein.")
+    try:
+        raw = str(value).strip().replace(" ", "")
+        if "," in raw:
+            raw = raw.replace(".", "").replace(",", ".")
+        amount = Decimal(raw)
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError("Der Planbetrag muss ein positiver Eurobetrag sein.") from exc
+    if not amount.is_finite() or amount <= 0 or amount.as_tuple().exponent < -2:
+        raise ValueError(
+            "Der Planbetrag muss positiv sein und darf höchstens zwei Nachkommastellen haben."
+        )
+    return float(amount.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP))
+
+
+def validate_plan_item_payload(
+    payload: object,
+    valid_targets: set[str],
+    *,
+    partial: bool = False,
+) -> dict[str, object]:
+    """Validate editable plan-item fields and return normalized values."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("Die Planpostendaten müssen ein Objekt sein.")
+    unknown = set(payload) - PLAN_ITEM_FIELDS
+    if unknown:
+        raise ValueError("Die Planposten enthalten ein unbekanntes Feld.")
+
+    normalized: dict[str, object] = {}
+    if not partial or "name" in payload:
+        name = payload.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Bitte eine Bezeichnung für den Planposten eingeben.")
+        normalized["name"] = name.strip()
+        if len(normalized["name"]) > 120:
+            raise ValueError("Die Bezeichnung darf höchstens 120 Zeichen enthalten.")
+
+    if not partial or "direction" in payload:
+        direction = payload.get("direction")
+        if direction not in PLAN_DIRECTIONS:
+            raise ValueError("Die Richtung des Planpostens ist ungültig.")
+        normalized["direction"] = direction
+
+    if not partial or "amount" in payload:
+        normalized["amount"] = _plan_amount(payload.get("amount"))
+
+    if not partial or "frequency_months" in payload:
+        frequency = payload.get("frequency_months")
+        if frequency is not None and (
+            isinstance(frequency, bool)
+            or not isinstance(frequency, int)
+            or frequency not in PLAN_FREQUENCIES
+        ):
+            raise ValueError("Der Rhythmus des Planpostens ist ungültig.")
+        normalized["frequency_months"] = frequency
+
+    for field, label in (
+        ("category", "Die Kategorie"),
+        ("area", "Der Bereich"),
+        ("project", "Das Projekt"),
+    ):
+        if not partial or field in payload:
+            normalized[field] = _optional_plan_text(payload.get(field), label)
+
+    if not partial or "target" in payload:
+        target = payload.get("target")
+        if target is not None:
+            target = _optional_plan_text(target, "Das Planungsziel", max_length=80)
+            if target is not None and target not in valid_targets:
+                raise ValueError("Das Planungsziel verweist nicht auf eine bekannte Person.")
+        normalized["target"] = target
+
+    if not partial or "active" in payload:
+        active = payload.get("active", True)
+        if not isinstance(active, bool):
+            raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
+        normalized["active"] = active
+
+    for field, label in (
+        ("due_date", "Das Fälligkeitsdatum"),
+        ("start_date", "Der Beginn"),
+        ("end_date", "Das Ende"),
+    ):
+        if not partial or field in payload:
+            normalized[field] = _plan_date(payload.get(field), label)
+
+    if not partial or "due_day" in payload:
+        due_day = payload.get("due_day")
+        if due_day in (None, ""):
+            normalized["due_day"] = None
+        elif isinstance(due_day, bool) or not isinstance(due_day, int) or not 1 <= due_day <= 31:
+            raise ValueError("Der Fälligkeitstag muss zwischen 1 und 31 liegen.")
+        else:
+            normalized["due_day"] = due_day
+
+    start = normalized.get("start_date")
+    end = normalized.get("end_date")
+    if start and end and start > end:
+        raise ValueError("Das Ende darf nicht vor dem Beginn liegen.")
+
+    if not partial or "due_date" in payload:
+        due_date = normalized.get("due_date")
+        if due_date and start and due_date < start:
+            raise ValueError("Das Fälligkeitsdatum darf nicht vor dem Beginn liegen.")
+        if due_date and end and due_date > end:
+            raise ValueError("Das Fälligkeitsdatum darf nicht nach dem Ende liegen.")
+
+    return normalized
+
+
+def plan_item_totals(amount: float, frequency_months: int | None) -> tuple[float | None, float]:
+    """Return monthly and annual equivalents for a plan-item payment."""
+
+    payment = _money(amount)
+    if frequency_months is None:
+        return None, float(payment)
+    monthly = (payment / Decimal(frequency_months)).quantize(
+        MONEY_QUANT, rounding=ROUND_HALF_UP
+    )
+    annual = (payment * Decimal("12") / Decimal(frequency_months)).quantize(
+        MONEY_QUANT, rounding=ROUND_HALF_UP
+    )
+    return float(monthly), float(annual)
 
 
 def ensure_account(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 from typing import Any
 
 from .const import DEFAULT_HOUSEHOLD_NAME, STORAGE_KEY, STORAGE_VERSION
@@ -19,6 +20,39 @@ def empty_data(household_name: str = DEFAULT_HOUSEHOLD_NAME) -> dict[str, Any]:
         "imports": [],
         "rules": [],
     }
+
+
+def _normalize_plan_items(data: dict[str, Any]) -> None:
+    """Add non-destructive defaults needed by the plan-item editor."""
+
+    plan_items = data.get("plan_items")
+    if not isinstance(plan_items, list):
+        data["plan_items"] = []
+        return
+    for index, item in enumerate(plan_items):
+        if not isinstance(item, dict):
+            continue
+        if not item.get("id"):
+            material = "|".join(
+                (
+                    str(index),
+                    str(item.get("name", "")),
+                    str(item.get("direction", "")),
+                    str(item.get("amount", "")),
+                )
+            )
+            item["id"] = f"plan-item-{hashlib.sha256(material.encode('utf-8')).hexdigest()[:16]}"
+        item.setdefault("active", True)
+        item.setdefault("remaining_amount", item.get("amount", 0))
+        item.setdefault("frequency_months", 1)
+        item.setdefault("category", None)
+        item.setdefault("area", None)
+        item.setdefault("project", None)
+        item.setdefault("target", None)
+        item.setdefault("due_day", None)
+        item.setdefault("due_date", None)
+        item.setdefault("start_date", None)
+        item.setdefault("end_date", None)
 
 
 def migrate_store_data(
@@ -84,6 +118,7 @@ def migrate_store_data(
             account_by_reference[reference] = account
 
     data["version"] = STORAGE_VERSION
+    _normalize_plan_items(data)
     return data
 
 
@@ -140,6 +175,7 @@ def normalize_current_store_data(
         booking.setdefault("allocations", [])
 
     data["version"] = STORAGE_VERSION
+    _normalize_plan_items(data)
     return data
 
 

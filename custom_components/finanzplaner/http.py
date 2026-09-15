@@ -21,6 +21,8 @@ from .core import (
     parse_allocation_payload,
     parse_camt053,
     parse_mt940,
+    plan_item_totals,
+    validate_plan_item_payload,
     split_amount,
 )
 from .coordinator import FinanzplanerCoordinator
@@ -341,6 +343,73 @@ def validate_account_update(
     return update
 
 
+def plan_item_payload(item: dict[str, object]) -> dict[str, object]:
+    """Return a copy of one plan item for the authenticated panel API."""
+
+    return _response_payload(dict(item))  # type: ignore[return-value]
+
+
+def _valid_plan_targets(hass: Any) -> set[str]:
+    return {
+        "household",
+        *(
+            state.entity_id
+            for state in hass.states.async_all()
+            if state.domain == "person"
+        ),
+    }
+
+
+def _plan_item_draft(item: dict[str, object]) -> dict[str, object]:
+    """Keep only editable fields when validating an existing item."""
+
+    amount = item.get("amount", 0)
+    try:
+        numeric_amount = float(amount)
+    except (TypeError, ValueError):
+        numeric_amount = 0.0
+    direction = item.get("direction")
+    if direction not in {"income", "expense", "saving"}:
+        direction = "income" if numeric_amount >= 0 else "expense"
+    return {
+        "name": item.get("name", ""),
+        "direction": direction,
+        "category": item.get("category"),
+        "area": item.get("area"),
+        "project": item.get("project"),
+        "amount": abs(numeric_amount),
+        "frequency_months": item.get("frequency_months", 1),
+        "due_day": item.get("due_day"),
+        "due_date": item.get("due_date"),
+        "start_date": item.get("start_date"),
+        "end_date": item.get("end_date"),
+        "target": item.get("target"),
+        "active": item.get("active", True),
+    }
+
+
+def _materialize_plan_item(
+    values: dict[str, object],
+    *,
+    item_id: str,
+    created_at: str,
+    updated_at: str,
+) -> dict[str, object]:
+    amount = float(values["amount"])
+    frequency = values.get("frequency_months")
+    monthly, annual = plan_item_totals(amount, frequency if isinstance(frequency, int) else None)
+    return {
+        "id": item_id,
+        **values,
+        "amount": amount,
+        "remaining_amount": amount,
+        "normalized_monthly": monthly,
+        "annual_amount": annual,
+        "created_at": created_at,
+        "updated_at": updated_at,
+    }
+
+
 def _demo_overview() -> dict[str, Any]:
     return {
         "demo": True,
@@ -533,6 +602,139 @@ class AccountView(HomeAssistantView):
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
         return self.json(_response_payload({"account": account_payload(account)}))
+
+
+class PlanItemsView(HomeAssistantView):
+    """List plan items and create a new recurring or one-time plan item."""
+
+    url = "/api/finanzplaner/plan-items"
+    name = "api:finanzplaner:plan-items"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        plan_items = (
+            []
+            if coordinator is None
+            else coordinator.store.data.get("plan_items", [])
+        )
+        return self.json(
+            _response_payload(
+                {
+                    "plan_items": [
+                        plan_item_payload(item)
+                        for item in plan_items
+                        if isinstance(item, dict)
+                    ]
+                }
+            )
+        )
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(
+                text="Die Planpostendaten sind kein gültiges JSON."
+            ) from exc
+        if isinstance(payload, dict) and "frequency_months" not in payload:
+            payload = {**payload, "frequency_months": 1}
+        try:
+            values = validate_plan_item_payload(
+                payload,
+                _valid_plan_targets(request.app["hass"]),
+            )
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        item = _materialize_plan_item(
+            values,
+            item_id=f"plan-item-{uuid4().hex}",
+            created_at=now_iso,
+            updated_at=now_iso,
+        )
+        coordinator.store.data.setdefault("plan_items", []).append(item)
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"plan_item": plan_item_payload(item)}))
+
+
+class PlanItemView(HomeAssistantView):
+    """Update or reversibly archive one plan item."""
+
+    url = "/api/finanzplaner/plan-items/{plan_item_id}"
+    name = "api:finanzplaner:plan-item"
+    requires_auth = True
+
+    def _find_item(
+        self,
+        coordinator: FinanzplanerCoordinator,
+        plan_item_id: str,
+    ) -> dict[str, object] | None:
+        return next(
+            (
+                item
+                for item in coordinator.store.data.get("plan_items", [])
+                if isinstance(item, dict) and item.get("id") == plan_item_id
+            ),
+            None,
+        )
+
+    async def post(self, request: web.Request, plan_item_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        item = self._find_item(coordinator, plan_item_id)
+        if item is None:
+            raise web.HTTPNotFound(text="Planposten nicht gefunden.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(
+                text="Die Planpostendaten sind kein gültiges JSON."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Planpostendaten müssen ein Objekt sein.")
+        try:
+            values = validate_plan_item_payload(
+                {**_plan_item_draft(item), **payload},
+                _valid_plan_targets(request.app["hass"]),
+            )
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        item.update(
+            _materialize_plan_item(
+                values,
+                item_id=str(item["id"]),
+                created_at=str(item.get("created_at", datetime.now(timezone.utc).isoformat())),
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"plan_item": plan_item_payload(item)}))
+
+    async def delete(self, request: web.Request, plan_item_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        item = self._find_item(coordinator, plan_item_id)
+        if item is None:
+            raise web.HTTPNotFound(text="Planposten nicht gefunden.")
+        item["active"] = False
+        item["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(
+            _response_payload(
+                {"plan_item": plan_item_payload(item), "archived": True}
+            )
+        )
 
 
 class UnresolvedBookingsView(HomeAssistantView):

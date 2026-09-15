@@ -144,6 +144,21 @@ export function accountActiveStatus(active) {
   return active ? "Aktiv" : "Archiviert";
 }
 
+export function planItemFrequencyLabel(frequency) {
+  const labels = {
+    1: "monatlich",
+    2: "alle 2 Monate",
+    3: "vierteljährlich",
+    6: "halbjährlich",
+    12: "jährlich",
+  };
+  return labels[frequency] || "einmalig";
+}
+
+export function planItemStatus(active) {
+  return active ? "Aktiv" : "Archiviert";
+}
+
 export function fetchWithHomeAssistantAuth(hass, path, options = {}) {
   if (typeof hass?.fetchWithAuth !== "function") {
     throw new Error("Die Home-Assistant-Anmeldung ist noch nicht bereit.");

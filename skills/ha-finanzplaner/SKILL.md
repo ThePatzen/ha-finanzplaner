@@ -58,6 +58,9 @@ Bereits geliefert:
   öffentlichen Dateien.
 - Prüfliste für ungeklärte Buchungen mit manueller, centgenauer Aufteilung auf
   Personen oder Haushalt sowie Bereich `Hunde`, Kategorie und Projekt.
+- Planposten-Ansicht mit authentifiziertem CRUD-API für Einnahmen, Ausgaben und
+  Rücklagen; wiederkehrende und einmalige Rhythmen, Fälligkeit, Gültigkeit,
+  Zielperson/Haushalt sowie reversible Archivierung.
 - HA-Personen und authentifizierte Panel-API-Aufrufe über
   `hass.fetchWithAuth()`.
 - 75 Python- und 21 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
@@ -119,11 +122,10 @@ Reihenfolge umsetzen:
 
 ### 2. Planposten-Verwaltung als Excel-Ersatz
 
-- Eigene Finanzplaner-/Planpostenansicht statt nur Excel-Import erstellen.
-- Planposten anlegen, bearbeiten, archivieren und löschen beziehungsweise
-  deaktivieren.
-- Felder für Richtung, Kategorie, Bereich, Projekt, Betrag, Rhythmus,
-  Fälligkeit, Gültigkeitszeitraum und optional Person/Haushalt ergänzen.
+- Planpostenansicht, Anlegen, Bearbeiten und reversible Archivierung sind
+  umgesetzt.
+- Als nächstes Planposten nach Monat und Fälligkeit in der Prognose verwenden
+  und die CRUD-Strecke im echten Home-Assistant-Laufzeittest prüfen.
 - Monats-, jährliche und einmalige Planungen aus der Excel-Struktur abbilden.
 - Gehalt, PV-Erlöse, Hunde, Urlaubsgeld und EMX sauber als fachliche Werte
   darstellen, nicht nur als Importwarnung.

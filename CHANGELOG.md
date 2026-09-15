@@ -8,6 +8,11 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## Unreleased
+
+- Planposten-Ansicht mit authentifiziertem CRUD-API, Rhythmus, Fälligkeit und Gültigkeitszeitraum ergänzt
+- Planposten werden beim Archivieren deaktiviert und bleiben für eine spätere Reaktivierung erhalten
+
 ## [0.3.0] – 2026-09-15
 
 - Konten bei CAMT.053- und MT940-Importen automatisch erkannt und bestehenden Buchungen stabil zugeordnet

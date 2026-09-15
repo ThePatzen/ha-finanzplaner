@@ -16,6 +16,8 @@ Version 0.3.0 liefert die erste durchgängige Konten- und Aufteilungsstrecke:
 - automatische Kontoerkennung aus CAMT.053-IBAN beziehungsweise MT940-Kontoangabe
 - Kontenpflege mit Anzeigename, mehreren Kontoinhabern und Archivstatus
 - Excel-Vorlage als prüfbare Vorschau mit Auswahl und Zuordnungsänderungen
+- eigene Planposten-Ansicht zum Anlegen, Bearbeiten und Archivieren von Einnahmen, Ausgaben und Rücklagen
+- wiederkehrende und einmalige Planungen mit Betrag, Rhythmus, Fälligkeit und Gültigkeitszeitraum
 - centgenaue, bestätigungspflichtige Aufteilungen auf Personen oder `Haushalt`
 - gemeinsame Zuordnungen wie `Haushalt` mit dem Bereich `Hunde`
 - lokale Versionierung über Home Assistants persistenten Store
@@ -32,6 +34,12 @@ Die Integration zeigt bei einem leeren Workspace klar markierte synthetische Dem
 5. Einen gemeinsamen Haushaltsnamen vergeben.
 
 Danach erscheint Finanzplaner in der Home-Assistant-Seitenleiste. MT940- und CAMT.053-Dateien werden bewusst manuell in der Prüfliste hochgeladen; Originaldateien werden nicht dauerhaft gespeichert.
+
+## Planposten verwalten
+
+Über `Planposten` lassen sich neue Einnahmen, Ausgaben und Rücklagen direkt im Finanzplaner anlegen. Ein Planposten kann monatlich, in längeren Abständen oder einmalig gelten und optional einen Fälligkeitstag, ein Datum sowie einen Gültigkeitszeitraum erhalten. Kategorien, Bereiche, Projekte und ein Planungsziel (`Haushalt` oder eine vorhandene Home-Assistant-Person) bleiben getrennt pflegbar.
+
+Archivieren deaktiviert einen Planposten nur; der Eintrag bleibt erhalten und kann über den Aktiv-Schalter wieder eingeschaltet werden. Beträge werden als positive Eurobeträge gespeichert, die Richtung bestimmt ihre Wirkung in der Übersicht.
 
 ## Konten und Bankimport
 
