@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const panelSource = await readFile(new URL("./panel.js", import.meta.url), "utf8");
 
 let utils;
 try {
@@ -53,6 +56,28 @@ test("summarizes selected excel suggestions", () => {
 test("labels an account without owners as not configured", () => {
   assert.equal(utils.accountOwnerStatus([]), "Inhaber noch nicht konfiguriert");
   assert.equal(utils.accountOwnerStatus(["person.alex", "person.sam"]), "2 Kontoinhaber");
+});
+
+test("labels the visible account lifecycle state", () => {
+  assert.equal(utils.accountActiveStatus(true), "Aktiv");
+  assert.equal(utils.accountActiveStatus(false), "Archiviert");
+});
+
+test("renders a skip link to focusable main content and reveals it on keyboard focus", () => {
+  assert.match(panelSource, /class="skip-link visually-hidden" href="#content" data-skip-link/);
+  assert.match(panelSource, /\.skip-link:focus-visible\s*\{[^}]*clip-path:\s*none\s*!important/s);
+  assert.match(panelSource, /<main class="main" id="content" tabindex="-1">/);
+  assert.match(panelSource, /querySelector\("\[data-skip-link\]"\).*addEventListener\("click"/);
+});
+
+test("uses a dedicated contrasting border token for account form controls", () => {
+  assert.match(panelSource, /--fp-control-border:\s*var\(--fp-muted\)/);
+  assert.match(panelSource, /\.account-field input, \.account-owners select\s*\{[^}]*border:\s*1px solid var\(--fp-control-border\)/s);
+});
+
+test("names each account save action and renders its lifecycle status", () => {
+  assert.match(panelSource, /aria-label="Änderungen für \$\{escapeHtml\(accountLabel\)\} speichern"/);
+  assert.match(panelSource, /data-account-active-status/);
 });
 
 test("uses the Home Assistant authenticated request method for protected panel APIs", async () => {

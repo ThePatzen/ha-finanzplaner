@@ -45,6 +45,10 @@ export function accountOwnerStatus(ownerTargets = []) {
   return `${ownerTargets.length} Kontoinhaber`;
 }
 
+export function accountActiveStatus(active) {
+  return active ? "Aktiv" : "Archiviert";
+}
+
 export function fetchWithHomeAssistantAuth(hass, path, options = {}) {
   if (typeof hass?.fetchWithAuth !== "function") {
     throw new Error("Die Home-Assistant-Anmeldung ist noch nicht bereit.");

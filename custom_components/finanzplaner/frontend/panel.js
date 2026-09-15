@@ -1,4 +1,4 @@
-import { accountOwnerStatus, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
+import { accountActiveStatus, accountOwnerStatus, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
@@ -46,6 +46,7 @@ const styles = `
     --fp-ink: #0b1e3f;
     --fp-muted: #5d6b7c;
     --fp-line: #d6dbdc;
+    --fp-control-border: var(--fp-muted);
     --fp-cyan: #0a9fc5;
     --fp-cyan-soft: #dff4f7;
     --fp-amber: #eb9b2f;
@@ -342,12 +343,15 @@ const styles = `
   .account-card-header h3 { margin: 0; font-family: var(--fp-display); font-size: 1.35rem; line-height: 1; }
   .account-reference { margin: 0; color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.8rem; }
   .account-field, .account-owners { display: grid; align-content: start; gap: 0.35rem; min-inline-size: 0; margin: 0; padding: 0; border: 0; color: var(--fp-muted); font-size: 0.78rem; font-weight: 700; }
-  .account-field input, .account-owners select { inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-line); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .account-field input, .account-owners select { inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-control-border); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
   .account-owners select { min-block-size: 7.4rem; }
   .account-owner-status { margin: 0; color: var(--fp-muted); font-size: 0.74rem; font-weight: 400; }
   .account-owner-status--missing { color: var(--fp-coral); font-weight: 700; }
   .account-toggle { min-block-size: 2.75rem; display: flex; align-items: center; gap: 0.6rem; color: var(--fp-ink); font-weight: 700; }
+  .account-toggle label { display: flex; align-items: center; gap: 0.6rem; }
   .account-toggle input { inline-size: 1.2rem; block-size: 1.2rem; accent-color: var(--fp-cyan); }
+  .account-active-status { color: var(--fp-muted); font-size: 0.78rem; font-weight: 800; }
+  .account-active-status--archived { color: var(--fp-ink); }
   .account-card-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 0.8rem; padding-block-start: 0.75rem; border-block-start: 1px solid var(--fp-line); }
   .account-save-status { flex: 1; margin: 0; color: var(--fp-muted); font-size: 0.78rem; }
   .account-save { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-paper); background: var(--fp-navy); font-weight: 800; }
@@ -357,6 +361,7 @@ const styles = `
 
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
   .skip-link { inset: 0.75rem auto auto 0.75rem; z-index: 10; padding: 0.6rem 0.8rem; color: var(--fp-paper); background: var(--fp-navy); }
+  .skip-link:focus-visible { position: fixed !important; inline-size: auto !important; block-size: auto !important; overflow: visible !important; clip-path: none !important; white-space: normal !important; }
   :where(a, button, input, select):focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 3px; }
   ::selection { color: var(--fp-paper); background: var(--fp-navy); }
   * { scrollbar-color: var(--fp-muted) var(--fp-paper); scrollbar-width: thin; }
@@ -704,6 +709,14 @@ class FinanzplanerPanel extends HTMLElement {
     status.classList.toggle("account-owner-status--missing", !ownerTargets.length);
   }
 
+  _updateAccountActiveStatus(event) {
+    const input = event.currentTarget;
+    const status = input.closest("form")?.querySelector("[data-account-active-status]");
+    if (!status) return;
+    status.textContent = accountActiveStatus(input.checked);
+    status.classList.toggle("account-active-status--archived", !input.checked);
+  }
+
   async _handleAssignment(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -868,6 +881,10 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _bindEvents() {
+    this.shadowRoot.querySelector("[data-skip-link]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.shadowRoot.querySelector("#content")?.focus();
+    });
     this.shadowRoot.querySelector("[data-action='previous-month']")?.addEventListener("click", () => this._shiftMonth(-1));
     this.shadowRoot.querySelector("[data-action='next-month']")?.addEventListener("click", () => this._shiftMonth(1));
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
@@ -880,6 +897,7 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAssignment(event)));
     this.shadowRoot.querySelectorAll("[data-account-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAccountSave(event)));
     this.shadowRoot.querySelectorAll("[data-account-owners]").forEach((select) => select.addEventListener("change", (event) => this._updateAccountOwnerStatus(event)));
+    this.shadowRoot.querySelectorAll("[data-account-active]").forEach((input) => input.addEventListener("change", (event) => this._updateAccountActiveStatus(event)));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.nav === "review") this._openReview();
       else if (button.dataset.nav === "accounts") this._openAccounts();
@@ -908,6 +926,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   _shellTemplate(content) {
     return `<div class="app-shell">
+      <a class="skip-link visually-hidden" href="#content" data-skip-link>Zum Inhalt springen</a>
       <aside class="rail" aria-label="Finanzplaner-Navigation">
         <a class="rail-brand" href="${homeAssistantPath(window.location.href)}">${icon("home", 18)}<span>Home Assistant</span><span class="brand-arrow">${icon("chevronRight", 18)}</span></a>
         <nav class="rail-nav" aria-label="Bereiche">${this._navTemplate()}</nav>
@@ -934,7 +953,6 @@ class FinanzplanerPanel extends HTMLElement {
     const household = data.household || demoHousehold;
     const last = data.last_unresolved;
     const content = `<main class="main" id="content" tabindex="-1">
-      <a class="skip-link visually-hidden" href="#overview">Zum Inhalt springen</a>
       ${this._toolbarTemplate()}
       <div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>
       <section class="hero" id="overview" aria-labelledby="overview-title">
@@ -983,13 +1001,15 @@ class FinanzplanerPanel extends HTMLElement {
         const ownerStatusId = `account-owner-status-${index}`;
         const activeId = `account-active-${index}`;
         const saveStatusId = `account-save-status-${index}`;
+        const accountLabel = account.label || "Konto";
+        const active = account.active !== false;
         const maskedReference = account.iban_masked || account.account_reference || "Keine maskierte Kontoreferenz verfügbar";
         return `<li><form class="surface account-card" method="post" data-account-form data-account-id="${escapeHtml(account.id)}" aria-labelledby="account-heading-${index}">
-          <div class="account-card-header"><h3 id="account-heading-${index}">${escapeHtml(account.label || "Konto")}</h3><p class="account-reference">${escapeHtml(maskedReference)}</p></div>
+          <div class="account-card-header"><h3 id="account-heading-${index}">${escapeHtml(accountLabel)}</h3><p class="account-reference">${escapeHtml(maskedReference)}</p></div>
           <label class="account-field" for="${labelId}">Kontoname<input id="${labelId}" name="label" data-account-label type="text" value="${escapeHtml(account.label || "")}" autocomplete="off" required></label>
-          <fieldset class="account-owners"><legend>Kontoinhaber</legend><label class="visually-hidden" for="${ownersId}">Kontoinhaber für ${escapeHtml(account.label || "Konto")} auswählen</label><select id="${ownersId}" name="owner_targets" data-account-owners multiple size="4" aria-describedby="${ownerStatusId}">${this._personOptions(ownerTargets)}</select><p class="account-owner-status${ownerTargets.length ? "" : " account-owner-status--missing"}" id="${ownerStatusId}" data-account-owner-status>${escapeHtml(ownerStatus)}</p></fieldset>
-          <label class="account-toggle" for="${activeId}"><input id="${activeId}" name="active" data-account-active type="checkbox"${account.active === false ? "" : " checked"}>Konto aktiv <span class="visually-hidden">(deaktivieren archiviert das Konto)</span></label>
-          <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit" aria-describedby="${saveStatusId}">Änderungen speichern</button></div>
+          <fieldset class="account-owners"><legend>Kontoinhaber</legend><label class="visually-hidden" for="${ownersId}">Kontoinhaber für ${escapeHtml(accountLabel)} auswählen</label><select id="${ownersId}" name="owner_targets" data-account-owners multiple size="4" aria-describedby="${ownerStatusId}">${this._personOptions(ownerTargets)}</select><p class="account-owner-status${ownerTargets.length ? "" : " account-owner-status--missing"}" id="${ownerStatusId}" data-account-owner-status>${escapeHtml(ownerStatus)}</p></fieldset>
+          <div class="account-toggle"><label for="${activeId}"><input id="${activeId}" name="active" data-account-active type="checkbox"${active ? " checked" : ""}>Konto aktiv <span class="visually-hidden">(deaktivieren archiviert das Konto)</span></label><span class="account-active-status${active ? "" : " account-active-status--archived"}" data-account-active-status aria-hidden="true">${accountActiveStatus(active)}</span></div>
+          <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit" aria-label="Änderungen für ${escapeHtml(accountLabel)} speichern" aria-describedby="${saveStatusId}">Änderungen speichern</button></div>
         </form></li>`;
       }).join("")}</ul>`
         : `<div class="empty-state">Keine Konten verfügbar. Importiere zuerst eine Bankdatei über „Buchungen prüfen“.</div>`;
