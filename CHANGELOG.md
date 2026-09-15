@@ -8,7 +8,7 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
-## [Unreleased]
+## [0.2.0] – 2026-09-15
 
 - Excel-Finanzplanvorlage mit Vorschau, Warnungen und bestätigungsgebundener Übernahme
 - positive Planbeträge mit Richtung `income`, `expense` oder `saving`
@@ -34,3 +34,4 @@ Erste vorbereitete vertikale Version:
 
 [0.1.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.1.0
 [0.1.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.1.1
+[0.2.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.0
