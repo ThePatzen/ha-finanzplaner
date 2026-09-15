@@ -57,3 +57,55 @@ OK
 ## Bedenken
 
 Keine offenen Bedenken.
+
+## Fix-Runde 1
+
+### Review-Finding
+
+Der neue Allocation-Endpoint übergab bislang den vollständigen Request-Body an
+`parse_allocation_payload()`. Dadurch wurde der öffentliche Wrapper
+`{"allocations": [...]}` abgelehnt und die nicht spezifizierte nackte Liste
+akzeptiert.
+
+### Korrektur
+
+- `BookingAllocationsView` verlangt nun einen JSON-Objekt-Wrapper und darin ein
+  Feld `allocations` vom Typ Liste.
+- Nur die enthaltene Liste wird an `parse_allocation_payload()` übergeben; dessen
+  pures Listen-Interface blieb unverändert.
+- Fehlende, leere, falsch typisierte oder als nackte Liste gesendete Wrapper
+  liefern HTTP 400, ohne Buchung, Store oder Refresh-Zähler zu verändern.
+- Der Erfolgstest und die bestehenden View-Validierungstests verwenden nun die
+  spezifizierte Wrapperform. Ein zusätzlicher Regressionstest deckt fehlende,
+  leere und falsche Wrapperformen ab.
+- Legacy-Endpoint, Live-Target-Prüfung, centgenaue Servervalidierung und
+  Response-Redaction blieben unverändert und sind weiterhin durch die
+  fokussierten Tests abgedeckt.
+
+### TDD-Nachweis
+
+Der neue Regressionstest lief vor der Implementierung rot: Der Wrapper-Erfolg
+endete mit HTTP 400, während die nackte Liste ohne Fehler angenommen wurde.
+
+### Prüfungen
+
+```text
+python3 -m unittest tests.test_allocation_payloads.BookingAllocationViewTests -v
+OK — 7 Tests
+
+python3 -m unittest tests.test_allocation_payloads -v
+OK — 12 Tests
+
+python3 -m unittest tests.test_allocation_payloads tests.test_finanzplaner_core -v
+OK — 22 Tests
+
+python3 -m compileall -q custom_components tests
+OK
+
+git diff --check
+OK
+```
+
+### Bedenken
+
+Keine offenen Bedenken.

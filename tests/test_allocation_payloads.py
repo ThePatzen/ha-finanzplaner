@@ -193,17 +193,19 @@ class BookingAllocationViewTests(unittest.TestCase):
         result = asyncio.run(
             self.http.BookingAllocationsView().post(
                 self._request(
-                    [
-                        {"target": "person.alex", "amount": 60.00},
-                        {"target": "person.sam", "amount": 20.00},
-                        {
-                            "target": "household",
-                            "amount": 20.00,
-                            "area": "Hunde",
-                            "category": "Tierbedarf",
-                            "project": "Alltag",
-                        },
-                    ]
+                    {
+                        "allocations": [
+                            {"target": "person.alex", "amount": 60.00},
+                            {"target": "person.sam", "amount": 20.00},
+                            {
+                                "target": "household",
+                                "amount": 20.00,
+                                "area": "Hunde",
+                                "category": "Tierbedarf",
+                                "project": "Alltag",
+                            },
+                        ]
+                    }
                 ),
                 "booking-1",
             )
@@ -224,7 +226,9 @@ class BookingAllocationViewTests(unittest.TestCase):
         with self.assertRaises(self.bad_request):
             asyncio.run(
                 self.http.BookingAllocationsView().post(
-                    self._request([{"target": "person.alex", "amount": 99.99}]),
+                    self._request(
+                        {"allocations": [{"target": "person.alex", "amount": 99.99}]}
+                    ),
                     "booking-1",
                 )
             )
@@ -233,13 +237,43 @@ class BookingAllocationViewTests(unittest.TestCase):
         self.assertEqual(self.coordinator.store.save_count, 0)
         self.assertEqual(self.coordinator.refresh_count, 0)
 
+    def test_missing_empty_or_wrong_allocations_wrapper_does_not_mutate_or_save(self):
+        invalid_payloads = (
+            {},
+            {"allocations": []},
+            {"allocations": {"target": "person.alex", "amount": 100.00}},
+            [{"target": "person.alex", "amount": 100.00}],
+        )
+
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                before = deepcopy(self.coordinator.store.data)
+
+                with self.assertRaises(self.bad_request):
+                    asyncio.run(
+                        self.http.BookingAllocationsView().post(
+                            self._request(payload),
+                            "booking-1",
+                        )
+                    )
+
+                self.assertEqual(self.coordinator.store.data, before)
+                self.assertEqual(self.coordinator.store.save_count, 0)
+                self.assertEqual(self.coordinator.refresh_count, 0)
+
     def test_account_owner_that_is_not_a_live_person_is_rejected(self):
         before = deepcopy(self.coordinator.store.data)
 
         with self.assertRaises(self.bad_request):
             asyncio.run(
                 self.http.BookingAllocationsView().post(
-                    self._request([{"target": "person.removed", "amount": 100.00}]),
+                    self._request(
+                        {
+                            "allocations": [
+                                {"target": "person.removed", "amount": 100.00}
+                            ]
+                        }
+                    ),
                     "booking-1",
                 )
             )
@@ -250,7 +284,9 @@ class BookingAllocationViewTests(unittest.TestCase):
         with self.assertRaises(self.not_found):
             asyncio.run(
                 self.http.BookingAllocationsView().post(
-                    self._request([{"target": "household", "amount": 100.00}]),
+                    self._request(
+                        {"allocations": [{"target": "household", "amount": 100.00}]}
+                    ),
                     "missing",
                 )
             )

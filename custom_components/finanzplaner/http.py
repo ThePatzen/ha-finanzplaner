@@ -426,6 +426,15 @@ class BookingAllocationsView(HomeAssistantView):
             raise web.HTTPBadRequest(
                 text="Die Aufteilung ist kein gültiges JSON."
             ) from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(
+                text="Die Aufteilung muss als Objekt übermittelt werden."
+            )
+        allocation_payload = payload.get("allocations")
+        if not isinstance(allocation_payload, list):
+            raise web.HTTPBadRequest(
+                text="Das Feld allocations muss eine Liste sein."
+            )
 
         booking = next(
             (
@@ -448,7 +457,7 @@ class BookingAllocationsView(HomeAssistantView):
         }
         try:
             allocations = parse_allocation_payload(
-                payload,
+                allocation_payload,
                 float(booking.get("amount", 0)),
                 valid_targets,
             )
