@@ -40,6 +40,11 @@ export function selectedSuggestionSummary(suggestions = []) {
   );
 }
 
+export function accountOwnerStatus(ownerTargets = []) {
+  if (!ownerTargets.length) return "Inhaber noch nicht konfiguriert";
+  return `${ownerTargets.length} Kontoinhaber`;
+}
+
 export function fetchWithHomeAssistantAuth(hass, path, options = {}) {
   if (typeof hass?.fetchWithAuth !== "function") {
     throw new Error("Die Home-Assistant-Anmeldung ist noch nicht bereit.");

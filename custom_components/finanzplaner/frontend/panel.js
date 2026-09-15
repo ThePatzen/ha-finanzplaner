@@ -1,6 +1,7 @@
-import { fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
+import { accountOwnerStatus, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
+const ACCOUNTS_URL = "/api/finanzplaner/accounts";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
 const IMPORT_URL = "/api/finanzplaner/import";
@@ -66,7 +67,7 @@ const styles = `
   }
 
   *, *::before, *::after { box-sizing: border-box; }
-  button, input { font: inherit; }
+  button, input, select { font: inherit; }
   button { cursor: pointer; }
   a { color: inherit; }
   svg { display: block; }
@@ -329,6 +330,29 @@ const styles = `
   .assign-button { min-block-size: 2.35rem; padding: 0.45rem 0.7rem; border: 1px solid var(--fp-navy); border-radius: 0.4rem; color: var(--fp-paper); background: var(--fp-navy); font-size: 0.78rem; font-weight: 800; }
   .assign-button:hover { background: var(--fp-navy-deep); }
   .assign-button:disabled { cursor: wait; opacity: 0.55; }
+  .accounts-view { max-inline-size: 68rem; padding-block: 1.8rem; }
+  .accounts-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .accounts-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
+  .accounts-view-header p { max-inline-size: 50rem; margin: 0.5rem 0 0; color: var(--fp-muted); }
+  .accounts-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; }
+  .accounts-actions .review-action { margin-block-start: 0; }
+  .account-list { display: grid; gap: 1rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+  .account-card { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1fr); gap: 1rem; padding: 1.1rem; }
+  .account-card-header { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-block-end: 0.75rem; border-block-end: 1px solid var(--fp-line); }
+  .account-card-header h3 { margin: 0; font-family: var(--fp-display); font-size: 1.35rem; line-height: 1; }
+  .account-reference { margin: 0; color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.8rem; }
+  .account-field, .account-owners { display: grid; align-content: start; gap: 0.35rem; min-inline-size: 0; margin: 0; padding: 0; border: 0; color: var(--fp-muted); font-size: 0.78rem; font-weight: 700; }
+  .account-field input, .account-owners select { inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-line); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .account-owners select { min-block-size: 7.4rem; }
+  .account-owner-status { margin: 0; color: var(--fp-muted); font-size: 0.74rem; font-weight: 400; }
+  .account-owner-status--missing { color: var(--fp-coral); font-weight: 700; }
+  .account-toggle { min-block-size: 2.75rem; display: flex; align-items: center; gap: 0.6rem; color: var(--fp-ink); font-weight: 700; }
+  .account-toggle input { inline-size: 1.2rem; block-size: 1.2rem; accent-color: var(--fp-cyan); }
+  .account-card-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 0.8rem; padding-block-start: 0.75rem; border-block-start: 1px solid var(--fp-line); }
+  .account-save-status { flex: 1; margin: 0; color: var(--fp-muted); font-size: 0.78rem; }
+  .account-save { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-paper); background: var(--fp-navy); font-weight: 800; }
+  .account-save:hover { background: var(--fp-navy-deep); }
+  .account-save:disabled { cursor: wait; opacity: 0.55; }
   .empty-state { margin-block-start: 1rem; padding: 2rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); text-align: center; }
 
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
@@ -383,8 +407,12 @@ const styles = `
     .statusbar { display: block; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
-    .review-view-header, .import-strip, .excel-review-header { display: block; }
+    .review-view-header, .accounts-view-header, .import-strip, .excel-review-header { display: block; }
     .back-button { margin-block-start: 1rem; }
+    .accounts-actions { margin-block-start: 1rem; }
+    .account-card { grid-template-columns: 1fr; }
+    .account-card-header, .account-card-actions { grid-column: 1; }
+    .account-card-header, .account-card-actions { align-items: stretch; flex-direction: column; }
     .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
     .excel-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .booking-row { grid-template-columns: 1fr auto; gap: 0.35rem 0.8rem; }
@@ -394,7 +422,7 @@ const styles = `
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card { border: 1px solid CanvasText; box-shadow: none; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -544,6 +572,9 @@ class FinanzplanerPanel extends HTMLElement {
     this._month = new Date();
     this._data = fallbackOverview;
     this._view = "overview";
+    this._accounts = [];
+    this._accountsLoading = false;
+    this._accountsLoadFailed = false;
     this._bookings = [];
     this._persons = [];
     this._excelPreview = null;
@@ -599,6 +630,78 @@ class FinanzplanerPanel extends HTMLElement {
     if (!bookingResponse.ok) throw new Error(`HTTP ${bookingResponse.status}`);
     this._bookings = (await bookingResponse.json()).bookings || [];
     this._persons = personsResponse.ok ? ((await personsResponse.json()).persons || []) : [];
+  }
+
+  async _openAccounts() {
+    this._view = "accounts";
+    this._message = "";
+    this._accountsLoading = true;
+    this._accountsLoadFailed = false;
+    this._render();
+    this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
+    try {
+      const [accountsResponse, personsResponse] = await Promise.all([
+        fetchWithHomeAssistantAuth(this._hass, ACCOUNTS_URL),
+        fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
+      ]);
+      if (!accountsResponse.ok || !personsResponse.ok) {
+        throw new Error("Konten oder Personen konnten nicht geladen werden.");
+      }
+      this._accounts = (await accountsResponse.json()).accounts || [];
+      this._persons = (await personsResponse.json()).persons || [];
+    } catch (error) {
+      this._accounts = [];
+      this._persons = [];
+      this._accountsLoadFailed = true;
+      this._message = error.message || "Konten und Personen konnten nicht geladen werden.";
+    } finally {
+      this._accountsLoading = false;
+    }
+    this._render();
+  }
+
+  async _handleAccountSave(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector("[type='submit']");
+    const status = form.querySelector("[data-account-save-status]");
+    const ownerTargets = [...form.querySelectorAll("[data-account-owners] option:checked")].map((option) => option.value);
+    const payload = {
+      label: form.querySelector("[data-account-label]")?.value || "",
+      owner_targets: ownerTargets,
+      active: Boolean(form.querySelector("[data-account-active]")?.checked),
+    };
+    this._message = "";
+    const globalStatus = this.shadowRoot.querySelector(".status-message");
+    if (globalStatus) globalStatus.textContent = "";
+    if (button) button.disabled = true;
+    if (status) status.textContent = "Änderungen werden gespeichert …";
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${ACCOUNTS_URL}/${encodeURIComponent(form.dataset.accountId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error("Das Konto konnte nicht gespeichert werden.");
+      if (status) status.textContent = "Konto gespeichert. Kontenliste wird aktualisiert …";
+      const accountsResponse = await fetchWithHomeAssistantAuth(this._hass, ACCOUNTS_URL);
+      if (!accountsResponse.ok) throw new Error("Das Konto wurde gespeichert, konnte aber nicht neu geladen werden.");
+      this._accounts = (await accountsResponse.json()).accounts || [];
+      this._message = `${payload.label.trim() || "Konto"} wurde gespeichert.`;
+      this._render();
+    } catch (error) {
+      if (status) status.textContent = error.message || "Das Konto konnte nicht gespeichert werden.";
+      if (button) button.disabled = false;
+    }
+  }
+
+  _updateAccountOwnerStatus(event) {
+    const select = event.currentTarget;
+    const status = select.closest("form")?.querySelector("[data-account-owner-status]");
+    if (!status) return;
+    const ownerTargets = [...select.selectedOptions].map((option) => option.value);
+    status.textContent = accountOwnerStatus(ownerTargets);
+    status.classList.toggle("account-owner-status--missing", !ownerTargets.length);
   }
 
   async _handleAssignment(event) {
@@ -755,7 +858,12 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _render() {
-    this.shadowRoot.innerHTML = `<style>${styles}</style>${this._view === "overview" ? this._overviewTemplate() : this._reviewTemplate()}`;
+    const template = this._view === "review"
+      ? this._reviewTemplate()
+      : this._view === "accounts"
+        ? this._accountsTemplate()
+        : this._overviewTemplate();
+    this.shadowRoot.innerHTML = `<style>${styles}</style>${template}`;
     this._bindEvents();
   }
 
@@ -770,10 +878,13 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-excel-select]").forEach((input) => input.addEventListener("change", (event) => this._updateExcelSelection(event)));
     this.shadowRoot.querySelectorAll("[data-excel-field]").forEach((input) => input.addEventListener("change", (event) => this._updateExcelField(event)));
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAssignment(event)));
+    this.shadowRoot.querySelectorAll("[data-account-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAccountSave(event)));
+    this.shadowRoot.querySelectorAll("[data-account-owners]").forEach((select) => select.addEventListener("change", (event) => this._updateAccountOwnerStatus(event)));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.nav === "review") this._openReview();
+      else if (button.dataset.nav === "accounts") this._openAccounts();
       else if (button.dataset.nav !== "overview") this._message = `${button.textContent.trim()} ist für die nächste Ausbaustufe vorbereitet.`;
-      this._render();
+      if (!["review", "accounts"].includes(button.dataset.nav)) this._render();
     }));
   }
 
@@ -786,9 +897,13 @@ class FinanzplanerPanel extends HTMLElement {
       ["tasks", "tasks", "Aufgaben"],
       ["household", "household", "Haushalt"],
       ["people", "people", "Personen"],
-      ["settings", "settings", "Einstellungen"],
+      ["accounts", "settings", "Konten"],
     ];
-    return items.map(([id, iconName, label]) => `<button class="nav-item" data-nav="${id === "planner" ? "overview" : id}"${id === "planner" ? ' aria-current="page"' : ""} type="button">${icon(iconName, 22)}<span>${label}</span></button>`).join("");
+    return items.map(([id, iconName, label]) => {
+      const target = id === "planner" ? "overview" : id;
+      const current = (this._view === "overview" && id === "planner") || this._view === id;
+      return `<button class="nav-item" data-nav="${target}"${current ? ' aria-current="page"' : ""} type="button">${icon(iconName, 22)}<span>${label}</span></button>`;
+    }).join("");
   }
 
   _shellTemplate(content) {
@@ -846,11 +961,40 @@ class FinanzplanerPanel extends HTMLElement {
     return this._shellTemplate(content);
   }
 
-  _personOptions() {
+  _personOptions(selectedTargets = []) {
+    const selected = new Set(selectedTargets);
     return [
-      `<option value="household">Haushalt</option>`,
-      ...this._persons.map((person) => `<option value="${escapeHtml(person.entity_id)}">${escapeHtml(person.name || person.entity_id)}</option>`),
+      `<option value="household"${selected.has("household") ? " selected" : ""}>Haushalt</option>`,
+      ...this._persons.map((person) => `<option value="${escapeHtml(person.entity_id)}"${selected.has(person.entity_id) ? " selected" : ""}>${escapeHtml(person.name || person.entity_id)}</option>`),
     ].join("");
+  }
+
+  _accountsTemplate() {
+    const accountList = this._accountsLoading
+      ? `<div class="empty-state">Konten werden geladen …</div>`
+      : this._accountsLoadFailed
+        ? `<div class="empty-state">Konten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
+        : this._accounts.length
+      ? `<ul class="account-list" aria-label="Konten">${this._accounts.map((account, index) => {
+        const ownerTargets = Array.isArray(account.owner_targets) ? account.owner_targets : [];
+        const ownerStatus = accountOwnerStatus(ownerTargets);
+        const labelId = `account-label-${index}`;
+        const ownersId = `account-owners-${index}`;
+        const ownerStatusId = `account-owner-status-${index}`;
+        const activeId = `account-active-${index}`;
+        const saveStatusId = `account-save-status-${index}`;
+        const maskedReference = account.iban_masked || account.account_reference || "Keine maskierte Kontoreferenz verfügbar";
+        return `<li><form class="surface account-card" method="post" data-account-form data-account-id="${escapeHtml(account.id)}" aria-labelledby="account-heading-${index}">
+          <div class="account-card-header"><h3 id="account-heading-${index}">${escapeHtml(account.label || "Konto")}</h3><p class="account-reference">${escapeHtml(maskedReference)}</p></div>
+          <label class="account-field" for="${labelId}">Kontoname<input id="${labelId}" name="label" data-account-label type="text" value="${escapeHtml(account.label || "")}" autocomplete="off" required></label>
+          <fieldset class="account-owners"><legend>Kontoinhaber</legend><label class="visually-hidden" for="${ownersId}">Kontoinhaber für ${escapeHtml(account.label || "Konto")} auswählen</label><select id="${ownersId}" name="owner_targets" data-account-owners multiple size="4" aria-describedby="${ownerStatusId}">${this._personOptions(ownerTargets)}</select><p class="account-owner-status${ownerTargets.length ? "" : " account-owner-status--missing"}" id="${ownerStatusId}" data-account-owner-status>${escapeHtml(ownerStatus)}</p></fieldset>
+          <label class="account-toggle" for="${activeId}"><input id="${activeId}" name="active" data-account-active type="checkbox"${account.active === false ? "" : " checked"}>Konto aktiv <span class="visually-hidden">(deaktivieren archiviert das Konto)</span></label>
+          <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit" aria-describedby="${saveStatusId}">Änderungen speichern</button></div>
+        </form></li>`;
+      }).join("")}</ul>`
+        : `<div class="empty-state">Keine Konten verfügbar. Importiere zuerst eine Bankdatei über „Buchungen prüfen“.</div>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="accounts-view"><div class="accounts-view-header"><div><h2>Konten verwalten</h2><p>Vergib verständliche Namen, ordne Kontoinhaber zu und archiviere nicht mehr verwendete Konten. Kontodaten werden ausschließlich maskiert angezeigt.</p></div><div class="accounts-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 18)}</button></div></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>${accountList}</div></main>`;
+    return this._shellTemplate(content);
   }
 
   _excelPreviewTemplate() {

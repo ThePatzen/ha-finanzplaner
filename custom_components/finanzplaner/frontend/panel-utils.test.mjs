@@ -50,6 +50,11 @@ test("summarizes selected excel suggestions", () => {
   );
 });
 
+test("labels an account without owners as not configured", () => {
+  assert.equal(utils.accountOwnerStatus([]), "Inhaber noch nicht konfiguriert");
+  assert.equal(utils.accountOwnerStatus(["person.alex", "person.sam"]), "2 Kontoinhaber");
+});
+
 test("uses the Home Assistant authenticated request method for protected panel APIs", async () => {
   const hass = {
     fetchWithAuth: async (path, options) => {
