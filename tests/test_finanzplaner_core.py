@@ -105,6 +105,55 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(overview["unresolved_bookings"], 1)
         self.assertEqual(overview["unresolved_total"], 10.0)
 
+    def test_plan_items_are_scheduled_by_rhythm_and_due_date(self):
+        core = load_core()
+        quarterly = {
+            "active": True,
+            "direction": "income",
+            "amount": 300,
+            "remaining_amount": 300,
+            "frequency_months": 3,
+            "due_date": "2026-01-15",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+        }
+
+        self.assertEqual(core.plan_item_month_values(quarterly, "2026-02"), (100.0, 0.0))
+        self.assertEqual(core.plan_item_month_values(quarterly, "2026-04"), (100.0, 300.0))
+
+    def test_month_plan_respects_validity_and_one_time_dates(self):
+        core = load_core()
+        data = {
+            "plan_items": [
+                {
+                    "active": True,
+                    "direction": "expense",
+                    "amount": 100,
+                    "remaining_amount": 100,
+                    "frequency_months": 1,
+                    "due_day": 5,
+                    "start_date": "2026-09-01",
+                    "end_date": "2026-09-30",
+                },
+                {
+                    "active": True,
+                    "direction": "expense",
+                    "amount": 250,
+                    "remaining_amount": 250,
+                    "frequency_months": None,
+                    "due_date": "2026-10-10",
+                },
+            ],
+            "bookings": [],
+        }
+
+        september = core.overview_values(data, "2026-09")
+        october = core.overview_values(data, "2026-10")
+        self.assertEqual(september["plan"], -100.0)
+        self.assertEqual(september["forecast"], -100.0)
+        self.assertEqual(october["plan"], -250.0)
+        self.assertEqual(october["forecast"], -250.0)
+
 
 class ImportTests(unittest.TestCase):
     def test_mt940_import_reads_booking_and_preserves_reference(self):

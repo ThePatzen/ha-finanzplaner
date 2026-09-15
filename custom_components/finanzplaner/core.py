@@ -456,6 +456,119 @@ def signed_plan_amount(item: dict[str, object]) -> float:
     return amount
 
 
+def _month_window(month: str) -> tuple[date, date]:
+    """Return the first and last day represented by an ISO month value."""
+
+    match = re.fullmatch(r"(\d{4})-(\d{2})", str(month))
+    if match is None:
+        raise ValueError("Der Monat muss im Format JJJJ-MM angegeben werden.")
+    year, month_number = (int(value) for value in match.groups())
+    if not 1 <= month_number <= 12:
+        raise ValueError("Der Monat muss zwischen 01 und 12 liegen.")
+    first = date(year, month_number, 1)
+    if month_number == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month_number + 1, 1)
+    return first, next_month.fromordinal(next_month.toordinal() - 1)
+
+
+def _stored_plan_date(value: object) -> date | None:
+    """Read a persisted plan date without making malformed legacy data fatal."""
+
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _plan_item_occurs_in_month(
+    item: dict[str, object],
+    month_start: date,
+    month_end: date,
+    frequency_months: int | None,
+) -> bool:
+    """Return whether a plan item's concrete payment falls in a month."""
+
+    start = _stored_plan_date(item.get("start_date"))
+    end = _stored_plan_date(item.get("end_date"))
+    if start and month_end < start or end and month_start > end:
+        return False
+
+    due_date = _stored_plan_date(item.get("due_date"))
+    if frequency_months is None:
+        payment_date = due_date or start
+        return payment_date is not None and month_start <= payment_date <= month_end
+
+    anchor = due_date or start
+    if anchor:
+        if anchor > month_end:
+            return False
+        month_delta = (month_start.year - anchor.year) * 12 + month_start.month - anchor.month
+        return month_delta >= 0 and month_delta % frequency_months == 0
+
+    # A due day is enough to anchor an interval to January without inventing a
+    # concrete year. This makes quarterly/annual legacy entries deterministic.
+    due_day = item.get("due_day")
+    if due_day not in (None, ""):
+        return (month_start.month - 1) % frequency_months == 0
+
+    # Legacy monthly entries have always contributed to every month. For a
+    # longer rhythm without an anchor, keep the normalized budget value but do
+    # not claim a concrete cash-flow date that the data does not provide.
+    return frequency_months == 1
+
+
+def plan_item_month_values(
+    item: dict[str, object], month: str
+) -> tuple[float, float]:
+    """Return ``(monthly_plan, scheduled_cashflow)`` for one plan item.
+
+    The first value is the normalized budget contribution. The second value is
+    the concrete amount still expected in the selected month. Both values are
+    signed according to the plan direction.
+    """
+
+    month_start, month_end = _month_window(month)
+    if not item.get("active", True):
+        return 0.0, 0.0
+
+    amount = abs(_money(item.get("amount", 0)))
+    remaining_value = item.get("remaining_amount", item.get("amount", 0))
+    if remaining_value is None:
+        remaining_value = item.get("amount", 0)
+    remaining = abs(_money(remaining_value))
+
+    frequency = item.get("frequency_months", 1)
+    if frequency is not None and (
+        isinstance(frequency, bool) or not isinstance(frequency, int) or frequency <= 0
+    ):
+        frequency = 1
+
+    occurs = _plan_item_occurs_in_month(item, month_start, month_end, frequency)
+    if frequency is None:
+        budget = amount if occurs else Decimal("0.00")
+    else:
+        start = _stored_plan_date(item.get("start_date"))
+        end = _stored_plan_date(item.get("end_date"))
+        if start and month_end < start or end and month_start > end:
+            budget = Decimal("0.00")
+        else:
+            budget = (amount / Decimal(frequency)).quantize(
+                MONEY_QUANT, rounding=ROUND_HALF_UP
+            )
+
+    signed_budget = signed_plan_amount({**item, "amount": float(budget)})
+    signed_scheduled = signed_plan_amount(
+        {**item, "amount": float(remaining if occurs else Decimal("0.00"))}
+    )
+    return signed_budget, signed_scheduled
+
+
 def overview_values(data: dict[str, object], month: str) -> dict[str, float | int]:
     """Calculate the compact overview contract used by the panel and HA sensors."""
 
@@ -467,15 +580,15 @@ def overview_values(data: dict[str, object], month: str) -> dict[str, float | in
     bookings = [
         item for item in data.get("bookings", []) if isinstance(item, dict)
     ]
-    plan = sum(signed_plan_amount(item) for item in plan_items)
+    plan_values = [plan_item_month_values(item, month) for item in plan_items]
+    plan = sum(monthly_plan for monthly_plan, _ in plan_values)
     actual = sum(
         float(item.get("amount", 0))
         for item in bookings
         if str(item.get("booking_date", "")).startswith(month)
     )
     planned_remaining = sum(
-        signed_plan_amount({**item, "amount": item.get("remaining_amount", 0)})
-        for item in plan_items
+        scheduled_cashflow for _, scheduled_cashflow in plan_values
     )
     unresolved = [item for item in bookings if item.get("status") != "resolved"]
     snapshot = month_snapshot(
