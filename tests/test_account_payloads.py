@@ -111,6 +111,22 @@ class AccountPayloadTests(unittest.TestCase):
 
         self.assertEqual(account["iban"], "AT123456789012345678")
 
+    def test_account_payload_masks_nested_iban_strings_without_mutating_input(self):
+        account = {
+            "iban": "AT123456789012345678",
+            "meta": {
+                "note": "Zahlung von AT123456789012345678",
+                "history": ["AT123456789012345678", {"text": "Keine IBAN"}],
+            },
+        }
+
+        payload = self.http.account_payload(account)
+
+        self.assertEqual(payload["meta"]["note"], "Zahlung von …5678")
+        self.assertEqual(payload["meta"]["history"][0], "…5678")
+        self.assertEqual(account["meta"]["note"], "Zahlung von AT123456789012345678")
+        self.assertEqual(account["meta"]["history"][0], "AT123456789012345678")
+
     def test_account_update_accepts_multiple_live_people_and_household(self):
         result = self.http.validate_account_update(
             {
@@ -143,6 +159,19 @@ class AccountPayloadTests(unittest.TestCase):
         self.assertEqual(result["bank"], "Erste Bank")
         self.assertEqual(result["iban"], "DE89370400440532013000")
 
+    def test_account_update_accepts_valid_austrian_iban(self):
+        result = self.http.validate_account_update(
+            {
+                "label": "Österreichisches Konto",
+                "iban": "AT61 1904 3002 3457 3201",
+                "owner_targets": [],
+                "active": True,
+            },
+            {"household"},
+        )
+
+        self.assertEqual(result["iban"], "AT611904300234573201")
+
     def test_account_update_rejects_malformed_iban(self):
         with self.assertRaises(ValueError):
             self.http.validate_account_update(
@@ -154,6 +183,24 @@ class AccountPayloadTests(unittest.TestCase):
                 },
                 {"household"},
             )
+
+    def test_account_update_rejects_unknown_country_and_wrong_country_length(self):
+        invalid_ibans = (
+            "ZZ89 3704 0044 0532 0130 00",
+            "DE89 3704 0044 0532 013",
+        )
+
+        for iban in invalid_ibans:
+            with self.subTest(iban=iban), self.assertRaises(ValueError):
+                self.http.validate_account_update(
+                    {
+                        "label": "Giro",
+                        "iban": iban,
+                        "owner_targets": [],
+                        "active": True,
+                    },
+                    {"household"},
+                )
 
     def test_account_update_rejects_unknown_target(self):
         with self.assertRaises(ValueError):
@@ -381,6 +428,39 @@ class AccountViewTests(unittest.TestCase):
         account = self.coordinator.store.data["accounts"][0]
         self.assertEqual(account["bank"], "Neue Bank")
         self.assertEqual(account["iban"], "AT123456789012345678")
+
+    def test_post_rejects_iban_already_used_by_another_account_without_mutation(self):
+        self.coordinator.store.data["accounts"].append(
+            {
+                "id": "account-2",
+                "label": "Sparkonto",
+                "iban": "DE89370400440532013000",
+                "account_reference": "DE89370400440532013000",
+                "owner_targets": [],
+                "active": True,
+            }
+        )
+        before = deepcopy(self.coordinator.store.data)
+
+        with self.assertRaises(self.bad_request):
+            asyncio.run(
+                self.http.AccountView().post(
+                    self._request(
+                        {
+                            "label": "Giro geändert",
+                            "bank": "Erste Bank",
+                            "iban": "DE89 3704 0044 0532 0130 00",
+                            "owner_targets": [],
+                            "active": True,
+                        }
+                    ),
+                    "account-1",
+                )
+            )
+
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
 
     def test_changing_shared_account_owners_preserves_existing_booking_allocation(self):
         allocation_before = deepcopy(
