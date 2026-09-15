@@ -24,3 +24,17 @@ test("builds an accessible chart summary from trend values", () => {
     "Plan 4.200,00 €, Prognose 3.710,00 €, Ist 3.285,40 €; Heute am Ende des Zeitraums.",
   );
 });
+
+test("returns from a root-hosted panel to the HA base route", () => {
+  assert.equal(
+    utils.homeAssistantPath("https://ha.example/finanzplaner?view=review#booking"),
+    "/",
+  );
+});
+
+test("preserves an installation base path but removes panel state", () => {
+  assert.equal(
+    utils.homeAssistantPath("https://ha.example/homeassistant/finanzplaner/?view=review#booking"),
+    "/homeassistant/",
+  );
+});

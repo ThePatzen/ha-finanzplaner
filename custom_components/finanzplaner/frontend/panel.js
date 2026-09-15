@@ -1,4 +1,4 @@
-import { formatEuro, trendSummary } from "./panel-utils.mjs";
+import { formatEuro, homeAssistantPath, trendSummary } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const PERSONS_URL = "/api/finanzplaner/persons";
@@ -659,7 +659,7 @@ class FinanzplanerPanel extends HTMLElement {
   _shellTemplate(content) {
     return `<div class="app-shell">
       <aside class="rail" aria-label="Finanzplaner-Navigation">
-        <a class="rail-brand" href="#content">${icon("home", 18)}<span>Home Assistant</span><span class="brand-arrow">${icon("chevronRight", 18)}</span></a>
+        <a class="rail-brand" href="${homeAssistantPath(window.location.href)}">${icon("home", 18)}<span>Home Assistant</span><span class="brand-arrow">${icon("chevronRight", 18)}</span></a>
         <nav class="rail-nav" aria-label="Bereiche">${this._navTemplate()}</nav>
         <div class="rail-footer"><button class="household-switcher" type="button">${icon("household", 21)}<span>Gemeinsamer Haushalt</span>${icon("chevronRight", 16)}</button><p>Zu Hause leben. Besser planen.</p></div>
       </aside>

@@ -20,3 +20,10 @@ export function trendSummary(trend) {
   const todayText = todayIndex >= periods - 1 ? "am Ende des Zeitraums" : `bei Tag ${todayIndex + 1}`;
   return `Plan ${formatEuro(last("planned"))}, Prognose ${formatEuro(last("forecast"))}, Ist ${formatEuro(last("actual"))}; Heute ${todayText}.`;
 }
+
+export function homeAssistantPath(currentHref, panelPath = "/finanzplaner") {
+  const url = new URL(currentHref);
+  const normalizedPanel = `/${panelPath.replace(/^\/+|\/+$/g, "")}`;
+  const panelPattern = new RegExp(`${normalizedPanel}/?$`);
+  return url.pathname.replace(panelPattern, "/") || "/";
+}
