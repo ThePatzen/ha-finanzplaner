@@ -27,3 +27,15 @@ export function homeAssistantPath(currentHref, panelPath = "/finanzplaner") {
   const panelPattern = new RegExp(`${normalizedPanel}/?$`);
   return url.pathname.replace(panelPattern, "/") || "/";
 }
+
+export function selectedSuggestionSummary(suggestions = []) {
+  return suggestions.reduce(
+    (summary, suggestion) => {
+      if (!suggestion?.selected) return summary;
+      summary.count += 1;
+      summary.amount += Number(suggestion.amount) || 0;
+      return summary;
+    },
+    { count: 0, amount: 0 },
+  );
+}

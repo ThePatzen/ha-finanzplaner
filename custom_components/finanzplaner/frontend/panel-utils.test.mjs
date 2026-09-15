@@ -38,3 +38,14 @@ test("preserves an installation base path but removes panel state", () => {
     "/homeassistant/",
   );
 });
+
+test("summarizes selected excel suggestions", () => {
+  assert.deepEqual(
+    utils.selectedSuggestionSummary([
+      { selected: true, amount: 12.5 },
+      { selected: false, amount: 9 },
+      { selected: true, amount: 2.5 },
+    ]),
+    { count: 2, amount: 15 },
+  );
+});

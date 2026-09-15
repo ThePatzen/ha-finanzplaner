@@ -1,9 +1,11 @@
-import { formatEuro, homeAssistantPath, trendSummary } from "./panel-utils.mjs";
+import { formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
 const IMPORT_URL = "/api/finanzplaner/import";
+const EXCEL_PREVIEW_URL = "/api/finanzplaner/excel/preview";
+const EXCEL_CONFIRM_URL = "/api/finanzplaner/excel/confirm";
 const PAPER_TEXTURE_PATH = "assets/plates/main-paper-sample.png";
 const PAPER_TEXTURE_URL = new URL(PAPER_TEXTURE_PATH, import.meta.url).href;
 
@@ -285,6 +287,35 @@ const styles = `
   .import-strip p { margin: 0.25rem 0 0; color: var(--fp-muted); font-size: 0.78rem; }
   .file-input { max-inline-size: 18rem; color: var(--fp-muted); font-size: 0.8rem; }
   .file-input::file-selector-button { min-block-size: 2.4rem; margin-inline-end: 0.5rem; padding: 0.45rem 0.7rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-paper); background: var(--fp-navy); font-weight: 700; }
+  .excel-review { display: grid; gap: 1rem; margin-block-start: 1rem; padding: 1rem; }
+  .excel-review-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .excel-review-header h3 { margin: 0; font-family: var(--fp-display); font-size: 1.35rem; line-height: 1; }
+  .excel-review-header p { margin: 0.35rem 0 0; color: var(--fp-muted); font-size: 0.8rem; }
+  .excel-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; padding: 0.7rem 0.8rem; border: 1px solid var(--fp-cyan); border-radius: 0.55rem; color: var(--fp-ink); background: var(--fp-cyan-soft); font-size: 0.82rem; }
+  .excel-summary strong { font-family: var(--fp-data); }
+  .excel-warning-summary { display: grid; gap: 0.35rem; padding: 0.7rem 0.8rem; border-inline-start: 0.25rem solid var(--fp-amber); color: var(--fp-ink); background: var(--fp-amber-soft); font-size: 0.78rem; }
+  .excel-warning-summary p { margin: 0; }
+  .excel-warning-summary ul { display: grid; gap: 0.2rem; margin: 0; padding-inline-start: 1.1rem; color: var(--fp-muted); }
+  .excel-suggestion-list { display: grid; gap: 0.65rem; margin: 0; padding: 0; list-style: none; }
+  .excel-suggestion-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.8rem; padding: 0.85rem; border: 1px solid var(--fp-line); border-radius: 0.65rem; background: rgb(255 254 249 / 0.86); }
+  .excel-suggestion-row:has(input[data-excel-select]:not(:checked)) { opacity: 0.65; }
+  .excel-select { display: flex; align-items: flex-start; padding-block-start: 0.25rem; }
+  .excel-select input { inline-size: 1.15rem; block-size: 1.15rem; accent-color: var(--fp-cyan); }
+  .excel-suggestion-content { min-inline-size: 0; display: grid; gap: 0.65rem; }
+  .excel-suggestion-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+  .excel-suggestion-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .excel-suggestion-amount { color: var(--fp-coral); font-family: var(--fp-data); font-weight: 700; white-space: nowrap; }
+  .excel-suggestion-meta { display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; color: var(--fp-muted); font-size: 0.72rem; }
+  .excel-badge { display: inline-flex; align-items: center; padding: 0.12rem 0.35rem; border-radius: 0.3rem; color: var(--fp-navy); background: var(--fp-amber-soft); font-size: 0.68rem; font-weight: 800; }
+  .excel-fields { display: grid; grid-template-columns: repeat(5, minmax(7rem, 1fr)); gap: 0.5rem; }
+  .excel-field { display: grid; gap: 0.25rem; color: var(--fp-muted); font-size: 0.68rem; font-weight: 800; }
+  .excel-field input, .excel-field select { min-block-size: 2.25rem; inline-size: 100%; min-inline-size: 0; padding: 0.35rem 0.45rem; border: 1px solid var(--fp-line); border-radius: 0.4rem; color: var(--fp-ink); background: var(--fp-paper-strong); }
+  .excel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.55rem; padding-block-start: 0.25rem; border-block-start: 1px solid var(--fp-line); }
+  .excel-actions button { min-block-size: 2.5rem; padding: 0.5rem 0.8rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; font-weight: 800; }
+  .excel-discard { color: var(--fp-navy); background: var(--fp-paper-strong); }
+  .excel-confirm { color: var(--fp-paper); background: var(--fp-navy); }
+  .excel-confirm:hover { background: var(--fp-navy-deep); }
+  .excel-confirm:disabled { cursor: not-allowed; opacity: 0.5; }
   .booking-list { display: grid; gap: 0.65rem; margin-block-start: 1rem; padding: 0; list-style: none; }
   .booking-row { display: grid; grid-template-columns: 7rem minmax(0, 1fr) auto auto; align-items: center; gap: 1rem; padding: 0.85rem 1rem; border: 1px solid var(--fp-line); border-radius: 0.65rem; background: rgb(255 254 249 / 0.86); }
   .booking-date { color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.75rem; }
@@ -302,7 +333,7 @@ const styles = `
 
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
   .skip-link { inset: 0.75rem auto auto 0.75rem; z-index: 10; padding: 0.6rem 0.8rem; color: var(--fp-paper); background: var(--fp-navy); }
-  :where(a, button, input):focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 3px; }
+  :where(a, button, input, select):focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 3px; }
   ::selection { color: var(--fp-paper); background: var(--fp-navy); }
   * { scrollbar-color: var(--fp-muted) var(--fp-paper); scrollbar-width: thin; }
   [data-reveal] { animation: reveal 700ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--reveal-order, 0) * 70ms); }
@@ -352,9 +383,10 @@ const styles = `
     .statusbar { display: block; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
-    .review-view-header, .import-strip { display: block; }
+    .review-view-header, .import-strip, .excel-review-header { display: block; }
     .back-button { margin-block-start: 1rem; }
     .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
+    .excel-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .booking-row { grid-template-columns: 1fr auto; gap: 0.35rem 0.8rem; }
     .booking-date, .booking-account { grid-column: 1; }
     .booking-amount { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
@@ -362,7 +394,7 @@ const styles = `
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row { border: 1px solid CanvasText; box-shadow: none; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -514,6 +546,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._view = "overview";
     this._bookings = [];
     this._persons = [];
+    this._excelPreview = null;
     this._message = "";
     this._loading = false;
   }
@@ -601,6 +634,10 @@ class FinanzplanerPanel extends HTMLElement {
   async _handleImport(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.name.toLowerCase().endsWith(".xlsx")) {
+      await this._handleExcelPreview(file);
+      return;
+    }
     const form = new FormData();
     form.append("file", file);
     this._message = "Import wird geprüft …";
@@ -616,6 +653,102 @@ class FinanzplanerPanel extends HTMLElement {
       this._message = error.message || "Import fehlgeschlagen.";
       this._render();
     }
+  }
+
+  async _handleExcelPreview(file) {
+    const form = new FormData();
+    form.append("file", file);
+    this._message = "Excel-Datei wird geprüft …";
+    this._render();
+    try {
+      const response = await fetch(EXCEL_PREVIEW_URL, { method: "POST", body: form, credentials: "same-origin" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Excel-Import fehlgeschlagen");
+      this._excelPreview = {
+        ...result,
+        suggestions: (result.suggestions || []).map((suggestion) => ({ ...suggestion, selected: true })),
+      };
+      this._message = "Vorschau bereit. Prüfe die markierten Planposten vor der Übernahme.";
+      this._render();
+    } catch (error) {
+      this._message = error.message || "Excel-Import fehlgeschlagen.";
+      this._render();
+    }
+  }
+
+  _excelFieldValue(suggestion, field) {
+    return suggestion[field] ?? "";
+  }
+
+  _updateExcelField(event) {
+    const input = event.currentTarget;
+    const suggestion = this._excelPreview?.suggestions.find((item) => item.id === input.dataset.suggestionId);
+    if (!suggestion) return;
+    suggestion[input.dataset.field] = input.value || null;
+    if (input.dataset.field === "direction") {
+      suggestion.direction = input.value;
+    }
+  }
+
+  _updateExcelSelection(event) {
+    const input = event.currentTarget;
+    const suggestion = this._excelPreview?.suggestions.find((item) => item.id === input.dataset.suggestionId);
+    if (!suggestion) return;
+    suggestion.selected = input.checked;
+    this._updateExcelSummary();
+  }
+
+  _updateExcelSummary() {
+    const summary = this.shadowRoot.querySelector("[data-excel-summary]");
+    if (!summary || !this._excelPreview) return;
+    const selected = selectedSuggestionSummary(this._excelPreview.suggestions);
+    summary.innerHTML = `<strong>${selected.count} ausgewählt</strong><span>${formatEuro(selected.amount)} Planvolumen</span><span>${this._excelPreview.suggestions.length - selected.count} abgewählt</span>`;
+  }
+
+  async _confirmExcelImport() {
+    if (!this._excelPreview) return;
+    const selected = this._excelPreview.suggestions.filter((suggestion) => suggestion.selected);
+    if (!selected.length) {
+      this._message = "Bitte mindestens einen Planposten auswählen.";
+      this._render();
+      return;
+    }
+    const button = this.shadowRoot.querySelector("[data-excel-confirm]");
+    if (button) button.disabled = true;
+    const overrides = Object.fromEntries(selected.map((suggestion) => [suggestion.id, {
+      direction: suggestion.direction,
+      category: suggestion.category,
+      area: suggestion.area,
+      project: suggestion.project,
+      person_hint: suggestion.person_hint,
+    }]));
+    try {
+      const response = await fetch(EXCEL_CONFIRM_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          preview_id: this._excelPreview.preview_id,
+          selected_ids: selected.map((suggestion) => suggestion.id),
+          overrides,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Excel-Import konnte nicht bestätigt werden");
+      this._excelPreview = null;
+      this._message = `${result.accepted} Planposten übernommen, ${result.skipped} abgewählt.`;
+      await this._loadOverview();
+      this._render();
+    } catch (error) {
+      this._message = error.message || "Excel-Import konnte nicht bestätigt werden.";
+      this._render();
+    }
+  }
+
+  _discardExcelPreview() {
+    this._excelPreview = null;
+    this._message = "Excel-Vorschau verworfen. Es wurden keine Planposten gespeichert.";
+    this._render();
   }
 
   _shiftMonth(delta) {
@@ -634,6 +767,10 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
     this.shadowRoot.querySelector("[data-action='back']")?.addEventListener("click", () => { this._view = "overview"; this._render(); this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true }); });
     this.shadowRoot.querySelector("[data-import]")?.addEventListener("change", (event) => this._handleImport(event));
+    this.shadowRoot.querySelector("[data-excel-confirm]")?.addEventListener("click", () => this._confirmExcelImport());
+    this.shadowRoot.querySelector("[data-excel-discard]")?.addEventListener("click", () => this._discardExcelPreview());
+    this.shadowRoot.querySelectorAll("[data-excel-select]").forEach((input) => input.addEventListener("change", (event) => this._updateExcelSelection(event)));
+    this.shadowRoot.querySelectorAll("[data-excel-field]").forEach((input) => input.addEventListener("change", (event) => this._updateExcelField(event)));
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAssignment(event)));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.nav === "review") this._openReview();
@@ -718,8 +855,59 @@ class FinanzplanerPanel extends HTMLElement {
     ].join("");
   }
 
+  _excelPreviewTemplate() {
+    const preview = this._excelPreview;
+    if (!preview) return "";
+    const selected = selectedSuggestionSummary(preview.suggestions);
+    const warningCounts = preview.warnings.reduce((counts, warning) => {
+      counts[warning.code] = (counts[warning.code] || 0) + 1;
+      return counts;
+    }, {});
+    const warningLabels = {
+      formula_value: "Formelwert",
+      derived_column: "abgeleitete Spalte",
+      historical_value: "historischer Wert",
+      empty_calculation_row: "Berechnungszeile",
+      comparison_table_diff: "EMX-Vergleich",
+      unmapped_category: "ungeklärte Kategorie",
+      missing_sheet: "fehlendes optionales Blatt",
+    };
+    const directionOptions = (value) => [
+      ["income", "Einnahme"],
+      ["expense", "Ausgabe"],
+      ["saving", "Rücklage"],
+    ].map(([optionValue, label]) => `<option value="${optionValue}"${value === optionValue ? " selected" : ""}>${label}</option>`).join("");
+    const areaOptions = (value) => [
+      ["", "Kein Bereich"],
+      ["Haushalt", "Haushalt"],
+      ["Hunde", "Hunde"],
+      ["Urlaub", "Urlaub"],
+      ["PV-Anlage", "PV-Anlage"],
+    ].map(([optionValue, label]) => `<option value="${optionValue}"${value === optionValue ? " selected" : ""}>${label}</option>`).join("");
+    const warningBadges = (warnings) => (warnings || []).map((warning) => `<span class="excel-badge" title="${escapeHtml(warningLabels[warning] || warning)}">${escapeHtml(warningLabels[warning] || warning)}</span>`).join("");
+    return `<section class="surface excel-review" aria-labelledby="excel-review-heading">
+      <div class="excel-review-header"><div><h3 id="excel-review-heading">Excel-Vorschau</h3><p>Prüfe die Zuordnungen. Erst die Übernahme schreibt Planposten in deinen Finanzplan.</p></div><span class="excel-badge">${escapeHtml(preview.preview_id.slice(0, 8))}</span></div>
+      <div class="excel-summary" data-excel-summary aria-live="polite"><strong>${selected.count} ausgewählt</strong><span>${formatEuro(selected.amount)} Planvolumen</span><span>${preview.suggestions.length - selected.count} abgewählt</span></div>
+      <div class="excel-warning-summary"><p><strong>${preview.warnings.length} Prüfhinweise</strong> · ${preview.historical_rows} historische Zeilen · ${preview.skipped_rows} übersprungene Zeilen</p><ul>${Object.entries(warningCounts).map(([code, count]) => `<li>${count}× ${escapeHtml(warningLabels[code] || code)}</li>`).join("") || "<li>Keine zusätzlichen Hinweise</li>"}</ul></div>
+      <ul class="excel-suggestion-list" aria-label="Excel-Planposten">${preview.suggestions.map((suggestion) => `<li class="excel-suggestion-row">
+        <label class="excel-select"><input type="checkbox" data-excel-select data-suggestion-id="${escapeHtml(suggestion.id)}"${suggestion.selected ? " checked" : ""} aria-label="${escapeHtml(suggestion.name)} übernehmen"></label>
+        <div class="excel-suggestion-content"><div class="excel-suggestion-heading"><strong>${escapeHtml(suggestion.name)}</strong><span class="excel-suggestion-amount">${formatEuro(suggestion.amount)}</span></div>
+          <div class="excel-suggestion-meta"><span>${escapeHtml(suggestion.direction)} · alle ${escapeHtml(suggestion.frequency_months)} Monate</span><span>${escapeHtml(suggestion.source_sheet)} · Zeile ${escapeHtml(suggestion.source_row)}</span><span>${escapeHtml((suggestion.source_columns || []).join(", "))}</span>${warningBadges(suggestion.warnings)}</div>
+          <div class="excel-fields">
+            <label class="excel-field">Richtung<select data-excel-field data-field="direction" data-suggestion-id="${escapeHtml(suggestion.id)}">${directionOptions(this._excelFieldValue(suggestion, "direction"))}</select></label>
+            <label class="excel-field">Kategorie<input data-excel-field data-field="category" data-suggestion-id="${escapeHtml(suggestion.id)}" value="${escapeHtml(this._excelFieldValue(suggestion, "category"))}"></label>
+            <label class="excel-field">Bereich<select data-excel-field data-field="area" data-suggestion-id="${escapeHtml(suggestion.id)}">${areaOptions(this._excelFieldValue(suggestion, "area"))}</select></label>
+            <label class="excel-field">Projekt<input data-excel-field data-field="project" data-suggestion-id="${escapeHtml(suggestion.id)}" value="${escapeHtml(this._excelFieldValue(suggestion, "project"))}"></label>
+            <label class="excel-field">Personenhinweis<input data-excel-field data-field="person_hint" data-suggestion-id="${escapeHtml(suggestion.id)}" value="${escapeHtml(this._excelFieldValue(suggestion, "person_hint"))}"></label>
+          </div>
+        </div>
+      </li>`).join("")}</ul>
+      <div class="excel-actions"><button class="excel-discard" type="button" data-excel-discard>Vorschau verwerfen</button><button class="excel-confirm" type="button" data-excel-confirm${selected.count ? "" : " disabled"}>Planposten übernehmen ${icon("check", 17)}</button></div>
+    </section>`;
+  }
+
   _reviewTemplate() {
-    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person, dem Haushalt oder dem Bereich Hunde zu. Mehrere Ziele teilen den Betrag centgenau.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><form class="import-strip"><div><h3>Bankdatei importieren</h3><p>MT940 oder CAMT.053 · lokal geprüft, ohne dauerhafte Originaldatei.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".sta,.mt940,.txt,.xml,.camt,.camt053,application/xml,text/plain"></label></form>${this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking) => `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${escapeHtml(booking.purpose || booking.counterparty || "Ohne Verwendungszweck")}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span><div class="booking-assignment"><label class="assignment-field">Zuordnung <select data-targets multiple size="2" aria-label="Ziele für Buchung auswählen">${this._personOptions()}</select></label><label class="assignment-field">Bereich <select data-area aria-label="Bereich für Buchung auswählen"><option value="">Kein Bereich</option><option value="Hunde">Hunde</option></select></label><button class="assign-button" type="submit">Zuordnen ${icon("check", 17)}</button></div></form></li>`).join("")}</ul>` : `<div class="empty-state">Noch keine importierten Buchungen in der Prüfliste. Lade eine MT940- oder CAMT.053-Datei hoch.</div>`}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person, dem Haushalt oder dem Bereich Hunde zu. Mehrere Ziele teilen den Betrag centgenau.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 für Buchungen · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking) => `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${escapeHtml(booking.purpose || booking.counterparty || "Ohne Verwendungszweck")}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span><div class="booking-assignment"><label class="assignment-field">Zuordnung <select data-targets multiple size="2" aria-label="Ziele für Buchung auswählen">${this._personOptions()}</select></label><label class="assignment-field">Bereich <select data-area aria-label="Bereich für Buchung auswählen"><option value="">Kein Bereich</option><option value="Hunde">Hunde</option></select></label><button class="assign-button" type="submit">Zuordnen ${icon("check", 17)}</button></div></form></li>`).join("")}</ul>` : `<div class="empty-state">Noch keine importierten Buchungen in der Prüfliste. Lade eine Bankdatei hoch oder importiere eine Excel-Vorlage.</div>`}</div></main>`;
     return this._shellTemplate(content);
   }
 }
