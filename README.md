@@ -11,6 +11,7 @@ Die erste vertikale Scheibe ist vorbereitet:
 - Plan · Prognose · Ist und offene Buchungen als zentrale Sicht
 - Home-Assistant-`person.*`-Entitäten als Personenquelle
 - MT940- und CAMT.053-Upload mit Duplikatfingerprint
+- Excel-Vorlage als prüfbare Vorschau mit Auswahl und Zuordnungsänderungen
 - gemeinsame Zuordnungen wie `Haushalt` und `Hunde` im Datenmodell
 - lokale Versionierung über Home Assistants persistenten Store
 - ausgewählte Übersichtswerte als HA-Sensoren
@@ -27,6 +28,15 @@ Die Integration zeigt bei einem leeren Workspace klar markierte synthetische Dem
 
 Danach erscheint Finanzplaner in der Home-Assistant-Seitenleiste. MT940- und CAMT.053-Dateien werden bewusst manuell in der Prüfliste hochgeladen; Originaldateien werden nicht dauerhaft gespeichert.
 
+## Excel-Plan übernehmen
+
+1. Finanzplaner öffnen und `Buchungen prüfen` auswählen.
+2. Die bisherige `.xlsx`-Finanzplanvorlage hochladen.
+3. Vorschläge, Beträge, Richtung, Kategorie, Bereich, Projekt und Personenhinweis prüfen; nicht gewünschte Zeilen abwählen.
+4. Mit `Planposten übernehmen` bestätigen oder die Vorschau verwerfen.
+
+Die Arbeitsblätter `Einnahmen`, `Ausgaben` und `Sparen  und Rücklagen` werden in Planposten mit Monatsrhythmus übersetzt. `Gehalt`, PV-Erlöse, `Hunde`, Urlaubsgeld und die linke EMX-Kalkulation erhalten passende Prüfhinweise bzw. Vorschläge. `Übersicht` wird nicht importiert. Formelwerte, historische Urlaubsgeldwerte und Abweichungen der EMX-Vergleichstabelle bleiben als Warnungen sichtbar. Die Originaldatei und ihre Bytes werden nicht gespeichert.
+
 ## Fachliche Leitplanken
 
 Ein Konto kann mehreren Personen gehören. Das beschreibt die Zahlungsquelle, nicht automatisch die fachliche Zuordnung. Jede Buchung kann auf eine oder mehrere Personen, `Haushalt`, den gemeinsamen Bereich `Hunde`, Kategorien und Projekte aufgeteilt werden. Gehalt wird als `Einnahmen / Erwerbseinkommen / Gehalt` geführt; PV-Erlöse als `Einnahmen / Energieerlöse / PV-Erlöse` im Projekt `PV-Anlage`.
@@ -36,7 +46,11 @@ Ein Konto kann mehreren Personen gehören. Das beschreibt die Zahlungsquelle, ni
 ```bash
 python3 -m unittest discover -s tests -v
 node --test custom_components/finanzplaner/frontend/panel-utils.test.mjs
+node --check custom_components/finanzplaner/frontend/panel.js
+python3 -m compileall -q custom_components
 ```
+
+Der Markenlink `Home Assistant` führt aus dem Panel zurück zur normalen Home-Assistant-Oberfläche und berücksichtigt auch Installationen unter einem URL-Unterpfad.
 
 ## Versionierung
 

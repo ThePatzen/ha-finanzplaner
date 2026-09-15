@@ -8,6 +8,13 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [Unreleased]
+
+- Excel-Finanzplanvorlage mit Vorschau, Warnungen und bestätigungsgebundener Übernahme
+- positive Planbeträge mit Richtung `income`, `expense` oder `saving`
+- Zuordnungsvorschläge für Gehalt, PV-Anlage, Hunde, Urlaubsgeld und EMX
+- Rücksprung aus dem Panel zur normalen Home-Assistant-Oberfläche inklusive URL-Unterpfad
+
 ## [0.1.1] – 2026-09-14
 
 - HACS-Installation auf den normalen GitHub-Quellarchiv-Download umgestellt

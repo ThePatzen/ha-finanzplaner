@@ -14,8 +14,14 @@ jobs:
           python-version: "3.13"
       - name: Run dependency-free core tests
         run: python -m unittest discover -s tests -v
+      - name: Compile integration Python
+        run: python -m compileall -q custom_components
+      - name: Validate JSON metadata
+        run: python -m json.tool custom_components/finanzplaner/manifest.json >/dev/null && python -m json.tool hacs.json >/dev/null
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
       - name: Run frontend utility tests
         run: node --test custom_components/finanzplaner/frontend/panel-utils.test.mjs
+      - name: Check frontend syntax
+        run: node --check custom_components/finanzplaner/frontend/panel.js
