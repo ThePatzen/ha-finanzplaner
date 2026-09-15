@@ -49,10 +49,10 @@ export function equalAllocationDraft(total, targets = []) {
   if (!targets.length) return [];
   const totalCents = Math.abs(euroToCents(total));
   const centsPerTarget = Math.floor(totalCents / targets.length);
-  const firstRowRemainder = totalCents - (centsPerTarget * targets.length);
+  const remainder = totalCents - (centsPerTarget * targets.length);
   return targets.map((target, index) => ({
     target,
-    amount: (centsPerTarget + (index === 0 ? firstRowRemainder : 0)) / 100,
+    amount: (centsPerTarget + (index < remainder ? 1 : 0)) / 100,
     area: null,
     category: null,
     project: null,
@@ -64,7 +64,67 @@ export function allocationRemaining(total, allocations = []) {
     (sum, allocation) => sum + euroToCents(allocation?.amount),
     0,
   );
-  return (euroToCents(total) - allocatedCents) / 100;
+  return (Math.abs(euroToCents(total)) - allocatedCents) / 100;
+}
+
+export function addAllocationDraftRow(total, allocations = []) {
+  return equalAllocationDraft(
+    total,
+    [...allocations.map((row) => row.target || ""), ""],
+  ).map((row, index) => {
+    const current = allocations[index];
+    return current ? {
+      ...row,
+      area: current.area ?? null,
+      category: current.category ?? null,
+      project: current.project ?? null,
+    } : row;
+  });
+}
+
+export function updateAllocationDraftRow(allocations = [], index, field, value) {
+  return allocations.map((row, rowIndex) => {
+    if (rowIndex !== index) return { ...row };
+    if (field === "amount") {
+      const amount = Number(String(value).trim().replace(",", "."));
+      return { ...row, amount: Number.isFinite(amount) ? amount : 0 };
+    }
+    return { ...row, [field]: value || null };
+  });
+}
+
+export function removeAllocationDraftRow(allocations = [], index) {
+  return allocations.filter((row, rowIndex) => rowIndex !== index).map((row) => ({ ...row }));
+}
+
+export function allocationSubmitState(total, allocations = [], submitting = false) {
+  const remaining = allocationRemaining(total, allocations);
+  const missingTarget = !allocations.length || allocations.some((row) => !row.target);
+  return {
+    missingTarget,
+    remaining,
+    disabled: missingTarget || remaining !== 0 || submitting,
+  };
+}
+
+export async function allocationErrorMessage(response) {
+  const fallback = response.status === 400
+    ? "Die Aufteilung wurde nicht akzeptiert. Bitte prüfe Ziele und Centbeträge."
+    : "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.";
+  try {
+    const body = (await response.text()).trim();
+    if (!body) return fallback;
+    try {
+      const parsed = JSON.parse(body);
+      return typeof parsed?.message === "string" && parsed.message.trim()
+        ? parsed.message.trim()
+        : fallback;
+    } catch {
+      return body;
+    }
+  } catch {
+    return fallback;
+  }
 }
 
 export function accountOwnerStatus(ownerTargets = []) {

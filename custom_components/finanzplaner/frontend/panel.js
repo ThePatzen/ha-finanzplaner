@@ -1,4 +1,4 @@
-import { accountActiveStatus, accountOwnerStatus, allocationRemaining, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, selectedSuggestionSummary, trendSummary } from "./panel-utils.mjs";
+import { accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, removeAllocationDraftRow, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
@@ -585,26 +585,6 @@ function dataWithDefaults(data) {
   };
 }
 
-async function allocationErrorMessage(response) {
-  const fallback = response.status === 400
-    ? "Die Aufteilung wurde nicht akzeptiert. Bitte prüfe Ziele und Centbeträge."
-    : "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.";
-  try {
-    const body = (await response.text()).trim();
-    if (!body) return fallback;
-    try {
-      const parsed = JSON.parse(body);
-      return typeof parsed?.message === "string" && parsed.message.trim()
-        ? parsed.message.trim()
-        : fallback;
-    } catch {
-      return body;
-    }
-  } catch {
-    return fallback;
-  }
-}
-
 class FinanzplanerPanel extends HTMLElement {
   constructor() {
     super();
@@ -772,7 +752,8 @@ class FinanzplanerPanel extends HTMLElement {
     if (!form) return;
     const rows = this._allocationDrafts.get(form.dataset.bookingId) || [];
     const total = Number(form.dataset.bookingTotal) || 0;
-    const remaining = allocationRemaining(total, rows);
+    const submitState = allocationSubmitState(total, rows, form.dataset.submitting === "true");
+    const { remaining } = submitState;
     const allocated = allocationRemaining(total, [{ amount: remaining }]);
     const remainingNode = form.querySelector("[data-allocation-remaining]");
     const allocatedNode = form.querySelector("[data-allocation-allocated]");
@@ -783,8 +764,7 @@ class FinanzplanerPanel extends HTMLElement {
       remainingNode.classList.toggle("allocation-summary--open", remaining !== 0);
     }
     if (submit) {
-      const missingTarget = !rows.length || rows.some((row) => !row.target);
-      submit.disabled = missingTarget || remaining !== 0 || form.dataset.submitting === "true";
+      submit.disabled = submitState.disabled;
     }
   }
 
@@ -792,16 +772,13 @@ class FinanzplanerPanel extends HTMLElement {
     const input = event.currentTarget;
     const form = input.closest("[data-assignment-form]");
     const rows = this._allocationDrafts.get(form?.dataset.bookingId);
-    const row = rows?.[Number(input.dataset.allocationIndex)];
-    if (!form || !row) return;
+    const index = Number(input.dataset.allocationIndex);
+    if (!form || !rows?.[index]) return;
     const field = input.dataset.allocationField;
-    if (field === "amount") {
-      const normalized = input.value.trim().replace(",", ".");
-      const amount = Number(normalized);
-      row.amount = Number.isFinite(amount) ? amount : 0;
-    } else {
-      row[field] = input.value || null;
-    }
+    this._allocationDrafts.set(
+      form.dataset.bookingId,
+      updateAllocationDraftRow(rows, index, field, input.value),
+    );
     const status = form.querySelector("[data-allocation-status]");
     if (status) status.textContent = "";
     this._updateAllocationSummary(form);
@@ -811,16 +788,10 @@ class FinanzplanerPanel extends HTMLElement {
     const form = event.currentTarget.closest("[data-assignment-form]");
     if (!form) return;
     const bookingId = form.dataset.bookingId;
-    const currentRows = this._allocationDrafts.get(bookingId) || [];
-    const redistributed = equalAllocationDraft(
+    const redistributed = addAllocationDraftRow(
       Number(form.dataset.bookingTotal) || 0,
-      [...currentRows.map((row) => row.target || ""), ""],
-    ).map((row, index) => index < currentRows.length ? {
-      ...row,
-      area: currentRows[index].area,
-      category: currentRows[index].category,
-      project: currentRows[index].project,
-    } : row);
+      this._allocationDrafts.get(bookingId) || [],
+    );
     this._allocationDrafts.set(bookingId, redistributed);
     this._render();
     const updatedForm = this._allocationForm(bookingId);
@@ -835,8 +806,7 @@ class FinanzplanerPanel extends HTMLElement {
     if (!form) return;
     const bookingId = form.dataset.bookingId;
     const index = Number(event.currentTarget.dataset.allocationIndex);
-    const rows = [...(this._allocationDrafts.get(bookingId) || [])];
-    rows.splice(index, 1);
+    const rows = removeAllocationDraftRow(this._allocationDrafts.get(bookingId) || [], index);
     this._allocationDrafts.set(bookingId, rows);
     this._render();
     const updatedForm = this._allocationForm(bookingId);
@@ -854,9 +824,10 @@ class FinanzplanerPanel extends HTMLElement {
     const form = event.currentTarget;
     const rows = this._allocationDrafts.get(form.dataset.bookingId) || [];
     const total = Number(form.dataset.bookingTotal) || 0;
-    const remaining = allocationRemaining(total, rows);
+    const submitState = allocationSubmitState(total, rows);
+    const { remaining } = submitState;
     const status = form.querySelector("[data-allocation-status]");
-    if (!rows.length || rows.some((row) => !row.target) || remaining !== 0) {
+    if (submitState.disabled) {
       if (status) status.textContent = "Bitte wähle für jede Zeile ein Ziel und gleiche den verbleibenden Betrag centgenau aus.";
       this._updateAllocationSummary(form);
       return;
@@ -1240,7 +1211,8 @@ class FinanzplanerPanel extends HTMLElement {
     const bookingId = String(booking.id);
     const rows = this._allocationDrafts.get(bookingId) || equalAllocationDraft(booking.amount, ["household"]);
     const total = Math.abs(Number(booking.amount) || 0);
-    const remaining = allocationRemaining(total, rows);
+    const submitState = allocationSubmitState(total, rows);
+    const { remaining } = submitState;
     const allocated = allocationRemaining(total, [{ amount: remaining }]);
     const summaryId = `allocation-summary-${bookingIndex}`;
     const statusId = `allocation-status-${bookingIndex}`;
@@ -1265,7 +1237,7 @@ class FinanzplanerPanel extends HTMLElement {
       <legend>Aufteilung</legend>
       <ul class="allocation-list" aria-label="Aufteilungszeilen">${rowMarkup}</ul>
       <p class="allocation-summary" id="${summaryId}" aria-live="polite"><span>Gesamt <strong>${formatEuro(total)}</strong></span><span>Zugeordnet <strong data-allocation-allocated>${formatEuro(allocated)}</strong></span><span>Verbleibend <strong data-allocation-remaining class="${remaining === 0 ? "" : "allocation-summary--open"}">${formatEuro(remaining)}</strong></span></p>
-      <div class="allocation-actions"><p class="allocation-status" id="${statusId}" data-allocation-status aria-live="polite"></p><button class="allocation-add" type="button" data-allocation-add>Zeile hinzufügen</button><button class="assign-button" type="submit"${!rows.length || rows.some((row) => !row.target) || remaining !== 0 ? " disabled" : ""}>Aufteilung speichern ${icon("check", 17)}</button></div>
+      <div class="allocation-actions"><p class="allocation-status" id="${statusId}" data-allocation-status aria-live="polite"></p><button class="allocation-add" type="button" data-allocation-add>Zeile hinzufügen</button><button class="assign-button" type="submit"${submitState.disabled ? " disabled" : ""}>Aufteilung speichern ${icon("check", 17)}</button></div>
     </fieldset>`;
   }
 

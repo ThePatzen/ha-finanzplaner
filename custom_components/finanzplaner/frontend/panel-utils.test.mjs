@@ -53,7 +53,7 @@ test("summarizes selected excel suggestions", () => {
   );
 });
 
-test("distributes equal allocations in cents with the remainder in the first row", () => {
+test("distributes remainder cents one-by-one across the first rows", () => {
   assert.deepEqual(
     utils.equalAllocationDraft(100, ["person.alex", "person.sam", "household"]),
     [
@@ -69,6 +69,14 @@ test("distributes equal allocations in cents with the remainder in the first row
       { target: "household", amount: 0.02, area: null, category: null, project: null },
     ],
   );
+  assert.deepEqual(
+    utils.equalAllocationDraft(0.05, ["person.alex", "person.sam", "household"]),
+    [
+      { target: "person.alex", amount: 0.02, area: null, category: null, project: null },
+      { target: "person.sam", amount: 0.02, area: null, category: null, project: null },
+      { target: "household", amount: 0.01, area: null, category: null, project: null },
+    ],
+  );
 });
 
 test("calculates the remaining allocation amount in cents", () => {
@@ -79,6 +87,68 @@ test("calculates the remaining allocation amount in cents", () => {
   assert.equal(
     utils.allocationRemaining(0.3, [{ amount: 0.1 }, { amount: 0.2 }]),
     0,
+  );
+  assert.equal(utils.allocationRemaining(-100, [{ amount: 100 }]), 0);
+});
+
+test("adds a row, rebalances cents, and preserves manual row metadata", () => {
+  assert.deepEqual(
+    utils.addAllocationDraftRow(0.05, [
+      { target: "person.alex", amount: 0.04, area: "Hunde", category: "Futter", project: "Welpe" },
+      { target: "household", amount: 0.01, area: null, category: "Haushalt", project: null },
+    ]),
+    [
+      { target: "person.alex", amount: 0.02, area: "Hunde", category: "Futter", project: "Welpe" },
+      { target: "household", amount: 0.02, area: null, category: "Haushalt", project: null },
+      { target: "", amount: 0.01, area: null, category: null, project: null },
+    ],
+  );
+});
+
+test("updates and removes draft rows without mutating the existing draft", () => {
+  const rows = [
+    { target: "household", amount: 10, area: "Hunde", category: "Futter", project: "Welpe" },
+    { target: "person.sam", amount: 5, area: null, category: null, project: null },
+  ];
+
+  const edited = utils.updateAllocationDraftRow(rows, 0, "amount", "9,50");
+  assert.equal(edited[0].amount, 9.5);
+  assert.equal(edited[0].category, "Futter");
+  assert.equal(rows[0].amount, 10);
+  assert.deepEqual(utils.removeAllocationDraftRow(edited, 1), [edited[0]]);
+});
+
+test("reports missing targets, remaining cents, and submitting state", () => {
+  assert.deepEqual(
+    utils.allocationSubmitState(10, [{ target: "", amount: 10 }]),
+    { missingTarget: true, remaining: 0, disabled: true },
+  );
+  assert.deepEqual(
+    utils.allocationSubmitState(-10, [{ target: "household", amount: 9.99 }]),
+    { missingTarget: false, remaining: 0.01, disabled: true },
+  );
+  assert.deepEqual(
+    utils.allocationSubmitState(10, [{ target: "household", amount: 10 }], true),
+    { missingTarget: false, remaining: 0, disabled: true },
+  );
+  assert.deepEqual(
+    utils.allocationSubmitState(10, [{ target: "household", amount: 10 }]),
+    { missingTarget: false, remaining: 0, disabled: false },
+  );
+});
+
+test("reads allocation errors from JSON messages and plain text", async () => {
+  assert.equal(
+    await utils.allocationErrorMessage({ status: 400, text: async () => '{"message":"Centbetrag stimmt nicht"}' }),
+    "Centbetrag stimmt nicht",
+  );
+  assert.equal(
+    await utils.allocationErrorMessage({ status: 500, text: async () => "Dienst vorübergehend nicht erreichbar" }),
+    "Dienst vorübergehend nicht erreichbar",
+  );
+  assert.equal(
+    await utils.allocationErrorMessage({ status: 400, text: async () => "" }),
+    "Die Aufteilung wurde nicht akzeptiert. Bitte prüfe Ziele und Centbeträge.",
   );
 });
 
