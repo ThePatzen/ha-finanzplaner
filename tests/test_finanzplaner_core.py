@@ -39,6 +39,14 @@ class AllocationRulesTests(unittest.TestCase):
 
 
 class ForecastTests(unittest.TestCase):
+    def test_signed_plan_amount_uses_direction_for_positive_imports(self):
+        core = load_core()
+
+        self.assertEqual(core.signed_plan_amount({"direction": "income", "amount": 100}), 100.0)
+        self.assertEqual(core.signed_plan_amount({"direction": "expense", "amount": 100}), -100.0)
+        self.assertEqual(core.signed_plan_amount({"direction": "saving", "amount": 100}), -100.0)
+        self.assertEqual(core.signed_plan_amount({"amount": -100}), -100.0)
+
     def test_forecast_combines_planned_future_and_actuals(self):
         core = load_core()
         snapshot = core.month_snapshot(

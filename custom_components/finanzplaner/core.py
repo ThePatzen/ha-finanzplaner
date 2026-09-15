@@ -102,6 +102,18 @@ def month_snapshot(
     )
 
 
+def signed_plan_amount(item: dict[str, object]) -> float:
+    """Return a plan amount with imported positive values in balance direction."""
+
+    amount = float(item.get("amount", 0))
+    direction = item.get("direction")
+    if direction == "income":
+        return abs(amount)
+    if direction in {"expense", "saving"}:
+        return -abs(amount)
+    return amount
+
+
 def overview_values(data: dict[str, object], month: str) -> dict[str, float | int]:
     """Calculate the compact overview contract used by the panel and HA sensors."""
 
@@ -113,13 +125,16 @@ def overview_values(data: dict[str, object], month: str) -> dict[str, float | in
     bookings = [
         item for item in data.get("bookings", []) if isinstance(item, dict)
     ]
-    plan = sum(float(item.get("amount", 0)) for item in plan_items)
+    plan = sum(signed_plan_amount(item) for item in plan_items)
     actual = sum(
         float(item.get("amount", 0))
         for item in bookings
         if str(item.get("booking_date", "")).startswith(month)
     )
-    planned_remaining = sum(float(item.get("remaining_amount", 0)) for item in plan_items)
+    planned_remaining = sum(
+        signed_plan_amount({**item, "amount": item.get("remaining_amount", 0)})
+        for item in plan_items
+    )
     unresolved = [item for item in bookings if item.get("status") != "resolved"]
     snapshot = month_snapshot(
         planned_total=plan,
