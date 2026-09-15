@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import re
@@ -26,6 +26,70 @@ def account_id_for_reference(value: str) -> str | None:
     if not normalized:
         return None
     return f"account-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]}"
+
+
+def ensure_account(
+    data: dict[str, object],
+    account_reference: str,
+    iban: str | None = None,
+) -> tuple[dict[str, object] | None, bool]:
+    """Return the matching imported account, creating it when necessary."""
+
+    normalized_reference = normalize_account_reference(account_reference)
+    normalized_iban = normalize_account_reference(iban) if iban else ""
+    if not normalized_reference:
+        return None, False
+
+    accounts = data.get("accounts")
+    if not isinstance(accounts, list):
+        accounts = []
+        data["accounts"] = accounts
+
+    matching_account: dict[str, object] | None = None
+    if normalized_iban:
+        matching_account = next(
+            (
+                account
+                for account in accounts
+                if isinstance(account, dict)
+                and normalize_account_reference(account.get("iban", ""))
+                == normalized_iban
+            ),
+            None,
+        )
+    if matching_account is None:
+        matching_account = next(
+            (
+                account
+                for account in accounts
+                if isinstance(account, dict)
+                and normalize_account_reference(account.get("account_reference", ""))
+                == normalized_reference
+            ),
+            None,
+        )
+    if matching_account is not None:
+        if normalized_iban and not normalize_account_reference(
+            matching_account.get("iban", "")
+        ):
+            matching_account["iban"] = normalized_iban
+            matching_account["updated_at"] = datetime.now(timezone.utc).isoformat()
+        return matching_account, False
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    account = {
+        "id": account_id_for_reference(normalized_reference),
+        "label": f"Konto · {normalized_reference[-4:]}",
+        "iban": normalized_iban or None,
+        "account_reference": normalized_reference,
+        "currency": "EUR",
+        "owner_targets": [],
+        "active": True,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    accounts.append(account)
+    return account, True
 
 
 @dataclass(frozen=True, slots=True)

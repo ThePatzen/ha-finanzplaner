@@ -14,6 +14,8 @@ from .const import DOMAIN
 from .core import (
     Booking,
     booking_fingerprint,
+    ensure_account,
+    normalize_account_reference,
     overview_values,
     parse_camt053,
     parse_mt940,
@@ -39,10 +41,15 @@ def _coordinator(hass: Any) -> FinanzplanerCoordinator | None:
     )
 
 
-def _booking_payload(booking: Booking) -> dict[str, Any]:
+def _booking_payload(
+    booking: Booking,
+    account_id: str | None = None,
+) -> dict[str, Any]:
     return {
         "id": booking_fingerprint(booking),
         "account": booking.account,
+        "account_id": account_id,
+        "account_reference": normalize_account_reference(booking.account),
         "booking_date": booking.booking_date.isoformat(),
         "amount": booking.amount,
         "currency": booking.currency,
@@ -52,6 +59,30 @@ def _booking_payload(booking: Booking) -> dict[str, Any]:
         "allocations": [],
         "status": "unresolved",
     }
+
+
+def _redact_account_value(value: object) -> object:
+    """Keep account context in import previews without exposing a full IBAN."""
+
+    if not isinstance(value, str):
+        return value
+    normalized = normalize_account_reference(value)
+    if (
+        len(normalized) >= 15
+        and normalized[:2].isalpha()
+        and normalized[2:4].isdigit()
+    ):
+        return f"…{normalized[-4:]}"
+    return value
+
+
+def _import_preview_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    preview = dict(payload)
+    preview["account"] = _redact_account_value(preview.get("account"))
+    preview["account_reference"] = _redact_account_value(
+        preview.get("account_reference")
+    )
+    return preview
 
 
 def _demo_overview() -> dict[str, Any]:
@@ -270,11 +301,26 @@ class ImportView(HomeAssistantView):
         existing = {booking.get("id") for booking in coordinator.store.data.get("bookings", [])}
         accepted = []
         duplicates = 0
+        new_account_ids: set[str] = set()
+        unconfigured_account_ids: set[str] = set()
         for booking in parsed:
             payload = _booking_payload(booking)
             if payload["id"] in existing:
                 duplicates += 1
                 continue
+            account, created = ensure_account(
+                coordinator.store.data,
+                booking.account,
+                booking.account if format_name == "CAMT.053" else None,
+            )
+            if account is not None:
+                account_id = account.get("id")
+                payload["account_id"] = account_id
+                if isinstance(account_id, str):
+                    if created:
+                        new_account_ids.add(account_id)
+                    if not account.get("owner_targets"):
+                        unconfigured_account_ids.add(account_id)
             existing.add(payload["id"])
             coordinator.store.data["bookings"].append(payload)
             accepted.append(payload)
@@ -294,7 +340,9 @@ class ImportView(HomeAssistantView):
                 "format": format_name,
                 "accepted": len(accepted),
                 "duplicates": duplicates,
-                "preview": accepted,
+                "new_accounts": len(new_account_ids),
+                "unconfigured_accounts": len(unconfigured_account_ids),
+                "preview": [_import_preview_payload(item) for item in accepted],
             }
         )
 

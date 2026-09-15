@@ -102,6 +102,7 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(len(bookings), 1)
         self.assertEqual(bookings[0].amount, -42.50)
         self.assertEqual(bookings[0].booking_date, date(2026, 9, 2))
+        self.assertEqual(bookings[0].account, "AT123456789012345678")
         self.assertEqual(bookings[0].reference, "NONREF")
         self.assertEqual(bookings[0].purpose, "Hundefutter")
 
@@ -122,6 +123,7 @@ class ImportTests(unittest.TestCase):
         bookings = core.parse_camt053(raw)
 
         self.assertEqual(len(bookings), 1)
+        self.assertEqual(bookings[0].account, "AT123456789012345678")
         self.assertEqual(bookings[0].amount, 125.00)
         self.assertEqual(bookings[0].counterparty, "Solarwerk")
         self.assertEqual(bookings[0].reference, "PAY-42")
