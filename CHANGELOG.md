@@ -10,6 +10,10 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+- Live-Dashboard ergänzt um echte Haushalts-, Bereichs- und Kategorieauswertungen sowie Monatsverlauf aus Planposten, Buchungen und Futterprognosen
+- Import → Zuordnung → Übersicht als durchgängigen API-Workflow abgesichert
+- Ungespeicherte Änderungen werden beim Verlassen einer Bearbeitungsansicht und beim Schließen des Browsers geschützt
+
 ## [0.3.3] – 2026-09-16
 
 - Planposten, Tiere, Futterprofile, Stammdaten und Konten starten mit einer tabellarischen Übersichtsansicht

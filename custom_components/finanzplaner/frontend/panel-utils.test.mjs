@@ -287,6 +287,24 @@ test("disables save actions until a draft differs from its loaded baseline", () 
   assert.match(panelSource, /this\._allocationOriginalDrafts = new Map\(\)/);
 });
 
+test("renders live Plan/Ist detail values instead of demo-only placeholders", () => {
+  assert.match(panelSource, /this\._data\.demo === false \? "LIVE" : "DEMO"/);
+  assert.match(panelSource, /household\.income_plan/);
+  assert.match(panelSource, /area\.actual \?\? area\.value/);
+  assert.match(panelSource, /area\.plan \?\? 0/);
+  assert.match(panelSource, /trend\.min_value/);
+});
+
+test("protects unsaved edits when leaving a view or closing the browser", () => {
+  assert.match(panelSource, /_hasUnsavedChanges\(\)/);
+  assert.match(panelSource, /_confirmDiscardUnsavedChanges\(\)/);
+  assert.match(panelSource, /Es gibt ungespeicherte Änderungen\. Möchtest du sie verwerfen\?/);
+  assert.match(panelSource, /_discardUnsavedChanges\(\)/);
+  assert.match(panelSource, /window\.addEventListener\("beforeunload", this\._handleBeforeUnload\)/);
+  assert.match(panelSource, /window\.removeEventListener\("beforeunload", this\._handleBeforeUnload\)/);
+  assert.match(panelSource, /_navigateToOverview\(\)/);
+});
+
 test("renders a skip link to focusable main content and reveals it on keyboard focus", () => {
   assert.match(panelSource, /class="skip-link visually-hidden" href="#content" data-skip-link/);
   assert.match(panelSource, /\.skip-link:focus-visible\s*\{[^}]*clip-path:\s*none\s*!important/s);

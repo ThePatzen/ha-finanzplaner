@@ -154,6 +154,69 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(october["plan"], -250.0)
         self.assertEqual(october["forecast"], -250.0)
 
+    def test_overview_details_joins_plan_actual_and_unallocated_amounts(self):
+        core = load_core()
+        details = core.overview_details(
+            {
+                "catalogs": {
+                    "areas": [{"id": "area-hunde", "label": "Hunde"}],
+                    "categories": [{"id": "category-futter", "label": "Futter"}],
+                },
+                "plan_items": [
+                    {
+                        "active": True,
+                        "direction": "expense",
+                        "amount": 100,
+                        "frequency_months": 1,
+                        "due_day": 5,
+                        "area": "alter Bereichsname",
+                        "area_id": "area-hunde",
+                        "category": "alte Kategorie",
+                        "category_id": "category-futter",
+                    }
+                ],
+                "bookings": [
+                    {
+                        "booking_date": "2026-09-03",
+                        "amount": -30,
+                        "status": "resolved",
+                        "allocations": [
+                            {
+                                "amount": 30,
+                                "area_id": "area-hunde",
+                                "category_id": "category-futter",
+                            }
+                        ],
+                    },
+                    {
+                        "booking_date": "2026-09-04",
+                        "amount": -5,
+                        "status": "unresolved",
+                        "allocations": [],
+                    },
+                ],
+            },
+            "2026-09",
+            today=date(2026, 9, 4),
+        )
+
+        self.assertEqual(details["areas"][0], {
+            "name": "Hunde",
+            "value": -30.0,
+            "plan": -100.0,
+            "actual": -30.0,
+            "variance": 70.0,
+        })
+        self.assertEqual(details["categories"][0]["name"], "Futter")
+        self.assertEqual(details["categories"][0]["plan"], -100.0)
+        self.assertEqual(details["areas"][1]["name"], "Nicht zugeordnet")
+        self.assertEqual(details["areas"][1]["actual"], -5.0)
+        self.assertEqual(details["household"]["expenses"], -35.0)
+        self.assertEqual(details["trend"]["planned"][-1], -100.0)
+        self.assertEqual(details["trend"]["actual"][-1], -35.0)
+        self.assertEqual(details["trend"]["forecast"][-1], -135.0)
+        self.assertEqual(details["trend"]["today_index"], 3)
+
 
 class ImportTests(unittest.TestCase):
     def test_mt940_import_reads_booking_and_preserves_reference(self):

@@ -276,17 +276,19 @@ const styles = `
   .mini-metric--negative .mini-metric-value { color: var(--fp-coral); }
   .mini-metric--available .mini-metric-value { color: var(--fp-ink); }
   .bar-list { display: grid; gap: 0.45rem; margin-block-start: 1rem; }
-  .bar-row { display: grid; grid-template-columns: 5.1rem minmax(0, 1fr) 4.8rem; align-items: center; gap: 0.55rem; color: var(--fp-muted); font-size: 0.72rem; }
+  .bar-row { display: grid; grid-template-columns: minmax(5.1rem, 0.65fr) minmax(0, 1fr) minmax(7.25rem, auto); align-items: center; gap: 0.55rem; color: var(--fp-muted); font-size: 0.72rem; }
   .bar-track { block-size: 0.48rem; overflow: hidden; background: #e4e6e4; }
   .bar-fill { display: block; block-size: 100%; min-inline-size: 0.35rem; background: var(--fp-navy); }
   .bar-fill--cyan { background: var(--fp-cyan); }
   .bar-fill--amber { background: var(--fp-amber); }
   .bar-fill--coral { background: var(--fp-coral); }
-  .bar-value { color: var(--fp-coral); font-family: var(--fp-data); text-align: end; white-space: nowrap; }
+  .bar-value { display: grid; gap: 0.1rem; color: var(--fp-coral); font-family: var(--fp-data); text-align: end; white-space: nowrap; }
+  .bar-value small, .category-values small { color: var(--fp-muted); font-family: var(--fp-body); font-size: 0.64rem; }
   .category-list { display: grid; gap: 0.38rem; margin: 1rem 0 0; padding: 0; list-style: none; }
   .category-item { display: grid; grid-template-columns: 1.3rem minmax(0, 1fr) auto; align-items: center; gap: 0.35rem; color: var(--fp-muted); font-size: 0.74rem; }
   .category-item svg { color: var(--fp-navy); }
-  .category-item span:last-child { color: var(--fp-ink); font-family: var(--fp-data); white-space: nowrap; }
+  .category-values { display: grid; gap: 0.1rem; text-align: end; white-space: nowrap; }
+  .category-values strong { color: var(--fp-ink); font-family: var(--fp-data); }
 
   .statusbar { display: flex; justify-content: space-between; gap: 1rem; margin-block-start: 1rem; color: var(--fp-muted); font-size: 0.7rem; }
   .statusbar span:last-child { text-align: end; }
@@ -631,6 +633,10 @@ const demoHousehold = {
   expenses: -1934.6,
   savings: -300,
   available: 3285.4,
+  income_plan: 5650,
+  expenses_plan: 2200,
+  savings_plan: 300,
+  available_plan: 3150,
 };
 
 const fallbackOverview = {
@@ -644,24 +650,25 @@ const fallbackOverview = {
   unresolved_total: -278.64,
   household: demoHousehold,
   areas: [
-    { name: "Haushalt", value: -120.5 },
-    { name: "PV-Anlage", value: -45 },
-    { name: "Hunde", value: -18.9 },
-    { name: "Sonstiges", value: -72.2 },
+    { name: "Haushalt", value: -120.5, actual: -120.5, plan: -150 },
+    { name: "PV-Anlage", value: -45, actual: -45, plan: -60 },
+    { name: "Hunde", value: -18.9, actual: -18.9, plan: -25 },
+    { name: "Sonstiges", value: -72.2, actual: -72.2, plan: -80 },
   ],
   categories: [
-    { name: "Lebensmittel", value: -612.4, icon: "cart" },
-    { name: "Wohnen", value: -540, icon: "household" },
-    { name: "Strom (inkl. PV)", value: -221.3, icon: "bolt" },
-    { name: "Hunde", value: -183.9, icon: "paw" },
-    { name: "Mobilität", value: -142.6, icon: "car" },
-    { name: "Sonstiges", value: -234.4, icon: "tasks" },
+    { name: "Lebensmittel", value: -612.4, actual: -612.4, plan: -700, icon: "cart" },
+    { name: "Wohnen", value: -540, actual: -540, plan: -560, icon: "household" },
+    { name: "Strom (inkl. PV)", value: -221.3, actual: -221.3, plan: -240, icon: "bolt" },
+    { name: "Hunde", value: -183.9, actual: -183.9, plan: -200, icon: "paw" },
+    { name: "Mobilität", value: -142.6, actual: -142.6, plan: -180, icon: "car" },
+    { name: "Sonstiges", value: -234.4, actual: -234.4, plan: -260, icon: "tasks" },
   ],
   trend: {
     planned: [0, 380, 1000, 1600, 2200, 2800, 3400, 3900, 4500, 5200, 6000],
     forecast: [0, 420, 1100, 1800, 2500, 3000, 3500, 3900, 4300, 4600, 4900],
     actual: [0, 290, 690, 1020, 1430, 1710, 1980, 2300, 2400],
     max_value: 8000,
+    min_value: 0,
     today_label: "17. Sep.",
     today_index: 8,
   },
@@ -746,15 +753,18 @@ function chartMarkup(trend = fallbackOverview.trend) {
   const plotWidth = width - left - right;
   const plotHeight = height - top - bottom;
   const series = [trend.planned || [], trend.forecast || [], trend.actual || []];
-  const max = Math.max(1, Number(trend.max_value || 0), ...series.flat().map((value) => Number(value) || 0));
+  const values = series.flat().map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  const min = Math.min(0, Number(trend.min_value ?? 0), ...values);
+  const max = Math.max(0, Number(trend.max_value ?? 0), ...values);
+  const range = Math.max(1, max - min);
   const count = Math.max(2, ...series.map((values) => values.length));
-  const point = (value, index) => `${left + (index / (count - 1)) * plotWidth},${top + plotHeight - ((Number(value) || 0) / max) * plotHeight}`;
+  const point = (value, index) => `${left + (index / (count - 1)) * plotWidth},${top + plotHeight - ((Number(value) - min) / range) * plotHeight}`;
   const points = (values) => values.map(point).join(" ");
   const todayIndex = Math.min(count - 1, Math.max(0, Number(trend.today_index || 0)));
   const todayX = left + (todayIndex / (count - 1)) * plotWidth;
   const grid = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
     const y = top + plotHeight - ratio * plotHeight;
-    const label = Math.round(max * ratio).toLocaleString("de-DE");
+    const label = Math.round(min + range * ratio).toLocaleString("de-DE");
     return `<line class="chart-grid-line" x1="${left}" x2="${width - right}" y1="${y}" y2="${y}"></line><text class="chart-axis-label" x="0" y="${y + 4}">${label}</text>`;
   }).join("");
   const dots = (values, className) => values.map((value, index) => `<circle class="chart-dot ${className}" cx="${point(value, index).split(",")[0]}" cy="${point(value, index).split(",")[1]}" r="${className.includes("planned") ? 3.2 : 4}"></circle>`).join("");
@@ -794,6 +804,13 @@ function dataWithDefaults(data) {
     areas: data?.areas?.length ? data.areas : liveData ? [] : fallbackOverview.areas,
     categories: data?.categories?.length ? data.categories : liveData ? [] : fallbackOverview.categories,
   };
+}
+
+function planShareCaption(value, plan, fallback) {
+  const planned = Number(plan) || 0;
+  if (!planned) return fallback;
+  const share = Math.abs((Number(value) || 0) / planned) * 100;
+  return `${share.toLocaleString("de-DE", { maximumFractionDigits: 0 })} % vom Plan`;
 }
 
 class FinanzplanerPanel extends HTMLElement {
@@ -847,11 +864,21 @@ class FinanzplanerPanel extends HTMLElement {
     this._excelPreview = null;
     this._message = "";
     this._loading = false;
+    this._handleBeforeUnload = (event) => {
+      if (!this._hasUnsavedChanges()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
   }
 
   connectedCallback() {
+    window.addEventListener("beforeunload", this._handleBeforeUnload);
     this._render();
     this._loadOverview();
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener("beforeunload", this._handleBeforeUnload);
   }
 
   set hass(value) {
@@ -876,6 +903,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openReview() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._view = "review";
     this._message = "";
     this._render();
@@ -955,6 +983,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openAccounts() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._view = "accounts";
     this._message = "";
     this._accountEditorId = null;
@@ -1027,6 +1056,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openPets() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._view = "pets";
     this._message = "";
     this._petEditorId = null;
@@ -1105,6 +1135,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openFeedProfiles() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._view = "feed_profiles";
     this._message = "";
     this._feedProfileEditorId = null;
@@ -1169,6 +1200,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openCatalogs() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._view = "catalogs";
     this._message = "";
     this._catalogOverviewKind = "categories";
@@ -1412,6 +1444,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openPlanItems() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._view = "plan_items";
     this._message = "";
     this._planItemEditorId = null;
@@ -1984,8 +2017,87 @@ class FinanzplanerPanel extends HTMLElement {
     if (button) button.disabled = isSubmitting || !hasChanges;
   }
 
+  _hasUnsavedChanges() {
+    for (const [itemId, draft] of this._planItemDrafts) {
+      const item = this._planItems.find((candidate) => String(candidate.id) === itemId);
+      const baseline = itemId === "new" ? this._newPlanItemDraft() : this._planItemDraftFromItem(item || {});
+      if (!this._draftsEqual(draft, baseline)) return true;
+    }
+    for (const [petId, draft] of this._petDrafts) {
+      const pet = this._pets.find((candidate) => String(candidate.id) === petId);
+      const baseline = petId === "new" ? this._newPetDraft() : this._petDraftFromPet(pet || {});
+      if (!this._draftsEqual(draft, baseline)) return true;
+    }
+    for (const [profileId, draft] of this._feedProfileDrafts) {
+      const profile = this._feedProfiles.find((candidate) => String(candidate.id) === profileId);
+      const baseline = profileId === "new" ? this._newFeedProfileDraft() : this._feedProfileDraftFromProfile(profile || {});
+      if (!this._draftsEqual(draft, baseline)) return true;
+    }
+    for (const [key, draft] of this._catalogDrafts) {
+      const separator = key.indexOf(":");
+      const kind = key.slice(0, separator);
+      const entryId = key.slice(separator + 1);
+      const entry = this._catalogEntries(kind).find((candidate) => String(candidate.id) === entryId);
+      const baseline = entryId === "new" ? { label: "", active: true } : this._catalogDraftFromEntry(entry || {});
+      if (!this._draftsEqual(draft, baseline)) return true;
+    }
+    for (const [accountId, draft] of this._accountDrafts) {
+      const account = this._accounts.find((candidate) => String(candidate.id) === accountId);
+      if (!this._draftsEqual(draft, this._accountDraftFromAccount(account || {}))) return true;
+    }
+    for (const [bookingId, draft] of this._allocationDrafts) {
+      const baseline = this._allocationOriginalDrafts.get(bookingId);
+      if (!baseline || !this._draftsEqual(draft, baseline)) return true;
+    }
+    return false;
+  }
+
+  _hasPendingSubmissions() {
+    return this._planItemSubmissions.size > 0
+      || this._petSubmissions.size > 0
+      || this._feedProfileSubmissions.size > 0
+      || this._catalogSubmissions.size > 0
+      || this._accountSubmissions.size > 0
+      || this._allocationSubmissions.size > 0;
+  }
+
+  _discardUnsavedChanges() {
+    this._planItemDrafts.clear();
+    this._petDrafts.clear();
+    this._feedProfileDrafts.clear();
+    this._catalogDrafts.clear();
+    this._accountDrafts.clear();
+    this._planItemErrors.clear();
+    this._petErrors.clear();
+    this._feedProfileErrors.clear();
+    this._catalogErrors.clear();
+    this._allocationErrors.clear();
+    this._allocationDrafts.clear();
+    for (const [bookingId, rows] of this._allocationOriginalDrafts) {
+      this._allocationDrafts.set(bookingId, rows.map((row) => ({ ...row })));
+    }
+  }
+
+  _confirmDiscardUnsavedChanges() {
+    if (this._hasPendingSubmissions()) {
+      window.alert("Eine Änderung wird gerade gespeichert. Bitte warte, bis der Vorgang abgeschlossen ist.");
+      return false;
+    }
+    if (!this._hasUnsavedChanges()) return true;
+    if (!window.confirm("Es gibt ungespeicherte Änderungen. Möchtest du sie verwerfen?")) return false;
+    this._discardUnsavedChanges();
+    return true;
+  }
+
   _focusContent() {
     this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
+  }
+
+  _navigateToOverview() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
+    this._view = "overview";
+    this._render();
+    this._focusContent();
   }
 
   _openAccountEditor(accountId) {
@@ -1996,6 +2108,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _closeAccountEditor() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._accountEditorId = null;
     this._render();
     this._focusContent();
@@ -2009,6 +2122,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _closePlanItemEditor() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._planItemEditorId = null;
     this._render();
     this._focusContent();
@@ -2022,6 +2136,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _closePetEditor() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._petEditorId = null;
     this._render();
     this._focusContent();
@@ -2035,6 +2150,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _closeFeedProfileEditor() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._feedProfileEditorId = null;
     this._render();
     this._focusContent();
@@ -2048,6 +2164,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _closeCatalogEditor() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
     this._catalogEditor = null;
     this._render();
     this._focusContent();
@@ -2366,7 +2483,7 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelector("[data-action='next-month']")?.addEventListener("click", () => this._shiftMonth(1));
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
     this.shadowRoot.querySelector("[data-action='accounts']")?.addEventListener("click", () => this._openAccounts());
-    this.shadowRoot.querySelector("[data-action='back']")?.addEventListener("click", () => { this._view = "overview"; this._render(); this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true }); });
+    this.shadowRoot.querySelector("[data-action='back']")?.addEventListener("click", () => this._navigateToOverview());
     this.shadowRoot.querySelector("[data-import]")?.addEventListener("change", (event) => this._handleImport(event));
     this.shadowRoot.querySelector("[data-excel-confirm]")?.addEventListener("click", () => this._confirmExcelImport());
     this.shadowRoot.querySelector("[data-excel-discard]")?.addEventListener("click", () => this._discardExcelPreview());
@@ -2467,7 +2584,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   _toolbarTemplate() {
     return `<header class="toolbar">
-      <div class="product-lockup"><h1>Finanzplaner</h1><span class="demo-chip">DEMO</span><p>Gemeinsam. Überblick. Handeln.</p></div>
+      <div class="product-lockup"><h1>Finanzplaner</h1><span class="demo-chip">${this._data.demo === false ? "LIVE" : "DEMO"}</span><p>Gemeinsam. Überblick. Handeln.</p></div>
       <div class="toolbar-actions">
         <div class="month-control" aria-label="Monat auswählen"><button type="button" data-action="previous-month" aria-label="Vorheriger Monat">${icon("chevronLeft", 20)}</button><span class="month-label">${monthLabel(this._month)} ${icon("calendarSmall", 16)}</span><button type="button" data-action="next-month" aria-label="Nächster Monat">${icon("chevronRight", 20)}</button></div>
         <button class="review-pill" type="button" data-action="review">${icon("warning", 17)}<span>Buchungen prüfen</span><span class="count">${escapeHtml(this._data.unresolved_count)}</span></button>
@@ -2481,6 +2598,22 @@ class FinanzplanerPanel extends HTMLElement {
     const variance = Number(data.variance || 0);
     const household = data.household || demoHousehold;
     const last = data.last_unresolved;
+    const areaScale = Math.max(1, ...data.areas.flatMap((area) => [
+      Math.abs(Number(area.actual ?? area.value ?? 0)),
+      Math.abs(Number(area.plan ?? 0)),
+    ]));
+    const areaRows = data.areas.map((area, index) => {
+      const actual = Number(area.actual ?? area.value ?? 0);
+      const plan = Number(area.plan ?? 0);
+      const width = Math.max(4, Math.min(100, Math.max(Math.abs(actual), Math.abs(plan)) / areaScale * 100));
+      const label = `${area.name}: Ist ${formatEuro(actual)} · Plan ${formatEuro(plan)}`;
+      return `<div class="bar-row" title="${escapeHtml(label)}"><span>${escapeHtml(area.name)}</span><span class="bar-track"><span class="bar-fill ${index === 1 ? "bar-fill--cyan" : index === 2 ? "bar-fill--amber" : index === 3 ? "bar-fill--coral" : ""}" style="inline-size:${width}%"></span></span><span class="bar-value"><strong>${formatEuro(actual)}</strong><small>Plan ${formatEuro(plan)}</small></span></div>`;
+    }).join("");
+    const categoryRows = data.categories.map((category) => {
+      const actual = Number(category.actual ?? category.value ?? 0);
+      const plan = Number(category.plan ?? 0);
+      return `<li class="category-item">${icon(category.icon || "overview", 17)}<span>${escapeHtml(category.name)}</span><span class="category-values"><strong>${formatEuro(actual)}</strong><small>Plan ${formatEuro(plan)}</small></span></li>`;
+    }).join("");
     const content = `<main class="main" id="content" tabindex="-1">
       ${this._toolbarTemplate()}
       <div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>
@@ -2499,9 +2632,9 @@ class FinanzplanerPanel extends HTMLElement {
         <aside class="surface review-card" data-reveal style="--reveal-order: 7" aria-labelledby="review-heading"><h3 class="review-heading" id="review-heading"><span class="warning-badge">${icon("warning", 18)}</span>Ungeklärte Buchungen</h3><p class="review-count">${escapeHtml(data.unresolved_count)}</p><p class="review-label">Buchungen in Prüfung</p><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 19)}</button><div class="review-amount"><p class="review-amount-label">Offener Betrag</p><p class="review-amount-value">${formatEuro(data.unresolved_total)}</p><p class="review-amount-note">Die zur Klärung nicht einberechneten Beträge.</p></div>${last ? `<div class="last-review">${icon("file", 19)}<span>Letzte ungeklärte Buchung<br><strong>${formatDate(last.date || last.booking_date)} · ${formatEuro(last.amount)}</strong></span></div>` : ""}</aside>
       </div>
       <div class="bottom-grid">
-        <section class="surface bottom-card" aria-labelledby="household-heading" data-reveal style="--reveal-order: 8"><h3 id="household-heading">Haushaltsübersicht</h3><p class="subline">${monthLabel(this._month)}</p><div class="metric-strip"><div class="mini-metric mini-metric--positive"><span class="mini-metric-icon">${icon("income", 25)}</span><p class="mini-metric-label">Einnahmen</p><p class="mini-metric-value">${formatEuro(household.income)}</p><p class="mini-metric-caption">92 % vom Plan</p></div><div class="mini-metric mini-metric--negative"><span class="mini-metric-icon">${icon("expense", 25)}</span><p class="mini-metric-label">Ausgaben</p><p class="mini-metric-value">${formatEuro(household.expenses)}</p><p class="mini-metric-caption">88 % vom Plan</p></div><div class="mini-metric mini-metric--negative"><span class="mini-metric-icon">${icon("savings", 25)}</span><p class="mini-metric-label">Rücklagen</p><p class="mini-metric-value">${formatEuro(household.savings)}</p><p class="mini-metric-caption">100 % vom Plan</p></div><div class="mini-metric mini-metric--available"><span class="mini-metric-icon">${icon("coins", 25)}</span><p class="mini-metric-label">Verfügbar</p><p class="mini-metric-value">${formatEuro(household.available)}</p><p class="mini-metric-caption">bisheriger Saldo</p></div></div></section>
-        <section class="surface bottom-card" aria-labelledby="areas-heading" data-reveal style="--reveal-order: 9"><h3 id="areas-heading">Bereiche <span class="visually-hidden">Ist gegenüber Plan</span></h3><p class="subline">Ist vs. Plan</p><div class="bar-list">${data.areas.map((area, index) => `<div class="bar-row"><span>${escapeHtml(area.name)}</span><span class="bar-track"><span class="bar-fill ${index === 1 ? "bar-fill--cyan" : index === 2 ? "bar-fill--amber" : index === 3 ? "bar-fill--coral" : ""}" style="inline-size:${Math.max(10, Math.min(100, Math.abs(Number(area.value || 0)) / 1.5))}%"></span></span><span class="bar-value">${formatEuro(area.value)}</span></div>`).join("")}</div></section>
-        <section class="surface bottom-card" aria-labelledby="categories-heading" data-reveal style="--reveal-order: 10"><h3 id="categories-heading">Top Kategorien <span class="visually-hidden">Ausgaben</span></h3><p class="subline">Ausgaben</p><ul class="category-list">${data.categories.map((category) => `<li class="category-item">${icon(category.icon || "overview", 17)}<span>${escapeHtml(category.name)}</span><span>${formatEuro(category.value)}</span></li>`).join("")}</ul></section>
+        <section class="surface bottom-card" aria-labelledby="household-heading" data-reveal style="--reveal-order: 8"><h3 id="household-heading">Haushaltsübersicht</h3><p class="subline">${monthLabel(this._month)}</p><div class="metric-strip"><div class="mini-metric mini-metric--positive"><span class="mini-metric-icon">${icon("income", 25)}</span><p class="mini-metric-label">Einnahmen</p><p class="mini-metric-value">${formatEuro(household.income)}</p><p class="mini-metric-caption">${planShareCaption(household.income, household.income_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--negative"><span class="mini-metric-icon">${icon("expense", 25)}</span><p class="mini-metric-label">Ausgaben</p><p class="mini-metric-value">${formatEuro(household.expenses)}</p><p class="mini-metric-caption">${planShareCaption(household.expenses, household.expenses_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--negative"><span class="mini-metric-icon">${icon("savings", 25)}</span><p class="mini-metric-label">Rücklagen</p><p class="mini-metric-value">${formatEuro(household.savings)}</p><p class="mini-metric-caption">${planShareCaption(household.savings, household.savings_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--available"><span class="mini-metric-icon">${icon("coins", 25)}</span><p class="mini-metric-label">Verfügbar</p><p class="mini-metric-value">${formatEuro(household.available)}</p><p class="mini-metric-caption">bisheriger Saldo</p></div></div></section>
+        <section class="surface bottom-card" aria-labelledby="areas-heading" data-reveal style="--reveal-order: 9"><h3 id="areas-heading">Bereiche <span class="visually-hidden">Ist gegenüber Plan</span></h3><p class="subline">Ist vs. Plan</p><div class="bar-list">${areaRows || `<p class="empty-state">Für diesen Monat sind noch keine Bereichswerte vorhanden.</p>`}</div></section>
+        <section class="surface bottom-card" aria-labelledby="categories-heading" data-reveal style="--reveal-order: 10"><h3 id="categories-heading">Top Kategorien <span class="visually-hidden">Ausgaben</span></h3><p class="subline">Ist vs. Plan</p><ul class="category-list">${categoryRows || `<li class="empty-state">Für diesen Monat sind noch keine Kategorien vorhanden.</li>`}</ul></section>
       </div>
       <footer class="statusbar"><span>Datenstand: <strong>${new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date())}</strong> · ${data.demo ? "Demo-Daten" : "lokale Daten"}</span><span>Fin Zuhause · Viele Bereiche · Fin Plan</span></footer>
     </main>`;

@@ -1026,6 +1026,296 @@ def overview_values(data: dict[str, object], month: str) -> dict[str, float | in
     }
 
 
+def _overview_catalog_labels(data: dict[str, object], kind: str) -> dict[str, str]:
+    """Return stable catalog IDs and their current labels for an overview."""
+
+    catalogs = data.get("catalogs")
+    entries = catalogs.get(kind, []) if isinstance(catalogs, dict) else []
+    if not isinstance(entries, list):
+        return {}
+    return {
+        str(entry.get("id")): str(entry.get("label")).strip()
+        for entry in entries
+        if isinstance(entry, dict)
+        and entry.get("id")
+        and isinstance(entry.get("label"), str)
+        and entry.get("label", "").strip()
+    }
+
+
+def _overview_dimension_label(
+    value: object,
+    identifier: object,
+    labels: dict[str, str],
+) -> str:
+    """Resolve a current catalog label while keeping legacy name snapshots."""
+
+    if identifier not in (None, "") and str(identifier) in labels:
+        return labels[str(identifier)]
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return "Nicht zugeordnet"
+
+
+def _overview_booking_date(booking: dict[str, object]) -> date | None:
+    value = booking.get("booking_date")
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _overview_booking_amount(booking: dict[str, object]) -> Decimal:
+    try:
+        return _money(booking.get("amount", 0))
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal("0.00")
+
+
+def _overview_breakdown(
+    groups: dict[str, dict[str, Decimal]],
+    *,
+    limit: int,
+) -> list[dict[str, object]]:
+    """Serialize the largest Plan/Ist groups for the overview cards."""
+
+    entries = []
+    for name, values in groups.items():
+        plan = float(_money(values["plan"]))
+        actual = float(_money(values["actual"]))
+        if plan == 0 and actual == 0:
+            continue
+        entries.append(
+            {
+                "name": name,
+                "value": actual,
+                "plan": plan,
+                "actual": actual,
+                "variance": float(_money(actual - plan)),
+            }
+        )
+    entries.sort(key=lambda entry: (-max(abs(entry["actual"]), abs(entry["plan"])), entry["name"].casefold()))
+    return entries[:limit]
+
+
+def _overview_plan_payment_date(
+    item: dict[str, object],
+    month_start: date,
+    month_end: date,
+) -> date:
+    """Choose a deterministic day for a concrete plan event in a month."""
+
+    due_date = _stored_plan_date(item.get("due_date"))
+    if due_date and month_start <= due_date <= month_end:
+        return due_date
+    start_date = _stored_plan_date(item.get("start_date"))
+    if start_date and month_start <= start_date <= month_end:
+        return start_date
+    due_day = item.get("due_day")
+    if isinstance(due_day, int) and not isinstance(due_day, bool):
+        return month_start + timedelta(days=min(due_day, month_end.day) - 1)
+    return month_start
+
+
+def _overview_breakdown_groups(
+    data: dict[str, object],
+    month: str,
+) -> tuple[
+    dict[str, dict[str, Decimal]],
+    dict[str, dict[str, Decimal]],
+    dict[str, Decimal],
+    dict[str, Decimal],
+]:
+    """Aggregate plan items and bookings by area/category and household type."""
+
+    area_labels = _overview_catalog_labels(data, "areas")
+    category_labels = _overview_catalog_labels(data, "categories")
+    area_groups: dict[str, dict[str, Decimal]] = {}
+    category_groups: dict[str, dict[str, Decimal]] = {}
+    planned_by_direction = {
+        "income": Decimal("0.00"),
+        "expense": Decimal("0.00"),
+        "saving": Decimal("0.00"),
+    }
+    actual_by_direction = {
+        "income": Decimal("0.00"),
+        "expense": Decimal("0.00"),
+        "saving": Decimal("0.00"),
+    }
+
+    plan_items = data.get("plan_items", [])
+    if isinstance(plan_items, list):
+        for item in plan_items:
+            if not isinstance(item, dict) or not item.get("active", True):
+                continue
+            monthly, _ = plan_item_month_values(item, month)
+            amount = _money(monthly)
+            direction = item.get("direction")
+            if direction in planned_by_direction:
+                planned_by_direction[direction] += abs(amount)
+            if amount == 0:
+                continue
+            area = _overview_dimension_label(item.get("area"), item.get("area_id"), area_labels)
+            category = _overview_dimension_label(
+                item.get("category"), item.get("category_id"), category_labels
+            )
+            area_groups.setdefault(area, {"plan": Decimal("0.00"), "actual": Decimal("0.00")})["plan"] += amount
+            category_groups.setdefault(category, {"plan": Decimal("0.00"), "actual": Decimal("0.00")})["plan"] += amount
+
+    month_start, month_end = _month_window(month)
+    bookings = data.get("bookings", [])
+    if isinstance(bookings, list):
+        for booking in bookings:
+            if not isinstance(booking, dict):
+                continue
+            booking_date = _overview_booking_date(booking)
+            if booking_date is None or not month_start <= booking_date <= month_end:
+                continue
+            amount = _overview_booking_amount(booking)
+            if amount > 0:
+                actual_by_direction["income"] += amount
+            elif amount < 0:
+                actual_by_direction["expense"] += amount
+            booking_direction = booking.get("direction")
+            if booking_direction == "saving":
+                actual_by_direction["saving"] += amount
+
+            allocations = booking.get("allocations")
+            clean_allocations = [
+                allocation for allocation in allocations
+                if isinstance(allocation, dict)
+            ] if isinstance(allocations, list) else []
+            allocated = Decimal("0.00")
+            for allocation in clean_allocations:
+                try:
+                    share = abs(_money(allocation.get("amount", 0)))
+                except (InvalidOperation, ValueError, TypeError):
+                    continue
+                if share == 0:
+                    continue
+                allocated += share
+                signed_share = share if amount >= 0 else -share
+                area = _overview_dimension_label(
+                    allocation.get("area"), allocation.get("area_id"), area_labels
+                )
+                category = _overview_dimension_label(
+                    allocation.get("category"),
+                    allocation.get("category_id"),
+                    category_labels,
+                )
+                area_groups.setdefault(area, {"plan": Decimal("0.00"), "actual": Decimal("0.00")})["actual"] += signed_share
+                category_groups.setdefault(category, {"plan": Decimal("0.00"), "actual": Decimal("0.00")})["actual"] += signed_share
+
+            remainder = abs(amount) - allocated
+            if not clean_allocations or remainder > 0:
+                remainder = max(Decimal("0.00"), remainder)
+                signed_remainder = remainder if amount >= 0 else -remainder
+                area_groups.setdefault("Nicht zugeordnet", {"plan": Decimal("0.00"), "actual": Decimal("0.00")})["actual"] += signed_remainder
+                category_groups.setdefault("Nicht zugeordnet", {"plan": Decimal("0.00"), "actual": Decimal("0.00")})["actual"] += signed_remainder
+
+    return area_groups, category_groups, planned_by_direction, actual_by_direction
+
+
+def overview_details(
+    data: dict[str, object],
+    month: str,
+    *,
+    today: date | None = None,
+) -> dict[str, object]:
+    """Calculate the detailed live dashboard contract for one month."""
+
+    month_start, month_end = _month_window(month)
+    area_groups, category_groups, planned, actual = _overview_breakdown_groups(data, month)
+    plan_total = sum(
+        (value for values in area_groups.values() for value in [values["plan"]]),
+        Decimal("0.00"),
+    )
+    actual_total = sum(
+        (value for values in area_groups.values() for value in [values["actual"]]),
+        Decimal("0.00"),
+    )
+
+    day_count = (month_end - month_start).days + 1
+    days = [month_start + timedelta(days=index) for index in range(day_count)]
+    actual_by_day = {current: Decimal("0.00") for current in days}
+    scheduled_by_day = {current: Decimal("0.00") for current in days}
+    plan_items = data.get("plan_items", [])
+    if isinstance(plan_items, list):
+        for item in plan_items:
+            if not isinstance(item, dict) or not item.get("active", True):
+                continue
+            _, scheduled = plan_item_month_values(item, month)
+            if scheduled:
+                event_date = _overview_plan_payment_date(item, month_start, month_end)
+                scheduled_by_day[event_date] += _money(scheduled)
+
+    feed_profiles = data.get("feed_profiles", [])
+    if isinstance(feed_profiles, list):
+        for profile in feed_profiles:
+            if not isinstance(profile, dict):
+                continue
+            forecast = feed_profile_forecast(profile, today=today)
+            purchase_date = _stored_plan_date(forecast.get("next_purchase_date"))
+            if purchase_date and month_start <= purchase_date <= month_end:
+                scheduled_by_day[purchase_date] += -_money(profile.get("expected_cost", 0))
+
+    bookings = data.get("bookings", [])
+    if isinstance(bookings, list):
+        for booking in bookings:
+            if not isinstance(booking, dict):
+                continue
+            booking_date = _overview_booking_date(booking)
+            if booking_date in actual_by_day:
+                actual_by_day[booking_date] += _overview_booking_amount(booking)
+
+    planned_running = Decimal("0.00")
+    forecast_running = Decimal("0.00")
+    actual_running = Decimal("0.00")
+    planned_values: list[float] = []
+    forecast_values: list[float] = []
+    actual_values: list[float] = []
+    for current in days:
+        planned_running += plan_total / Decimal(day_count)
+        actual_running += actual_by_day[current]
+        forecast_running += actual_by_day[current] + scheduled_by_day[current]
+        planned_values.append(float(_money(planned_running)))
+        forecast_values.append(float(_money(forecast_running)))
+        actual_values.append(float(_money(actual_running)))
+
+    reference_date = today or date.today()
+    today_index = 0 if reference_date < month_start else day_count - 1
+    if month_start <= reference_date <= month_end:
+        today_index = reference_date.day - 1
+    all_values = planned_values + forecast_values + actual_values + [0.0]
+    return {
+        "household": {
+            "income": float(_money(actual["income"])),
+            "expenses": float(_money(actual["expense"])),
+            "savings": float(_money(actual["saving"])),
+            "available": float(_money(actual_total)),
+            "income_plan": float(_money(planned["income"])),
+            "expenses_plan": float(_money(-planned["expense"])),
+            "savings_plan": float(_money(-planned["saving"])),
+            "available_plan": float(_money(plan_total)),
+        },
+        "areas": _overview_breakdown(area_groups, limit=6),
+        "categories": _overview_breakdown(category_groups, limit=6),
+        "trend": {
+            "planned": planned_values,
+            "forecast": forecast_values,
+            "actual": actual_values,
+            "min_value": min(all_values),
+            "max_value": max(all_values),
+            "today_index": today_index,
+            "today_label": reference_date.strftime("%d. %b.") if month_start <= reference_date <= month_end else None,
+        },
+    }
+
+
 def _parse_amount(value: str) -> float:
     normalized = value.strip().replace(" ", "")
     if "," in normalized:

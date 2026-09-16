@@ -172,7 +172,10 @@ class BankImportViewTests(unittest.TestCase):
             self.coordinator.refresh_count += 1
 
         self.coordinator.async_refresh_data = async_refresh_data
-        hass = types.SimpleNamespace(data={DOMAIN: {"entry": self.coordinator}})
+        hass = types.SimpleNamespace(
+            data={DOMAIN: {"entry": self.coordinator}},
+            states=types.SimpleNamespace(async_all=lambda: []),
+        )
         self.app = {"hass": hass}
 
     def _request(self, filename, raw):
@@ -188,6 +191,16 @@ class BankImportViewTests(unittest.TestCase):
 
     def _import(self, filename, raw):
         return asyncio.run(self.http.ImportView().post(self._request(filename, raw)))
+
+    def _json_request(self, payload, *, month=None):
+        class Request:
+            app = self.app
+            query = {"month": month} if month else {}
+
+            async def json(self):
+                return payload
+
+        return Request()
 
     def test_response_serializer_redacts_booking_accounts_without_mutating_store(self):
         booking = {
@@ -301,6 +314,52 @@ class BankImportViewTests(unittest.TestCase):
 
         self.assertEqual(self.coordinator.store.data, before)
         self.assertEqual(self.coordinator.store.save_count, 0)
+
+    def test_import_assign_and_overview_form_one_live_workflow(self):
+        raw = """<?xml version="1.0"?><Document><BkToCstmrStmt><Stmt>
+          <Acct><Id><IBAN>AT12 3456 7890 1234 5678</IBAN></Id></Acct>
+          <Ntry><Amt Ccy="EUR">12.50</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+            <BookgDt><Dt>2026-09-04</Dt></BookgDt><NtryDtls><TxDtls>
+            <Refs><EndToEndId>FUTTER-42</EndToEndId></Refs>
+            <RmtInf><Ustrd>Hundefutter</Ustrd></RmtInf>
+          </TxDtls></NtryDtls></Ntry></Stmt></BkToCstmrStmt></Document>"""
+
+        imported = self._import("statement.xml", raw)
+        booking_id = self.coordinator.store.data["bookings"][0]["id"]
+
+        async def async_refresh():
+            self.coordinator.refresh_count += 1
+
+        self.coordinator.async_refresh = async_refresh
+        assigned = asyncio.run(
+            self.http.BookingAllocationsView().post(
+                self._json_request(
+                    {
+                        "allocations": [
+                            {
+                                "target": "household",
+                                "amount": 12.50,
+                                "area": "Haustiere",
+                                "category": "Futter",
+                            }
+                        ]
+                    }
+                ),
+                booking_id,
+            )
+        )
+        overview = asyncio.run(
+            self.http.OverviewView().get(self._json_request({}, month="2026-09"))
+        )
+
+        self.assertEqual(imported["accepted"], 1)
+        self.assertEqual(assigned["booking"]["status"], "resolved")
+        self.assertFalse(overview["demo"])
+        self.assertEqual(overview["actual"], -12.50)
+        self.assertEqual(overview["categories"][0]["name"], "Futter")
+        self.assertEqual(overview["categories"][0]["actual"], -12.50)
+        self.assertEqual(overview["areas"][0]["name"], "Haustiere")
+        self.assertEqual(overview["trend"]["actual"][-1], -12.50)
 
 
 if __name__ == "__main__":

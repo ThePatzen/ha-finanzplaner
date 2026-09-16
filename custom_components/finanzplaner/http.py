@@ -21,6 +21,7 @@ from .core import (
     ensure_account,
     feed_profile_forecast,
     normalize_account_reference,
+    overview_details,
     overview_values,
     parse_allocation_payload,
     parse_camt053,
@@ -620,9 +621,7 @@ def _overview(data: dict[str, Any], month: str | None) -> dict[str, Any]:
         "demo": False,
         "month": month_value,
         **values,
-        "areas": [],
-        "categories": [],
-        "trend": {"planned": [], "forecast": [], "actual": [], "today_index": 0},
+        **overview_details(data, month_value),
         "last_unresolved": unresolved[-1] if unresolved else None,
     }
 
