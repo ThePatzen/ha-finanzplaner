@@ -65,6 +65,91 @@ test("summarizes selected excel suggestions", () => {
   );
 });
 
+test("suggestionDraft returns the server allocation rows", () => {
+  const booking = {
+    status: "suggested",
+    suggestion: {
+      rule_id: "rule-1",
+      allocations: [{ target: "household", amount: 42.37 }],
+    },
+  };
+
+  assert.deepEqual(utils.suggestionDraft(booking), [
+    { target: "household", amount: 42.37 },
+  ]);
+});
+
+test("suggestionDraft returns an empty list for unresolved bookings", () => {
+  assert.deepEqual(utils.suggestionDraft({ status: "unresolved" }), []);
+});
+
+test("suggestionDraft copies server allocation rows", () => {
+  const allocation = { target: "household", amount: 42.37 };
+  const booking = {
+    status: "suggested",
+    suggestion: { allocations: [allocation] },
+  };
+
+  const draft = utils.suggestionDraft(booking);
+  draft[0].amount = 10;
+
+  assert.equal(allocation.amount, 42.37);
+});
+
+test("ruleStatusLabel explains conflict status", () => {
+  assert.equal(utils.ruleStatusLabel("conflict"), "Regelkonflikt");
+  assert.equal(utils.ruleStatusLabel("other"), "Prüfung erforderlich");
+});
+
+test("rulePayloadFromForm trims text and keeps null filters", () => {
+  assert.deepEqual(utils.rulePayloadFromForm({
+    label: "  Supermarkt  ",
+    active: true,
+    priority: "20",
+    account_id: "account-giro",
+    counterparty: "  Supermarkt AG ",
+    purpose_contains: "  ",
+    allocations: [{ target: "household", share_percent: 100 }],
+  }), {
+    label: "Supermarkt",
+    active: true,
+    priority: 20,
+    account_id: "account-giro",
+    counterparty: "Supermarkt AG",
+    purpose_contains: null,
+    allocations: [{ target: "household", share_percent: 100 }],
+  });
+});
+
+test("rulePayloadFromForm copies allocation rows", () => {
+  const allocation = { target: "household", share_percent: 100 };
+  const payload = utils.rulePayloadFromForm({
+    label: "Supermarkt",
+    active: true,
+    priority: 20,
+    account_id: null,
+    counterparty: "Supermarkt AG",
+    purpose_contains: "Einkauf",
+    allocations: [allocation],
+  });
+
+  payload.allocations[0].share_percent = 50;
+
+  assert.equal(allocation.share_percent, 100);
+});
+
+test("conflictRuleIds returns conflict ids and copies the source list", () => {
+  const conflicts = ["rule-1", "rule-2"];
+  const booking = { status: "conflict", conflicts };
+
+  const ids = utils.conflictRuleIds(booking);
+  ids.pop();
+
+  assert.deepEqual(ids, ["rule-1"]);
+  assert.deepEqual(conflicts, ["rule-1", "rule-2"]);
+  assert.deepEqual(utils.conflictRuleIds({ status: "suggested", conflicts }), []);
+});
+
 test("distributes remainder cents one-by-one across the first rows", () => {
   assert.deepEqual(
     utils.equalAllocationDraft(100, ["person.alex", "person.sam", "household"]),

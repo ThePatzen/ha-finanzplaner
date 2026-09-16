@@ -40,6 +40,38 @@ export function selectedSuggestionSummary(suggestions = []) {
   );
 }
 
+export function suggestionDraft(booking) {
+  return booking?.status === "suggested"
+    ? (booking.suggestion?.allocations || []).map((row) => ({ ...row }))
+    : [];
+}
+
+export function ruleStatusLabel(status) {
+  return {
+    unresolved: "Manuelle Zuordnung erforderlich",
+    suggested: "Regelvorschlag",
+    conflict: "Regelkonflikt",
+  }[status] || "Prüfung erforderlich";
+}
+
+export function rulePayloadFromForm(form) {
+  return {
+    label: form.label.trim(),
+    active: Boolean(form.active),
+    priority: Number(form.priority),
+    account_id: form.account_id || null,
+    counterparty: form.counterparty.trim(),
+    purpose_contains: form.purpose_contains.trim() || null,
+    allocations: form.allocations.map((row) => ({ ...row })),
+  };
+}
+
+export function conflictRuleIds(booking) {
+  return booking?.status === "conflict"
+    ? (booking.conflicts || []).map((ruleId) => ruleId)
+    : [];
+}
+
 export async function readApiResponse(response) {
   const contentType = response.headers?.get?.("Content-Type") || "";
   const mediaType = contentType.split(";", 1)[0].trim().toLowerCase();
