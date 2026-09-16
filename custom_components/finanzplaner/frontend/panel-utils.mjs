@@ -47,11 +47,12 @@ export function suggestionDraft(booking) {
 }
 
 export function ruleStatusLabel(status) {
-  return {
+  const labels = {
     unresolved: "Manuelle Zuordnung erforderlich",
     suggested: "Regelvorschlag",
     conflict: "Regelkonflikt",
-  }[status] || "Prüfung erforderlich";
+  };
+  return Object.hasOwn(labels, status) ? labels[status] : "Prüfung erforderlich";
 }
 
 export function rulePayloadFromForm(form) {

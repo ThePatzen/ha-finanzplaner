@@ -101,6 +101,12 @@ test("ruleStatusLabel explains conflict status", () => {
   assert.equal(utils.ruleStatusLabel("other"), "Prüfung erforderlich");
 });
 
+test("ruleStatusLabel falls back for prototype-key statuses", () => {
+  for (const status of ["toString", "__proto__"]) {
+    assert.equal(utils.ruleStatusLabel(status), "Prüfung erforderlich");
+  }
+});
+
 test("rulePayloadFromForm trims text and keeps null filters", () => {
   assert.deepEqual(utils.rulePayloadFromForm({
     label: "  Supermarkt  ",
