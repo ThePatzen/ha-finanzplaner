@@ -42,6 +42,20 @@ CATALOG_VALUE_FIELDS = {
     "areas": "area",
     "projects": "project",
 }
+RULE_FIELDS = frozenset(
+    {
+        "label",
+        "active",
+        "priority",
+        "account_id",
+        "counterparty",
+        "purpose_contains",
+        "allocations",
+    }
+)
+RULE_ALLOCATION_FIELDS = frozenset(
+    {"target", "share_percent", "area_id", "category_id", "project_id", "pet_id"}
+)
 
 
 def catalog_id_for_label(kind: str, label: str) -> str:
@@ -679,6 +693,318 @@ def split_amount(total: float, targets: list[str]) -> list[Allocation]:
         )
         for index, target in enumerate(clean_targets)
     ]
+
+
+def _normalized_match_text(value: object, label: str, *, required: bool) -> str | None:
+    if value is None:
+        if required:
+            raise ValueError(f"{label} muss als Text angegeben werden.")
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{label} muss als Text angegeben werden.")
+    normalized = " ".join(value.split())
+    if not normalized:
+        if required:
+            raise ValueError(f"{label} darf nicht leer sein.")
+        return None
+    if len(normalized) > 120:
+        raise ValueError(f"{label} darf höchstens 120 Zeichen enthalten.")
+    return normalized
+
+
+def _active_reference(
+    reference_id: str,
+    references: dict[str, dict[str, object]],
+    label: str,
+) -> None:
+    reference = references.get(reference_id)
+    if reference is None or reference.get("active") is False:
+        raise ValueError(f"{label} verweist nicht auf einen aktiven Eintrag.")
+
+
+def _active_catalog_references(
+    catalogs: dict[str, list[dict[str, object]]], kind: str,
+) -> dict[str, dict[str, object]]:
+    entries = catalogs.get(kind, [])
+    if not isinstance(entries, list):
+        return {}
+    return {
+        entry["id"]: entry
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+    }
+
+
+def _rule_share_percent(value: object) -> Decimal:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise ValueError("Der prozentuale Anteil muss als Zahl angegeben werden.")
+    try:
+        share = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise ValueError("Der prozentuale Anteil muss als Zahl angegeben werden.") from exc
+    if not share.is_finite() or share <= 0:
+        raise ValueError("Der prozentuale Anteil muss positiv sein.")
+    return share
+
+
+def validate_rule_payload(
+    payload: object,
+    *,
+    valid_targets: set[str],
+    accounts: dict[str, dict[str, object]],
+    catalogs: dict[str, list[dict[str, object]]],
+    pets: dict[str, dict[str, object]],
+    partial: bool = False,
+) -> dict[str, object]:
+    """Validate one persisted booking-rule payload and normalize its fields."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("Die Regeldaten müssen ein Objekt sein.")
+    unknown = set(payload) - RULE_FIELDS
+    if unknown:
+        raise ValueError("Die Regeldaten enthalten ein unbekanntes Feld.")
+
+    normalized: dict[str, object] = {}
+    if not partial or "label" in payload:
+        normalized["label"] = _normalized_match_text(
+            payload.get("label"), "Die Regelbezeichnung", required=True
+        )
+    if not partial or "active" in payload:
+        active = payload.get("active", True)
+        if not isinstance(active, bool):
+            raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
+        normalized["active"] = active
+    if not partial or "priority" in payload:
+        priority = payload.get("priority", 100)
+        if isinstance(priority, bool) or not isinstance(priority, int):
+            raise ValueError("Die Regelpriorität muss eine ganze Zahl sein.")
+        normalized["priority"] = priority
+    if not partial or "account_id" in payload:
+        account_id = _normalized_match_text(
+            payload.get("account_id"), "Die Konto-ID", required=False
+        )
+        if account_id is not None:
+            _active_reference(account_id, accounts, "Die Konto-ID")
+        normalized["account_id"] = account_id
+    if not partial or "counterparty" in payload:
+        normalized["counterparty"] = _normalized_match_text(
+            payload.get("counterparty"), "Der Zahlungsempfänger", required=True
+        )
+    if not partial or "purpose_contains" in payload:
+        normalized["purpose_contains"] = _normalized_match_text(
+            payload.get("purpose_contains"), "Der Verwendungszweckfilter", required=False
+        )
+    if not partial or "allocations" in payload:
+        allocations = payload.get("allocations")
+        if not isinstance(allocations, list) or not allocations:
+            raise ValueError("Die Regelaufteilung muss eine nicht leere Liste sein.")
+        seen_targets: set[str] = set()
+        total_share = Decimal("0")
+        normalized_allocations: list[dict[str, object]] = []
+        catalog_references = {
+            kind: _active_catalog_references(catalogs, kind) for kind in CATALOG_KINDS
+        }
+        for allocation in allocations:
+            if not isinstance(allocation, dict):
+                raise ValueError("Jeder Regelanteil muss ein Objekt sein.")
+            unknown_allocation = set(allocation) - RULE_ALLOCATION_FIELDS
+            if unknown_allocation:
+                raise ValueError("Ein Regelanteil enthält ein unbekanntes Feld.")
+            target = _normalized_match_text(
+                allocation.get("target"), "Das Aufteilungsziel", required=True
+            )
+            if target not in valid_targets:
+                raise ValueError("Eine Zuordnung verweist nicht auf eine bekannte Person.")
+            if target in seen_targets:
+                raise ValueError("Jedes Zuordnungsziel darf nur einmal vorkommen.")
+            seen_targets.add(target)
+            share_percent = _rule_share_percent(allocation.get("share_percent"))
+            total_share += share_percent
+
+            normalized_allocation: dict[str, object] = {
+                "target": target,
+                "share_percent": float(share_percent),
+            }
+            for field, kind, label in (
+                ("area_id", "areas", "Die Bereichs-ID"),
+                ("category_id", "categories", "Die Kategorie-ID"),
+                ("project_id", "projects", "Die Projekt-ID"),
+            ):
+                reference_id = _normalized_match_text(
+                    allocation.get(field), label, required=False
+                )
+                if reference_id is not None:
+                    _active_reference(reference_id, catalog_references[kind], label)
+                normalized_allocation[field] = reference_id
+            pet_id = _normalized_match_text(
+                allocation.get("pet_id"), "Die Tier-ID", required=False
+            )
+            if pet_id is not None:
+                _active_reference(pet_id, pets, "Die Tier-ID")
+            normalized_allocation["pet_id"] = pet_id
+            normalized_allocations.append(normalized_allocation)
+        if total_share != Decimal("100"):
+            raise ValueError("Die Regelanteile müssen zusammen genau 100 Prozent ergeben.")
+        normalized["allocations"] = normalized_allocations
+    return normalized
+
+
+def _rule_matches_booking(rule: dict[str, object], booking: dict[str, object]) -> bool:
+    account_id = rule.get("account_id")
+    if account_id not in (None, "") and account_id != booking.get("account_id"):
+        return False
+    counterparty = _normalized_match_text(
+        booking.get("counterparty"), "Der Zahlungsempfänger", required=False
+    )
+    if counterparty is None:
+        return False
+    rule_counterparty = rule.get("counterparty")
+    if not isinstance(rule_counterparty, str) or rule_counterparty.casefold() != counterparty.casefold():
+        return False
+    purpose_contains = rule.get("purpose_contains")
+    if purpose_contains in (None, ""):
+        return True
+    purpose = _normalized_match_text(
+        booking.get("purpose"), "Der Verwendungszweck", required=False
+    )
+    return isinstance(purpose_contains, str) and purpose is not None and (
+        purpose_contains.casefold() in purpose.casefold()
+    )
+
+
+def _materialize_rule_allocations(
+    amount: object, allocations: list[dict[str, object]]
+) -> list[dict[str, object]]:
+    try:
+        total = abs(_money(amount))
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValueError("Der Buchungsbetrag ist ungültig.") from exc
+    materialized: list[dict[str, object]] = []
+    assigned = Decimal("0.00")
+    for allocation in allocations:
+        share_amount = (total * Decimal(str(allocation["share_percent"])) / Decimal("100")).quantize(
+            MONEY_QUANT, rounding=ROUND_HALF_UP
+        )
+        assigned += share_amount
+        materialized.append({**allocation, "amount": float(share_amount)})
+    if materialized:
+        materialized[0]["amount"] = float(_money(materialized[0]["amount"]) + total - assigned)
+    return materialized
+
+
+def rule_suggestion(
+    booking: dict[str, object],
+    rules: list[dict[str, object]],
+    *,
+    accounts: dict[str, dict[str, object]],
+    valid_targets: set[str],
+    catalogs: dict[str, list[dict[str, object]]],
+    pets: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    """Project the one unambiguous active rule suggestion for a booking."""
+
+    unresolved = {"status": "unresolved", "suggestion": None, "conflicts": []}
+    if not isinstance(booking, dict) or not isinstance(rules, list):
+        return unresolved
+    try:
+        if abs(_money(booking.get("amount", 0))) <= 0:
+            return unresolved
+    except (InvalidOperation, ValueError, TypeError):
+        return unresolved
+    matches: list[tuple[dict[str, object], dict[str, object]]] = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("active") is not True:
+            continue
+        try:
+            normalized = validate_rule_payload(
+                {field: rule.get(field) for field in RULE_FIELDS},
+                valid_targets=valid_targets,
+                accounts=accounts,
+                catalogs=catalogs,
+                pets=pets,
+            )
+        except ValueError:
+            continue
+        if _rule_matches_booking(normalized, booking):
+            matches.append((rule, normalized))
+    if not matches:
+        return unresolved
+    matches.sort(key=lambda match: (-int(match[1]["priority"]), str(match[0].get("id", ""))))
+    highest_priority = matches[0][1]["priority"]
+    highest_matches = [match for match in matches if match[1]["priority"] == highest_priority]
+    if len(highest_matches) > 1:
+        return {
+            "status": "conflict",
+            "suggestion": None,
+            "conflicts": [str(match[0].get("id", "")) for match in highest_matches],
+        }
+    rule, normalized = highest_matches[0]
+    return {
+        "status": "suggested",
+        "suggestion": {
+            "rule_id": str(rule.get("id", "")),
+            "rule_label": normalized["label"],
+            "reason": "Zahlungsempfänger und Konto stimmen mit der Regel überein.",
+            "allocations": _materialize_rule_allocations(
+                booking.get("amount"), normalized["allocations"]
+            ),
+        },
+        "conflicts": [],
+    }
+
+
+def rule_payload_from_booking(booking: dict[str, object]) -> dict[str, object]:
+    """Create a reusable rule template from confirmed booking allocations."""
+
+    if not isinstance(booking, dict):
+        raise ValueError("Die Buchungsdaten müssen ein Objekt sein.")
+    allocations = booking.get("allocations")
+    if not isinstance(allocations, list) or not allocations:
+        raise ValueError("Die Buchung benötigt bestätigte Aufteilungen.")
+    total = abs(_money(booking.get("amount", sum(
+        _money(item.get("amount", 0)) for item in allocations if isinstance(item, dict)
+    ))))
+    if total <= 0:
+        raise ValueError("Die Buchung benötigt einen positiven Betrag.")
+    template_allocations: list[dict[str, object]] = []
+    assigned = Decimal("0")
+    for allocation in allocations:
+        if not isinstance(allocation, dict):
+            raise ValueError("Jeder Buchungsanteil muss ein Objekt sein.")
+        amount = _money(allocation.get("amount", 0))
+        if amount <= 0:
+            raise ValueError("Jeder Buchungsanteil benötigt einen positiven Betrag.")
+        share = (amount / total * Decimal("100")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        assigned += share
+        template_allocations.append(
+            {
+                "target": allocation.get("target"),
+                "share_percent": float(share),
+                "area_id": allocation.get("area_id"),
+                "category_id": allocation.get("category_id"),
+                "project_id": allocation.get("project_id"),
+                "pet_id": allocation.get("pet_id"),
+            }
+        )
+    template_allocations[0]["share_percent"] = float(
+        Decimal(str(template_allocations[0]["share_percent"])) + Decimal("100") - assigned
+    )
+    counterparty = _normalized_match_text(
+        booking.get("counterparty"), "Der Zahlungsempfänger", required=True
+    )
+    return {
+        "label": counterparty,
+        "active": True,
+        "priority": 100,
+        "account_id": _normalized_match_text(
+            booking.get("account_id"), "Die Konto-ID", required=False
+        ),
+        "counterparty": counterparty,
+        "purpose_contains": None,
+        "allocations": template_allocations,
+    }
 
 
 def month_snapshot(
