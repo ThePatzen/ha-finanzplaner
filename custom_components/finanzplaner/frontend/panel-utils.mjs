@@ -55,6 +55,10 @@ export function ruleStatusLabel(status) {
   return Object.hasOwn(labels, status) ? labels[status] : "Prüfung erforderlich";
 }
 
+export function acceptSuggestionDraft(booking) {
+  return { bookingId: booking.id, allocations: suggestionDraft(booking) };
+}
+
 export function rulePayloadFromForm(form) {
   return {
     label: form.label.trim(),

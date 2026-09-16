@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 
 const panelSource = await readFile(new URL("./panel.js", import.meta.url), "utf8");
 
@@ -456,6 +457,202 @@ test("provides overview pages for every prepared navigation section", () => {
   assert.match(panelSource, /Als Nächstes/);
   assert.match(panelSource, /Personen im Haushalt/);
   assert.doesNotMatch(panelSource, /für die nächste Ausbaustufe vorbereitet/);
+});
+
+test("acceptSuggestionDraft identifies the booking and copies allocations", () => {
+  const booking = {
+    id: "booking-1",
+    status: "suggested",
+    suggestion: { allocations: [{ target: "household", amount: 42.37 }] },
+  };
+  const result = utils.acceptSuggestionDraft(booking);
+  assert.deepEqual(result, {
+    bookingId: "booking-1",
+    allocations: [{ target: "household", amount: 42.37 }],
+  });
+  result.allocations[0].amount = 10;
+  assert.equal(booking.suggestion.allocations[0].amount, 42.37);
+});
+
+// Exercise panel behavior without claiming layout or browser rendering coverage.
+function ruleTestPanel() {
+  let Panel;
+  const root = { querySelector: () => null, querySelectorAll: () => [] };
+  runInNewContext(panelSource
+    .replace(/^import \{([^}]+)\} from "\.\/panel-utils.mjs";/, "const {$1} = utils;")
+    .replaceAll("import.meta.url", JSON.stringify(new URL("./panel.js", import.meta.url).href)), {
+    utils, URL, Intl, console,
+    HTMLElement: class { attachShadow() { this.shadowRoot = root; } },
+    customElements: { define: (_name, value) => { Panel = value; } },
+    window: { confirm: () => true, alert: () => {}, location: { href: "https://ha.example/finanzplaner" } },
+  });
+  const panel = new Panel();
+  panel._render = () => {};
+  return panel;
+}
+
+function validRuleDraft() {
+  return {
+    label: "Lebensmittel", active: true, priority: "100", account_id: "",
+    counterparty: "Laden", purpose_contains: "",
+    allocations: [{ target: "household", share_percent: "100", area_id: "", category_id: "", project_id: "", pet_id: "" }],
+  };
+}
+
+test("accepting a suggestion changes only its draft and permits explicit confirmation of identical rows", () => {
+  const panel = ruleTestPanel();
+  const booking = { id: "b1", status: "suggested", suggestion: { allocations: [{ target: "household", amount: 42.37 }] } };
+  panel._bookings = [booking];
+  panel._allocationOriginalDrafts.set("b1", [{ target: "household", amount: 42.37 }]);
+  panel._hass = { fetchWithAuth: () => assert.fail("Accepting must not send a request") };
+  panel._acceptSuggestion("b1");
+  assert.deepEqual(panel._allocationDrafts.get("b1"), [{ target: "household", amount: 42.37 }]);
+  assert.equal(panel._acceptedSuggestions.has("b1"), true);
+  panel._allocationDrafts.get("b1")[0].amount = 10;
+  assert.equal(booking.suggestion.allocations[0].amount, 42.37);
+  assert.equal(booking.status, "suggested");
+});
+
+test("rule validation rejects bad shares, duplicate targets and unavailable references", () => {
+  const panel = ruleTestPanel();
+  const draft = validRuleDraft();
+  assert.deepEqual(Object.keys(panel._ruleValidationErrors(draft)), []);
+  draft.allocations[0].share_percent = "99.99";
+  assert.ok(panel._ruleValidationErrors(draft).allocations);
+  draft.allocations = [
+    { target: "household", share_percent: "50", category_id: "archived" },
+    { target: "household", share_percent: "50" },
+    { target: "person.missing", share_percent: "0" },
+  ];
+  panel._catalogs.categories = [{ id: "archived", label: "Alt", active: false }];
+  const errors = panel._ruleValidationErrors(draft);
+  assert.ok(errors["0-category_id"]);
+  assert.ok(errors["1-target"]);
+  assert.ok(errors["2-target"]);
+  assert.ok(errors["2-share_percent"]);
+});
+
+test("confirmed booking opens a prefilled rule with no purpose filter and no POST", async () => {
+  const panel = ruleTestPanel();
+  panel._confirmedBookings.set("b1", {
+    id: "b1", status: "resolved", counterparty: "Laden", purpose: "Private Details",
+    account_id: "a1", amount: -3, allocations: [
+      { target: "household", amount: 1 }, { target: "person.anna", amount: 2 },
+    ],
+  });
+  panel._hass = { fetchWithAuth: async (_url, options) => {
+    assert.notEqual(options.method, "POST");
+    return new Response(JSON.stringify({ rules: [], accounts: [], persons: [], pets: [], catalogs: {} }), { headers: { "Content-Type": "application/json" } });
+  } };
+  await panel._openRuleFromBooking("b1");
+  assert.equal(panel._ruleDraft.purpose_contains, "");
+  assert.equal(panel._ruleDraft.counterparty, "Laden");
+  assert.equal(panel._ruleDraft.account_id, "a1");
+  assert.deepEqual(Array.from(panel._ruleDraft.allocations, (row) => Number(row.share_percent)), [33.33, 66.67]);
+  assert.equal(panel._ruleSourceBookingId, "b1");
+});
+
+test("saving a booking rule validates the source then persists once and returns to the list", async () => {
+  const panel = ruleTestPanel();
+  panel._ruleDraft = validRuleDraft();
+  panel._ruleEditingId = "new";
+  panel._ruleSourceBookingId = "b1";
+  const writes = [];
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  panel._hass = { fetchWithAuth: async (url, options) => {
+    if (options.method === "POST") {
+      writes.push({ url, body: JSON.parse(options.body) });
+      await pending;
+    }
+    return new Response(JSON.stringify({ rule: { id: "r1" }, rules: [], accounts: [], persons: [], pets: [], catalogs: {} }), { headers: { "Content-Type": "application/json" } });
+  } };
+  const event = { preventDefault() {}, currentTarget: { querySelector: () => null, querySelectorAll: () => [] } };
+  const first = panel._handleRuleSave(event);
+  await panel._handleRuleSave(event);
+  assert.equal(panel._ruleSubmitting, true);
+  release();
+  await first;
+  assert.deepEqual(writes.map((write) => write.url), ["/api/finanzplaner/rules/from-booking/b1", "/api/finanzplaner/rules"]);
+  assert.deepEqual(writes[0].body, { label: "Lebensmittel" });
+  assert.equal(writes[1].body.purpose_contains, null);
+  assert.equal(writes[1].body.allocations[0].share_percent, 100);
+  assert.equal(panel._ruleEditingId, null);
+  assert.equal(panel._ruleSubmitting, false);
+  assert.match(panel._ruleMessage, /gespeichert/);
+});
+
+test("failed rule save retains edits and exposes server feedback", async () => {
+  const panel = ruleTestPanel();
+  panel._ruleDraft = validRuleDraft();
+  panel._ruleEditingId = "new";
+  panel._hass = { fetchWithAuth: async () => new Response("Kategorie ist archiviert", { status: 400 }) };
+  await panel._handleRuleSave({ preventDefault() {}, currentTarget: { querySelector: () => null, querySelectorAll: () => [] } });
+  assert.equal(panel._ruleDraft.label, "Lebensmittel");
+  assert.equal(panel._ruleEditingId, "new");
+  assert.equal(panel._ruleSubmitting, false);
+  assert.match(panel._ruleMessage, /Kategorie ist archiviert/);
+});
+
+test("booking confirmation locks the editor and offers rule creation only after a successful response", async () => {
+  const panel = ruleTestPanel();
+  const rows = [{ target: "household", amount: 42.37 }];
+  panel._bookings = [{ id: "b1", counterparty: "Laden", amount: -42.37, status: "suggested" }];
+  panel._allocationDrafts.set("b1", rows);
+  panel._allocationOriginalDrafts.set("b1", rows.map((row) => ({ ...row })));
+  panel._acceptedSuggestions.add("b1");
+  const editor = { disabled: false };
+  const status = { textContent: "" };
+  const form = {
+    dataset: { bookingId: "b1", bookingTotal: "42.37" },
+    querySelector: (selector) => selector === ".allocation-editor" ? editor : selector === "[data-allocation-status]" ? status : null,
+    setAttribute() {}, removeAttribute() {},
+  };
+  let respond;
+  panel._hass = { fetchWithAuth: () => new Promise((resolve) => { respond = resolve; }) };
+  const request = panel._handleAssignment({ preventDefault() {}, currentTarget: form });
+  assert.equal(panel._confirmedBookings.size, 0);
+  const wasLocked = editor.disabled;
+  respond(new Response("Aufteilung ungültig", { status: 400 }));
+  await request;
+  assert.equal(wasLocked, true);
+  assert.equal(editor.disabled, false);
+  assert.equal(panel._confirmedBookings.size, 0);
+  assert.match(status.textContent, /Aufteilung ungültig/);
+  panel._hass = { fetchWithAuth: async (url) => new Response(JSON.stringify(url.endsWith("/allocations")
+    ? { booking: { id: "b1", status: "resolved", counterparty: "Laden", amount: -42.37, allocations: rows } }
+    : { rules: [], bookings: [], persons: [], pets: [], accounts: [], catalogs: {} }), { headers: { "Content-Type": "application/json" } }) };
+  await panel._handleAssignment({ preventDefault() {}, currentTarget: form });
+  assert.equal(panel._confirmedBookings.get("b1").status, "resolved");
+  assert.equal(panel._allocationDrafts.has("b1"), false);
+  assert.equal(panel._acceptedSuggestions.has("b1"), false);
+});
+
+test("an invalid share total is associated with its percentage field after interaction", () => {
+  const panel = ruleTestPanel();
+  panel._ruleDraft = validRuleDraft();
+  panel._ruleDraft.allocations[0].share_percent = "90";
+  panel._ruleTouched.add("0-share_percent");
+  const input = {
+    id: "rule-0-share_percent", dataset: { ruleField: "share_percent", ruleIndex: "0" },
+    setCustomValidity(value) { this.error = value; }, setAttribute(key, value) { this[key] = value; },
+  };
+  const error = { textContent: "" };
+  panel._syncRuleFormState({
+    querySelectorAll: () => [input],
+    querySelector: (selector) => selector === '[id="rule-0-share_percent-error"]' ? error : null,
+  });
+  assert.match(input.error, /100/);
+  assert.match(error.textContent, /100/);
+  assert.equal(input["aria-invalid"], "true");
+});
+
+test("leaving a field does not erase server feedback without editing", () => {
+  const panel = ruleTestPanel();
+  panel._ruleDraft = validRuleDraft();
+  panel._ruleMessage = "Fehler beim Speichern: Kategorie ist archiviert";
+  panel._updateRuleField({ type: "focusout", target: { dataset: { ruleField: "label" }, value: "Lebensmittel" } });
+  assert.match(panel._ruleMessage, /Kategorie ist archiviert/);
 });
 
 test("uses the Home Assistant authenticated request method for protected panel APIs", async () => {

@@ -1,4 +1,4 @@
-import { accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const PLAN_ITEMS_URL = "/api/finanzplaner/plan-items";
@@ -8,6 +8,7 @@ const FEED_PROFILES_URL = "/api/finanzplaner/feed-profiles";
 const CATALOGS_URL = "/api/finanzplaner/catalogs";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
+const RULES_URL = "/api/finanzplaner/rules";
 const BOOKINGS_URL = "/api/finanzplaner/bookings";
 const IMPORT_URL = "/api/finanzplaner/import";
 const EXCEL_PREVIEW_URL = "/api/finanzplaner/excel/preview";
@@ -590,6 +591,40 @@ const styles = `
   .management-editor-back:hover { border-color: var(--fp-navy); background: var(--fp-cyan-soft); }
   .management-editor > .catalog-entry-form { padding: 1.1rem; border: 1px solid var(--fp-line); border-radius: var(--fp-radius); background: rgb(255 254 249 / 0.82); box-shadow: var(--fp-shadow); }
 
+  .rules-view button, .rules-view input, .rules-view select, .review-view button,
+  .review-view input:not([type="checkbox"]), .review-view select, [data-nav="rules"] { min-block-size: 48px; min-inline-size: 48px; }
+  .rail-nav [data-nav="rules"] span { display: inline; }
+  .rule-form { display: grid; gap: 1.25rem; padding: 1.1rem; background: var(--fp-paper-strong); border: 1px solid var(--fp-line); border-radius: var(--fp-radius); }
+  .rule-fieldset { min-inline-size: 0; margin: 0; padding: 0.8rem 0 0; border: 0; border-block-start: 1px solid var(--fp-line); }
+  .rule-fieldset legend { padding-inline-end: 0.5rem; font-weight: 700; }
+  .rule-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 0.85rem; }
+  .rule-field { display: grid; align-content: start; gap: 0.35rem; min-inline-size: 0; font-size: 0.85rem; }
+  .rule-field label { font-weight: 700; }
+  .rule-field input, .rule-field select { inline-size: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-control-border); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .rule-field [aria-invalid="true"] { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .rule-field small, .rule-help { color: var(--fp-muted); line-height: 1.5; }
+  .rule-error { margin: 0; color: var(--fp-ink); font-size: 0.85rem; font-weight: 700; overflow-wrap: anywhere; }
+  .rule-error:empty { display: none; }
+  .rule-allocation { margin-block-start: 1.1rem; }
+  .rule-allocation > .rule-actions { margin-block-start: 0.75rem; }
+  .rule-fieldset > .rule-error:not(:empty) { margin-block: 0.75rem; }
+  .rule-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.65rem; }
+  .rule-actions p { flex: 1 1 16rem; }
+  .rules-view button:disabled, .review-view button:disabled { cursor: not-allowed; opacity: 0.55; }
+  .rules-view .management-table-wrap:focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 3px; }
+  .rules-view .management-table { min-inline-size: 64rem; }
+  .rules-view .management-table td, .rules-view .management-table tbody th { min-inline-size: 9rem; max-inline-size: 24rem; overflow-wrap: anywhere; }
+  .rules-view .management-table .table-number { min-inline-size: 6rem; }
+  .rules-view .management-table ul { margin: 0; padding-inline-start: 1.1rem; }
+  .booking-rule-hint { grid-column: 1 / -1; padding: 0.8rem; background: var(--fp-cyan-soft); border-radius: 0.45rem; overflow-wrap: anywhere; }
+  .booking-rule-hint--conflict { background: var(--fp-amber-soft); }
+  .booking-rule-hint h3, .booking-rule-hint p { margin: 0 0 0.55rem; }
+  .booking-rule-hint h3 { font-size: 1rem; }
+  .booking-rule-hint ul { padding-inline-start: 1.2rem; }
+  .review-view .allocation-status { flex-basis: auto; }
+  .confirmed-bookings { display: grid; gap: 0.65rem; padding: 0; list-style: none; }
+  .confirmed-bookings li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.65rem; padding-block: 0.65rem; border-block-end: 1px solid var(--fp-line); }
+
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
   .skip-link { inset: 0.75rem auto auto 0.75rem; z-index: 10; padding: 0.6rem 0.8rem; color: var(--fp-paper); background: var(--fp-navy); }
   .skip-link:focus-visible { position: fixed !important; inline-size: auto !important; block-size: auto !important; overflow: visible !important; clip-path: none !important; white-space: normal !important; }
@@ -901,6 +936,22 @@ class FinanzplanerPanel extends HTMLElement {
     this._planItemErrors = new Map();
     this._planItemEditorId = null;
     this._bookings = [];
+    this._reviewLoading = false;
+    this._reviewLoadFailed = false;
+    this._rules = [];
+    this._rulesLoading = false;
+    this._rulesLoadFailed = false;
+    this._rulesRequest = null;
+    this._ruleEditingId = null;
+    this._ruleMessage = "";
+    this._ruleDraft = null;
+    this._ruleBaseline = null;
+    this._ruleSourceBookingId = null;
+    this._ruleSubmitting = false;
+    this._ruleTouched = new Set();
+    this._ruleSubmitAttempted = false;
+    this._acceptedSuggestions = new Set();
+    this._confirmedBookings = new Map();
     this._persons = [];
     this._allocationDrafts = new Map();
     this._allocationOriginalDrafts = new Map();
@@ -947,6 +998,9 @@ class FinanzplanerPanel extends HTMLElement {
     window.addEventListener("beforeunload", this._handleBeforeUnload);
     this._render();
     this._loadOverview();
+    this._loadRules().catch(() => {}).finally(() => {
+      if (this.isConnected && ["rules", "review"].includes(this._view)) this._render();
+    });
   }
 
   disconnectedCallback() {
@@ -978,6 +1032,8 @@ class FinanzplanerPanel extends HTMLElement {
     if (!this._confirmDiscardUnsavedChanges()) return;
     this._view = "review";
     this._message = "";
+    this._reviewLoading = true;
+    this._reviewLoadFailed = false;
     this._render();
     this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
     try {
@@ -986,8 +1042,11 @@ class FinanzplanerPanel extends HTMLElement {
       this._bookings = [];
       this._persons = [];
       this._message = error.message || "Die Prüfliste konnte nicht geladen werden.";
+      this._reviewLoadFailed = true;
     }
+    this._reviewLoading = false;
     this._render();
+    this._focusContent();
   }
 
   async _openSectionOverview(view) {
@@ -1017,6 +1076,300 @@ class FinanzplanerPanel extends HTMLElement {
         this._focusContent();
       }
     }
+  }
+
+  async _loadRules() {
+    if (this._rulesRequest) return this._rulesRequest;
+    this._rulesLoading = true;
+    this._rulesLoadFailed = false;
+    this._rulesRequest = (async () => {
+      const results = await Promise.all([RULES_URL, ACCOUNTS_URL, PERSONS_URL, PETS_URL, CATALOGS_URL].map(async (url) => {
+        const response = await fetchWithHomeAssistantAuth(this._hass, url);
+        const result = await readApiResponse(response);
+        if (!response.ok) throw new Error(apiErrorMessage(result, "Regeln oder Zuordnungsziele konnten nicht geladen werden."));
+        return result;
+      }));
+      const [rules, accounts, persons, pets, catalogs] = results;
+      this._rules = rules.rules || [];
+      this._accounts = accounts.accounts || [];
+      this._persons = persons.persons || [];
+      this._pets = pets.pets || [];
+      this._catalogs = catalogs.catalogs || { categories: [], areas: [], projects: [] };
+    })();
+    try {
+      await this._rulesRequest;
+    } catch (error) {
+      this._rulesLoadFailed = true;
+      this._ruleMessage = error.message || "Regeln konnten nicht geladen werden. Bitte erneut laden.";
+      throw error;
+    } finally {
+      this._rulesLoading = false;
+      this._rulesRequest = null;
+    }
+  }
+
+  async _openRules() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
+    this._view = "rules";
+    this._resetRuleEditor();
+    this._ruleMessage = "";
+    const loading = this._loadRules();
+    this._render();
+    this._focusContent();
+    try { await loading; } catch { /* The rules status contains the load error. */ }
+    if (this._view === "rules") {
+      this._render();
+      this._focusContent();
+    }
+  }
+
+  _resetRuleEditor() {
+    this._ruleEditingId = null;
+    this._ruleDraft = null;
+    this._ruleBaseline = null;
+    this._ruleSourceBookingId = null;
+    this._ruleTouched.clear();
+    this._ruleSubmitAttempted = false;
+  }
+
+  _ruleDraftFromRule(rule = {}) {
+    return {
+      label: rule.label || "", active: rule.active !== false,
+      priority: String(rule.priority ?? 100), account_id: rule.account_id || "",
+      counterparty: rule.counterparty || "", purpose_contains: rule.purpose_contains || "",
+      allocations: (rule.allocations || [{ target: "household", share_percent: 100 }]).map((row) => ({
+        target: row.target || "", share_percent: String(row.share_percent ?? ""),
+        area_id: row.area_id || "", category_id: row.category_id || "",
+        project_id: row.project_id || "", pet_id: row.pet_id || "",
+      })),
+    };
+  }
+
+  _openRuleEditor(ruleId) {
+    if (this._rulesLoading || this._rulesLoadFailed || !this._confirmDiscardUnsavedChanges()) return;
+    const rule = this._rules.find((candidate) => String(candidate.id) === String(ruleId));
+    if (ruleId !== "new" && !rule) return;
+    this._resetRuleEditor();
+    this._ruleEditingId = String(ruleId);
+    this._ruleDraft = this._ruleDraftFromRule(rule);
+    this._ruleBaseline = this._ruleDraftFromRule(rule);
+    this._ruleMessage = "";
+    this._render();
+    this.shadowRoot.querySelector("#rule-label")?.focus();
+  }
+
+  _closeRuleEditor() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
+    this._resetRuleEditor();
+    this._ruleMessage = "";
+    this._render();
+    this._focusContent();
+  }
+
+  async _openRuleFromBooking(bookingId) {
+    const booking = this._confirmedBookings.get(String(bookingId));
+    if (!booking || booking.status !== "resolved" || !this._confirmDiscardUnsavedChanges()) return;
+    await this._openRules();
+    if (this._view !== "rules" || this._rulesLoadFailed) return;
+    const total = Math.abs(Number(booking.amount));
+    const allocations = booking.allocations.map((row) => ({ ...row, share_percent: Math.round(Number(row.amount) / total * 10000) / 100 }));
+    if (allocations.length) {
+      const assigned = allocations.reduce((sum, row) => sum + Math.round(row.share_percent * 100), 0);
+      allocations[0].share_percent = (Math.round(allocations[0].share_percent * 100) + 10000 - assigned) / 100;
+    }
+    this._ruleEditingId = "new";
+    this._ruleSourceBookingId = String(bookingId);
+    this._ruleDraft = this._ruleDraftFromRule({
+      label: booking.counterparty, counterparty: booking.counterparty,
+      account_id: booking.account_id, purpose_contains: "", allocations,
+    });
+    this._ruleBaseline = this._ruleDraftFromRule();
+    this._ruleMessage = "Vorlage aus der bestätigten Buchung. Prüfe die Angaben und speichere die Regel ausdrücklich.";
+    this._render();
+    this.shadowRoot.querySelector("#rule-label")?.focus();
+  }
+
+  _ruleValidationErrors(draft) {
+    const errors = {};
+    for (const [key, label] of [["label", "Regelname"], ["counterparty", "Zahlungsempfänger"], ["purpose_contains", "Verwendungszweckfilter"]]) {
+      const text = String(draft[key] || "").trim();
+      if (key !== "purpose_contains" && !text) errors[key] = `${label} fehlt.`;
+      else if (text.length > 120) errors[key] = "Bitte höchstens 120 Zeichen eingeben.";
+    }
+    if (String(draft.priority).trim() === "" || !Number.isSafeInteger(Number(draft.priority))) errors.priority = "Bitte eine ganze Zahl eingeben.";
+    if (draft.account_id && !this._accounts.some((account) => account.id === draft.account_id && account.active !== false)) errors.account_id = "Konto fehlt oder ist archiviert. Bitte ein aktives Konto oder alle Konten wählen.";
+    const targets = new Set(["household", ...this._persons.map((person) => person.entity_id)]);
+    const seen = new Set();
+    let total = 0;
+    draft.allocations.forEach((row, index) => {
+      if (!targets.has(row.target)) errors[`${index}-target`] = "Person fehlt. Bitte ein verfügbares Ziel wählen.";
+      else if (seen.has(row.target)) errors[`${index}-target`] = "Jedes Ziel darf nur einmal vorkommen.";
+      seen.add(row.target);
+      const share = Number(row.share_percent);
+      if (!Number.isFinite(share) || share <= 0 || share > 100) errors[`${index}-share_percent`] = "Bitte einen Anteil größer als 0 und höchstens 100 eingeben.";
+      total += share;
+      for (const [key, entries] of [
+        ["area_id", this._catalogs.areas], ["category_id", this._catalogs.categories],
+        ["project_id", this._catalogs.projects], ["pet_id", this._pets],
+      ]) {
+        if (row[key] && !(entries || []).some((entry) => entry.id === row[key] && entry.active !== false)) {
+          errors[`${index}-${key}`] = "Eintrag fehlt oder ist archiviert. Bitte ersetzen oder die Zuordnung entfernen.";
+        }
+      }
+    });
+    if (!draft.allocations.length || !Number.isFinite(total) || Math.abs(total - 100) > 1e-9) errors.allocations = "Die Anteile müssen zusammen 100 % ergeben.";
+    return errors;
+  }
+
+  _ruleHasChanges() {
+    return Boolean(this._ruleDraft) && !this._draftsEqual(this._ruleDraft, this._ruleBaseline);
+  }
+
+  _syncRuleFormState(form = this.shadowRoot.querySelector("[data-rule-form]")) {
+    if (!form || !this._ruleDraft) return;
+    const errors = this._ruleValidationErrors(this._ruleDraft);
+    for (const input of form.querySelectorAll("[data-rule-field]")) {
+      const key = input.dataset.ruleIndex === undefined ? input.dataset.ruleField : `${input.dataset.ruleIndex}-${input.dataset.ruleField}`;
+      const error = errors[key] || (input.dataset.ruleField === "share_percent" ? errors.allocations : "") || "";
+      input.setCustomValidity(error);
+      const visible = Boolean(error) && (this._ruleSubmitAttempted || this._ruleTouched.has(key));
+      input.setAttribute("aria-invalid", String(visible));
+      const errorNode = form.querySelector(`[id="${input.id}-error"]`);
+      if (errorNode) errorNode.textContent = visible ? `Fehler: ${error}` : "";
+    }
+    const total = this._ruleDraft.allocations.reduce((sum, row) => sum + Number(row.share_percent), 0);
+    const summary = form.querySelector("[data-rule-share-summary]");
+    if (summary) summary.textContent = `Anteilssumme: ${Number.isFinite(total) ? new Intl.NumberFormat("de-DE", { maximumFractionDigits: 6 }).format(total) : "—"} % von 100 %`;
+    const allocationError = form.querySelector("#rule-allocations-error");
+    if (allocationError) allocationError.textContent = (this._ruleSubmitAttempted || this._ruleTouched.size) && errors.allocations ? `Fehler: ${errors.allocations}` : "";
+    const submit = form.querySelector("[type='submit']");
+    if (submit) submit.disabled = this._ruleSubmitting || !this._ruleHasChanges();
+    const state = form.querySelector("[data-rule-save-state]");
+    if (state) state.textContent = this._ruleSubmitting ? "Wird gespeichert …" : this._ruleSubmitAttempted && Object.keys(errors).length ? "Fehlerhaft – bitte die markierten Angaben prüfen." : this._ruleHasChanges() ? "Geändert – noch nicht gespeichert." : "Unverändert.";
+  }
+
+  _updateRuleField(event) {
+    if (this._ruleSubmitting || !this._ruleDraft) return;
+    const input = event.target;
+    const field = input.dataset.ruleField;
+    if (!field) return;
+    const index = input.dataset.ruleIndex;
+    const key = index === undefined ? field : `${index}-${field}`;
+    if (index === undefined) this._ruleDraft[field] = field === "active" ? input.value === "true" : input.value;
+    else this._ruleDraft.allocations[Number(index)][field] = input.value;
+    if (event.type !== "input" || this._ruleSubmitAttempted) this._ruleTouched.add(key);
+    if (event.type !== "focusout") {
+      this._ruleMessage = "";
+      const status = this.shadowRoot.querySelector("[data-rule-message]");
+      if (status) status.textContent = "";
+    }
+    this._syncRuleFormState();
+  }
+
+  _changeRuleAllocation(index = null) {
+    if (this._ruleSubmitting || !this._ruleDraft) return;
+    if (index === null) this._ruleDraft.allocations.push({ target: "", share_percent: "", area_id: "", category_id: "", project_id: "", pet_id: "" });
+    else this._ruleDraft.allocations.splice(index, 1);
+    this._ruleTouched.clear();
+    this._ruleTouched.add("allocations");
+    this._render();
+    this.shadowRoot.querySelector(index === null ? `#rule-${this._ruleDraft.allocations.length - 1}-target` : "[data-rule-add]")?.focus();
+  }
+
+  async _postRule(url, payload) {
+    const response = await fetchWithHomeAssistantAuth(this._hass, url, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    const result = await readApiResponse(response);
+    if (!response.ok) throw new Error(apiErrorMessage(result, "Die Regel konnte nicht gespeichert werden. Bitte erneut versuchen."));
+    return result;
+  }
+
+  async _handleRuleSave(event) {
+    event.preventDefault();
+    if (this._ruleSubmitting || !this._ruleDraft || !this._ruleHasChanges()) return;
+    this._ruleSubmitAttempted = true;
+    const form = event.currentTarget;
+    const errors = this._ruleValidationErrors(this._ruleDraft);
+    this._syncRuleFormState(form);
+    const invalidInput = [...form.querySelectorAll("[data-rule-field]")].find((input) => !input.validity.valid);
+    if (Object.keys(errors).length || invalidInput) {
+      this._ruleMessage = "Fehlerhaft: Bitte prüfe die markierten Felder und die Anteilssumme.";
+      const status = this.shadowRoot.querySelector("[data-rule-message]");
+      if (status) status.textContent = this._ruleMessage;
+      (invalidInput || form.querySelector("[data-rule-add]"))?.focus();
+      return;
+    }
+    const payload = rulePayloadFromForm(this._ruleDraft);
+    payload.allocations = payload.allocations.map((row) => ({
+      ...row, share_percent: Number(row.share_percent),
+      area_id: row.area_id || null, category_id: row.category_id || null,
+      project_id: row.project_id || null, pet_id: row.pet_id || null,
+    }));
+    const sourceBookingId = this._ruleSourceBookingId;
+    this._ruleSubmitting = true;
+    this._ruleMessage = "Regel wird gespeichert …";
+    this._render();
+    try {
+      // This endpoint validates a template; only the following /rules request persists it.
+      if (sourceBookingId) await this._postRule(`${RULES_URL}/from-booking/${encodeURIComponent(sourceBookingId)}`, { label: payload.label });
+      await this._postRule(this._ruleEditingId === "new" ? RULES_URL : `${RULES_URL}/${encodeURIComponent(this._ruleEditingId)}`, payload);
+    } catch (error) {
+      this._ruleSubmitting = false;
+      this._ruleMessage = `Fehler beim Speichern: ${error.message}`;
+      this._render();
+      this._focusContent();
+      return;
+    }
+    if (sourceBookingId) this._confirmedBookings.delete(sourceBookingId);
+    this._resetRuleEditor();
+    this._ruleMessage = "Regel gespeichert. Bestätigte Buchungen bleiben unverändert.";
+    try { await this._loadRules(); } catch {
+      this._ruleMessage = "Regel gespeichert. Die Übersicht konnte danach nicht geladen werden. Bitte erneut laden.";
+    }
+    this._ruleSubmitting = false;
+    this._render();
+    this._focusContent();
+  }
+
+  async _deactivateRule(ruleId) {
+    if (this._ruleSubmitting) return;
+    const rule = this._rules.find((entry) => String(entry.id) === String(ruleId));
+    if (!rule || rule.active === false) return;
+    this._ruleSubmitting = true;
+    this._ruleMessage = "Regel wird deaktiviert …";
+    this._render();
+    try {
+      await this._postRule(`${RULES_URL}/${encodeURIComponent(ruleId)}`, { active: false });
+    } catch (error) {
+      this._ruleSubmitting = false;
+      this._ruleMessage = `Deaktivieren fehlgeschlagen: ${error.message} Öffne „Bearbeiten“, um die Angaben zu prüfen.`;
+      this._render();
+      this._focusContent();
+      return;
+    }
+    this._ruleMessage = "Regel deaktiviert. Bestätigte Buchungen bleiben unverändert.";
+    try { await this._loadRules(); } catch {
+      this._ruleMessage = "Regel deaktiviert. Die Übersicht konnte danach nicht geladen werden. Bitte erneut laden.";
+    }
+    this._ruleSubmitting = false;
+    this._render();
+    this._focusContent();
+  }
+
+  _acceptSuggestion(bookingId) {
+    const booking = this._bookings.find((entry) => String(entry.id) === String(bookingId));
+    if (!booking || booking.status !== "suggested" || this._allocationSubmissions.has(String(bookingId))) return;
+    const accepted = acceptSuggestionDraft(booking);
+    if (!accepted.allocations.length) return;
+    this._allocationDrafts.set(String(accepted.bookingId), accepted.allocations);
+    this._acceptedSuggestions.add(String(accepted.bookingId));
+    this._allocationErrors.delete(String(accepted.bookingId));
+    this._render();
+    const form = this._allocationForm(bookingId);
+    const status = form?.querySelector("[data-allocation-status]");
+    if (status) status.textContent = "Vorschlag im Entwurf übernommen. Bitte prüfen und mit „Aufteilung speichern“ bestätigen.";
+    form?.querySelector("[data-allocation-field='target']")?.focus();
   }
 
   _accountDraftFromAccount(account) {
@@ -1079,8 +1432,10 @@ class FinanzplanerPanel extends HTMLElement {
         this._allocationDrafts.delete(bookingId);
         this._allocationOriginalDrafts.delete(bookingId);
         this._allocationErrors.delete(bookingId);
+        this._acceptedSuggestions.delete(bookingId);
       }
     }
+    await this._loadRules().catch(() => {});
   }
 
   async _openAccounts() {
@@ -2119,6 +2474,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _hasUnsavedChanges() {
+    if (this._ruleHasChanges() || this._ruleSubmitting || this._acceptedSuggestions.size) return true;
     for (const [itemId, draft] of this._planItemDrafts) {
       const item = this._planItems.find((candidate) => String(candidate.id) === itemId);
       const baseline = itemId === "new" ? this._newPlanItemDraft() : this._planItemDraftFromItem(item || {});
@@ -2154,7 +2510,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _hasPendingSubmissions() {
-    return this._planItemSubmissions.size > 0
+    return this._ruleSubmitting || this._planItemSubmissions.size > 0
       || this._petSubmissions.size > 0
       || this._feedProfileSubmissions.size > 0
       || this._catalogSubmissions.size > 0
@@ -2163,6 +2519,8 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _discardUnsavedChanges() {
+    this._resetRuleEditor();
+    this._acceptedSuggestions.clear();
     this._planItemDrafts.clear();
     this._petDrafts.clear();
     this._feedProfileDrafts.clear();
@@ -2280,14 +2638,19 @@ class FinanzplanerPanel extends HTMLElement {
     if (!form) return;
     const rows = this._allocationDrafts.get(form.dataset.bookingId) || [];
     const total = Number(form.dataset.bookingTotal) || 0;
-    const submitState = allocationSubmitState(total, rows, this._allocationSubmissions.has(form.dataset.bookingId));
+    const submitting = this._allocationSubmissions.has(form.dataset.bookingId);
+    const editor = form.querySelector(".allocation-editor");
+    const accept = form.querySelector("[data-accept-suggestion]");
+    if (editor) editor.disabled = submitting;
+    if (accept) accept.disabled = submitting;
+    const submitState = allocationSubmitState(total, rows, submitting);
     const { remaining } = submitState;
     const allocated = submitState.invalidAmount ? null : allocationRemaining(total, [{ amount: remaining }]);
     const remainingNode = form.querySelector("[data-allocation-remaining]");
     const allocatedNode = form.querySelector("[data-allocation-allocated]");
     const submit = form.querySelector("[type='submit']");
     const originalRows = this._allocationOriginalDrafts.get(form.dataset.bookingId);
-    const hasChanges = Boolean(originalRows) && !this._draftsEqual(rows, originalRows);
+    const hasChanges = this._acceptedSuggestions.has(form.dataset.bookingId) || Boolean(originalRows) && !this._draftsEqual(rows, originalRows);
     if (allocatedNode) allocatedNode.textContent = allocated === null ? "—" : formatEuro(allocated);
     if (remainingNode) {
       remainingNode.textContent = submitState.invalidAmount ? "—" : formatEuro(remaining);
@@ -2370,7 +2733,7 @@ class FinanzplanerPanel extends HTMLElement {
     const submitState = allocationSubmitState(total, rows);
     const { remaining } = submitState;
     const status = form.querySelector("[data-allocation-status]");
-    if (submitState.disabled || !originalRows || this._draftsEqual(rows, originalRows)) {
+    if (submitState.disabled || !originalRows || (!this._acceptedSuggestions.has(bookingId) && this._draftsEqual(rows, originalRows))) {
       if (status) status.textContent = submitState.invalidAmount
         ? "Bitte verwende Beträge mit höchstens zwei Nachkommastellen."
         : "Bitte wähle für jede Zeile ein Ziel und gleiche den verbleibenden Betrag centgenau aus.";
@@ -2400,6 +2763,9 @@ class FinanzplanerPanel extends HTMLElement {
       });
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(allocationErrorMessage(response, result));
+      const original = this._bookings.find((booking) => String(booking.id) === bookingId);
+      const confirmed = result?.booking || { ...original, id: bookingId, amount: total, allocations };
+      this._confirmedBookings.set(bookingId, { ...confirmed, status: "resolved", allocations: (confirmed.allocations || allocations).map((row) => ({ ...row })) });
     } catch (error) {
       this._allocationSubmissions.delete(bookingId);
       this._allocationErrors.set(bookingId, error.message || "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.");
@@ -2412,6 +2778,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._allocationErrors.delete(bookingId);
     this._allocationDrafts.delete(bookingId);
     this._allocationOriginalDrafts.delete(bookingId);
+    this._acceptedSuggestions.delete(bookingId);
     this._bookings = this._bookings.filter((booking) => String(booking.id) !== bookingId);
     this._message = "Buchung zugeordnet und aus der Prüfliste entfernt.";
     this._render();
@@ -2426,6 +2793,7 @@ class FinanzplanerPanel extends HTMLElement {
       ? "Buchung gespeichert. Die Prüfliste konnte danach nicht neu geladen werden."
       : "Buchung zugeordnet und aus der Prüfliste entfernt.";
     this._render();
+    [...this.shadowRoot.querySelectorAll("[data-rule-from-booking]")].find((button) => button.dataset.ruleFromBooking === bookingId)?.focus();
   }
 
   async _handleImport(event) {
@@ -2561,6 +2929,8 @@ class FinanzplanerPanel extends HTMLElement {
   _render() {
     const template = this._view === "review"
       ? this._reviewTemplate()
+      : this._view === "rules"
+        ? this._rulesTemplate()
       : this._view === "plan_items"
         ? this._planItemsTemplate()
       : this._view === "pets"
@@ -2576,6 +2946,8 @@ class FinanzplanerPanel extends HTMLElement {
               : this._overviewTemplate();
     this.shadowRoot.innerHTML = `<style>${styles}</style>${template}`;
     this._bindEvents();
+    if (this._view === "rules" && this._ruleEditingId) this._syncRuleFormState();
+    this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => this._updateAllocationSummary(form));
   }
 
   _bindEvents() {
@@ -2586,6 +2958,17 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelector("[data-action='previous-month']")?.addEventListener("click", () => this._shiftMonth(-1));
     this.shadowRoot.querySelector("[data-action='next-month']")?.addEventListener("click", () => this._shiftMonth(1));
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
+    this.shadowRoot.querySelectorAll("[data-action='rules']").forEach((button) => button.addEventListener("click", () => this._openRules()));
+    this.shadowRoot.querySelectorAll("[data-open-rule-editor]").forEach((button) => button.addEventListener("click", () => this._openRuleEditor(button.dataset.openRuleEditor)));
+    this.shadowRoot.querySelector("[data-close-rule-editor]")?.addEventListener("click", () => this._closeRuleEditor());
+    this.shadowRoot.querySelectorAll("[data-deactivate-rule]").forEach((button) => button.addEventListener("click", () => this._deactivateRule(button.dataset.deactivateRule)));
+    this.shadowRoot.querySelectorAll("[data-rule-from-booking]").forEach((button) => button.addEventListener("click", () => this._openRuleFromBooking(button.dataset.ruleFromBooking)));
+    this.shadowRoot.querySelectorAll("[data-accept-suggestion]").forEach((button) => button.addEventListener("click", () => this._acceptSuggestion(button.dataset.acceptSuggestion)));
+    const ruleForm = this.shadowRoot.querySelector("[data-rule-form]");
+    ruleForm?.addEventListener("submit", (event) => this._handleRuleSave(event));
+    for (const type of ["input", "change", "focusout"]) ruleForm?.addEventListener(type, (event) => this._updateRuleField(event));
+    this.shadowRoot.querySelector("[data-rule-add]")?.addEventListener("click", () => this._changeRuleAllocation());
+    this.shadowRoot.querySelectorAll("[data-rule-remove]").forEach((button) => button.addEventListener("click", () => this._changeRuleAllocation(Number(button.dataset.ruleRemove))));
     this.shadowRoot.querySelector("[data-action='accounts']")?.addEventListener("click", () => this._openAccounts());
     this.shadowRoot.querySelector("[data-action='back']")?.addEventListener("click", () => this._navigateToOverview());
     this.shadowRoot.querySelector("[data-import]")?.addEventListener("change", (event) => this._handleImport(event));
@@ -2659,6 +3042,7 @@ class FinanzplanerPanel extends HTMLElement {
       else if (button.dataset.nav === "pets") this._openPets();
       else if (button.dataset.nav === "feed_profiles") this._openFeedProfiles();
       else if (button.dataset.nav === "catalogs") this._openCatalogs();
+      else if (button.dataset.nav === "rules") this._openRules();
       else if (button.dataset.nav === "overview") this._navigateToOverview();
       else if (SECTION_VIEWS.includes(button.dataset.nav)) this._openSectionOverview(button.dataset.nav);
     }));
@@ -2677,11 +3061,12 @@ class FinanzplanerPanel extends HTMLElement {
       ["feed_profiles", "cart", "Futter"],
       ["catalogs", "tags", "Stammdaten"],
       ["accounts", "settings", "Konten"],
+      ["rules", "tasks", "Regeln"],
     ];
     return items.map(([id, iconName, label]) => {
       const target = id === "planner" ? "plan_items" : id;
       const current = (this._view === "plan_items" && id === "planner") || this._view === id;
-      return `<button class="nav-item" data-nav="${target}"${current ? ' aria-current="page"' : ""} type="button">${icon(iconName, 22)}<span>${label}</span></button>`;
+      return `<button class="nav-item" data-nav="${target}"${current ? ' aria-current="page"' : ""} type="button" aria-label="${escapeHtml(label)}">${icon(iconName, 22)}<span>${label}</span></button>`;
     }).join("");
   }
 
@@ -3246,10 +3631,126 @@ class FinanzplanerPanel extends HTMLElement {
     </section>`;
   }
 
+  _ruleReferenceOptions(entries, selected, emptyLabel) {
+    const current = (entries || []).find((entry) => entry.id === selected);
+    const options = [`<option value=""${selected ? "" : " selected"}>${escapeHtml(emptyLabel)}</option>`];
+    if (selected && (!current || current.active === false)) {
+      options.push(`<option value="${escapeHtml(selected)}" selected disabled>${escapeHtml(current?.label || current?.name || selected)} (${current ? "archiviert" : "fehlt"}) – bitte ersetzen</option>`);
+    }
+    options.push(...(entries || []).filter((entry) => entry.active !== false).map((entry) => `<option value="${escapeHtml(entry.id)}"${selected === entry.id ? " selected" : ""}>${escapeHtml(entry.label || entry.name || entry.id)}</option>`));
+    return options.join("");
+  }
+
+  _ruleFieldTemplate(field, label, value, { index, options, type = "text", constraints = "", help = "" } = {}) {
+    const key = index === undefined ? field : `${index}-${field}`;
+    const id = `rule-${key}`;
+    const attributes = `id="${id}" name="${index === undefined ? field : `allocations[${index}][${field}]`}" data-rule-field="${field}"${index === undefined ? "" : ` data-rule-index="${index}"`} aria-describedby="${id}-error${help ? ` ${id}-help` : ""}" aria-errormessage="${id}-error" ${constraints}`;
+    return `<div class="rule-field"><label for="${id}">${escapeHtml(label)}</label>${options === undefined
+      ? `<input ${attributes} type="${type}" value="${escapeHtml(value)}">`
+      : `<select ${attributes}>${options}</select>`}${help ? `<small id="${id}-help">${escapeHtml(help)}</small>` : ""}<p class="rule-error" id="${id}-error"></p></div>`;
+  }
+
+  _ruleFormTemplate() {
+    const draft = this._ruleDraft;
+    const disabled = this._ruleSubmitting ? " disabled" : "";
+    const field = (key, label, options = {}) => this._ruleFieldTemplate(key, label, draft[key], options);
+    const allocations = draft.allocations.map((row, index) => {
+      const rowField = (key, label, options = {}) => this._ruleFieldTemplate(key, label, row[key], { index, ...options });
+      return `<fieldset class="rule-fieldset rule-allocation"><legend>Aufteilung ${index + 1}</legend><div class="rule-fields">
+        ${rowField("target", "Ziel", { options: this._allocationTargetOptions(row.target), constraints: "required" })}
+        ${rowField("share_percent", "Anteil in Prozent", { type: "number", constraints: 'required min="0" max="100" step="any" inputmode="decimal"' })}
+        ${rowField("category_id", "Kategorie (optional)", { options: this._ruleReferenceOptions(this._catalogs.categories, row.category_id, "Keine Kategorie") })}
+        ${rowField("area_id", "Bereich (optional)", { options: this._ruleReferenceOptions(this._catalogs.areas, row.area_id, "Kein Bereich") })}
+        ${rowField("project_id", "Projekt (optional)", { options: this._ruleReferenceOptions(this._catalogs.projects, row.project_id, "Kein Projekt") })}
+        ${rowField("pet_id", "Tier (optional)", { options: this._ruleReferenceOptions(this._pets, row.pet_id, "Kein Tier") })}
+      </div><div class="rule-actions"><button class="table-edit-button" type="button" data-rule-remove="${index}" aria-label="Aufteilung ${index + 1} entfernen"${disabled}>Entfernen</button></div></fieldset>`;
+    }).join("");
+    return `<section class="management-editor" aria-labelledby="rule-editor-heading"><div class="management-editor-header"><div><h3 id="rule-editor-heading">${this._ruleEditingId === "new" ? "Regel anlegen" : "Regel bearbeiten"}</h3><p>Vorschläge gelten für offene Buchungen. Bestätigte Aufteilungen bleiben erhalten.</p></div><button class="management-editor-back" type="button" data-close-rule-editor${disabled}>${icon("chevronLeft", 16)} Zur Regelübersicht</button></div>
+      <form class="rule-form" data-rule-form method="post" novalidate aria-labelledby="rule-editor-heading" aria-busy="${this._ruleSubmitting}">
+        <fieldset class="rule-fieldset"${disabled}><legend>Regel</legend><div class="rule-fields">
+          ${field("label", "Regelname", { constraints: 'required maxlength="120"' })}
+          ${this._ruleEditingId !== "new" ? field("active", "Status", { options: `<option value="true"${draft.active ? " selected" : ""}>Aktiv</option><option value="false"${draft.active ? "" : " selected"}>Deaktiviert</option>` }) : ""}
+        </div></fieldset>
+        <fieldset class="rule-fieldset"${disabled}><legend>Bedingungen</legend><div class="rule-fields">
+          ${field("account_id", "Konto", { options: this._ruleReferenceOptions(this._accounts, draft.account_id, "Alle Konten"), help: "Ein Konto begrenzt die Regel auf diese Zahlungsquelle." })}
+          ${field("counterparty", "Zahlungsempfänger", { constraints: 'required maxlength="120"', help: "Der vollständige Name wird ohne Beachtung der Groß- und Kleinschreibung verglichen." })}
+          ${field("purpose_contains", "Verwendungszweck enthält (optional)", { constraints: 'maxlength="120"', help: "Leer lassen, wenn die Regel für jeden Verwendungszweck gelten soll." })}
+          ${field("priority", "Priorität", { type: "number", constraints: 'required step="1"', help: "Eine höhere Zahl hat Vorrang. Gleiche Priorität kann einen Regelkonflikt ergeben." })}
+        </div></fieldset>
+        <fieldset class="rule-fieldset" aria-describedby="rule-share-summary rule-allocations-error"${disabled}><legend>Aufteilungsvorlage</legend>
+          <p class="rule-help">Jedes Ziel einmal wählen. Alle Anteile müssen zusammen 100 % ergeben. Es stehen aktive Stammdaten und Tiere zur Auswahl.</p>
+          ${allocations}
+          <p id="rule-share-summary" data-rule-share-summary aria-live="polite"></p><p class="rule-error" id="rule-allocations-error" aria-live="polite"></p>
+          <button class="table-edit-button" type="button" data-rule-add${disabled}>Aufteilung hinzufügen</button>
+        </fieldset>
+        <div class="rule-actions"><p data-rule-save-state aria-live="polite"></p><button class="account-save" type="submit"${this._ruleSubmitting || !this._ruleHasChanges() ? " disabled" : ""}>${this._ruleSubmitting ? "Wird gespeichert …" : "Regel speichern"} ${icon("check", 17)}</button></div>
+      </form></section>`;
+  }
+
+  _ruleTargetLabel(target) {
+    if (target === "household") return "Haushalt";
+    const person = this._persons.find((entry) => entry.entity_id === target);
+    return person ? person.name || person.entity_id : `${target || "Ziel"} (Person fehlt)`;
+  }
+
+  _ruleAllocationLabel(row, percentage = false) {
+    const labels = [this._ruleTargetLabel(row.target), percentage ? `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 6 }).format(Number(row.share_percent))} %` : formatEuro(row.amount)];
+    for (const [key, entries, snapshot] of [
+      ["category_id", this._catalogs.categories, row.category], ["area_id", this._catalogs.areas, row.area],
+      ["project_id", this._catalogs.projects, row.project], ["pet_id", this._pets, row.pet_name],
+    ]) {
+      if (!row[key] && !snapshot) continue;
+      const entry = (entries || []).find((candidate) => candidate.id === row[key]);
+      labels.push(entry ? `${entry.label || entry.name}${entry.active === false ? " (archiviert)" : ""}` : `${snapshot || row[key]}${row[key] ? " (fehlt)" : ""}`);
+    }
+    return labels.join(" · ");
+  }
+
+  _rulesOverviewTemplate() {
+    const disabled = this._ruleSubmitting ? " disabled" : "";
+    const rows = this._rules.map((rule) => {
+      const account = this._accounts.find((entry) => entry.id === rule.account_id);
+      const accountLabel = !rule.account_id ? "Alle Konten" : account ? `${account.label || account.iban_masked || account.id}${account.active === false ? " (archiviert)" : ""}` : `${rule.account_id} (Konto fehlt)`;
+      const invalid = Object.keys(this._ruleValidationErrors(this._ruleDraftFromRule(rule))).length > 0;
+      return `<tr><th scope="row">${escapeHtml(rule.label)}</th><td>${rule.active === false ? "Deaktiviert" : "Aktiv"}${invalid ? " · Angaben prüfen" : ""}</td><td class="table-number">${escapeHtml(rule.priority)}</td><td>${escapeHtml(accountLabel)}</td><td>${escapeHtml(rule.counterparty)}${rule.purpose_contains ? `<p>Verwendungszweck enthält: ${escapeHtml(rule.purpose_contains)}</p>` : ""}</td><td><ul>${(rule.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row, true))}</li>`).join("")}</ul></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-rule-editor="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} bearbeiten"${disabled}>Bearbeiten</button> <button class="table-edit-button" type="button" data-deactivate-rule="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} deaktivieren"${this._ruleSubmitting || rule.active === false ? " disabled" : ""}>Deaktivieren</button></td></tr>`;
+    }).join("");
+    return `<div class="management-list-toolbar"><p>${this._rules.filter((rule) => rule.active !== false).length} aktive Regeln · Deaktivierte Regeln bleiben erhalten.</p><button class="table-new-button" type="button" data-open-rule-editor="new"${disabled}>Regel anlegen ${icon("plus", 17)}</button></div>
+      <div class="management-table-wrap" tabindex="0" role="region" aria-label="Regelübersicht, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Regeln für Buchungsvorschläge</caption><thead><tr><th scope="col">Regelname</th><th scope="col">Status</th><th scope="col">Priorität</th><th scope="col">Konto</th><th scope="col">Zahlungsempfänger</th><th scope="col">Aufteilung</th><th scope="col">Aktionen</th></tr></thead><tbody>${rows || `<tr><td colspan="7">Noch keine Regeln angelegt. Mit „Regel anlegen“ legst du Bedingungen und eine Aufteilungsvorlage für künftige Vorschläge fest.</td></tr>`}</tbody></table></div>`;
+  }
+
+  _rulesTemplate() {
+    const body = this._rulesLoading ? `<p class="empty-state" role="status">Regeln und Zuordnungsziele werden geladen …</p>`
+      : this._rulesLoadFailed ? `<div class="empty-state"><p>Die Regelübersicht ist derzeit nicht verfügbar.</p><button class="table-edit-button" type="button" data-action="rules">Erneut laden</button></div>`
+        : this._ruleEditingId ? this._ruleFormTemplate() : this._rulesOverviewTemplate();
+    return this._shellTemplate(`<main class="main" id="content" tabindex="-1"><div class="accounts-view rules-view"><div class="accounts-view-header"><div><h2>Regeln</h2><p>Verwalte Vorschläge für Buchungsaufteilungen. Du bestätigst jede Aufteilung in der Prüfliste.</p></div><div class="accounts-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 18)}</button></div></div><p class="status-message" data-rule-message role="status" aria-live="polite" aria-atomic="true">${escapeHtml(this._ruleMessage)}</p>${body}</div></main>`);
+  }
+
+  _bookingRuleHintTemplate(booking, index) {
+    if (booking.status === "resolved") return "";
+    const status = ruleStatusLabel(booking.status);
+    const heading = `booking-rule-${index}`;
+    if (booking.status === "suggested" && booking.suggestion) {
+      const suggestion = booking.suggestion;
+      return `<section class="booking-rule-hint" aria-labelledby="${heading}"><h3 id="${heading}">${escapeHtml(status)}: ${escapeHtml(suggestion.rule_label || suggestion.rule_id)}</h3><p>${escapeHtml(suggestion.reason || "Passende Regel gefunden.")}</p><ul>${(suggestion.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row))}</li>`).join("")}</ul><p>Die Übernahme füllt nur den Entwurf. Erst „Aufteilung speichern“ bestätigt die Buchung.</p><button class="table-edit-button" type="button" data-accept-suggestion="${escapeHtml(booking.id)}"${this._allocationSubmissions.has(String(booking.id)) || !suggestion.allocations?.length ? " disabled" : ""}>Vorschlag übernehmen</button></section>`;
+    }
+    if (booking.status === "conflict") {
+      const rules = conflictRuleIds(booking).map((id) => this._rules.find((rule) => rule.id === id)?.label || `Regel ${id}`);
+      return `<section class="booking-rule-hint booking-rule-hint--conflict" aria-labelledby="${heading}"><h3 id="${heading}">${escapeHtml(status)}</h3><p>Mehrere Regeln mit gleicher Priorität passen. Prüfe die Regeln oder teile diese Buchung manuell auf.</p><ul>${rules.map((label) => `<li>${escapeHtml(label)}</li>`).join("")}</ul><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button></section>`;
+    }
+    return `<section class="booking-rule-hint" aria-labelledby="${heading}"><h3 id="${heading}">${escapeHtml(status)}</h3><p>${escapeHtml(booking.reason || "Bitte die Aufteilung manuell prüfen.")}</p><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button></section>`;
+  }
+
+  _confirmedBookingsTemplate() {
+    if (!this._confirmedBookings.size) return "";
+    return `<section aria-labelledby="confirmed-bookings-heading"><h3 id="confirmed-bookings-heading">Aufteilung gespeichert</h3><p>Du kannst aus einer bestätigten Aufteilung eine Regel vorbereiten.</p><ul class="confirmed-bookings">${[...this._confirmedBookings.values()].map((booking) => `<li><span>${escapeHtml(booking.counterparty || booking.purpose || "Buchung")} · ${formatEuro(booking.amount)}</span><button class="table-edit-button" type="button" data-rule-from-booking="${escapeHtml(booking.id)}" aria-label="${escapeHtml(booking.counterparty || "Buchung")} als Regel speichern">Als Regel speichern</button></li>`).join("")}</ul></section>`;
+  }
+
   _allocationTargetOptions(selectedTarget) {
     return [
       `<option value=""${selectedTarget ? "" : " selected"}>Ziel auswählen</option>`,
       `<option value="household"${selectedTarget === "household" ? " selected" : ""}>Haushalt</option>`,
+      ...(selectedTarget && selectedTarget !== "household" && !this._persons.some((person) => person.entity_id === selectedTarget)
+        ? [`<option value="${escapeHtml(selectedTarget)}" selected disabled>${escapeHtml(selectedTarget)} (Person fehlt) – bitte ersetzen</option>`] : []),
       ...this._persons.map((person) => `<option value="${escapeHtml(person.entity_id)}"${selectedTarget === person.entity_id ? " selected" : ""}>${escapeHtml(person.name || person.entity_id)}</option>`),
     ].join("");
   }
@@ -3282,7 +3783,7 @@ class FinanzplanerPanel extends HTMLElement {
         <button class="allocation-remove" type="button" data-allocation-remove data-allocation-index="${rowIndex}" aria-label="Zeile ${rowIndex + 1} aus der Aufteilung für ${escapeHtml(purpose)} entfernen">Entfernen</button>
       </li>`;
     }).join("");
-    return `<fieldset class="allocation-editor" aria-describedby="${summaryId} ${statusId}">
+    return `<fieldset class="allocation-editor" aria-describedby="${summaryId} ${statusId}"${this._allocationSubmissions.has(bookingId) ? " disabled" : ""}>
       <legend>Aufteilung</legend>
       <ul class="allocation-list" aria-label="Aufteilungszeilen">${rowMarkup}</ul>
       <p class="allocation-summary" id="${summaryId}" aria-live="polite"><span>Gesamt <strong>${formatEuro(total)}</strong></span><span>Zugeordnet <strong data-allocation-allocated>${allocated === null ? "—" : formatEuro(allocated)}</strong></span><span>Verbleibend <strong data-allocation-remaining class="${submitState.invalidAmount || remaining !== 0 ? "allocation-summary--open" : ""}">${submitState.invalidAmount ? "—" : formatEuro(remaining)}</strong></span></p>
@@ -3291,10 +3792,13 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _reviewTemplate() {
-    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking, index) => {
+    const bookingList = this._reviewLoading ? `<p class="empty-state" role="status">Buchungen werden geladen …</p>`
+      : this._reviewLoadFailed ? `<div class="empty-state"><p>Die Prüfliste konnte nicht geladen werden.</p><button class="table-edit-button" type="button" data-action="review">Erneut laden</button></div>`
+        : this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking, index) => {
       const total = Math.abs(Number(booking.amount) || 0);
-      return `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${escapeHtml(booking.purpose || booking.counterparty || "Ohne Verwendungszweck")}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._allocationEditorTemplate(booking, index)}</form></li>`;
-    }).join("")}</ul>` : `<div class="empty-state">Noch keine importierten Buchungen in der Prüfliste. Lade eine Bankdatei hoch oder importiere eine Excel-Vorlage.</div>`}</div></main>`;
+      return `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${escapeHtml(booking.purpose || booking.counterparty || "Ohne Verwendungszweck")}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
+    }).join("")}</ul>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
     return this._shellTemplate(content);
   }
 }
