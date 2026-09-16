@@ -3,6 +3,7 @@ import { accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocat
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const PLAN_ITEMS_URL = "/api/finanzplaner/plan-items";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
+const PETS_URL = "/api/finanzplaner/pets";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
 const BOOKINGS_URL = "/api/finanzplaner/bookings";
@@ -334,9 +335,10 @@ const styles = `
   .allocation-editor { grid-column: 1 / -1; min-inline-size: 0; margin: 0; padding: 0.85rem 0 0; border: 0; border-block-start: 1px solid var(--fp-line); }
   .allocation-editor legend { padding: 0; color: var(--fp-ink); font-size: 0.82rem; font-weight: 800; }
   .allocation-list { display: grid; gap: 0.65rem; margin: 0.7rem 0 0; padding: 0; list-style: none; }
-  .allocation-row { min-inline-size: 0; display: grid; grid-template-columns: minmax(9rem, 1.2fr) minmax(7rem, 0.65fr) minmax(7rem, 0.8fr) minmax(7rem, 1fr) minmax(7rem, 1fr) auto; align-items: end; gap: 0.55rem; }
+  .allocation-row { min-inline-size: 0; display: grid; grid-template-columns: minmax(9rem, 1.2fr) minmax(7rem, 0.65fr) minmax(9rem, 1fr) minmax(7rem, 0.8fr) minmax(7rem, 1fr) minmax(7rem, 1fr) auto; align-items: end; gap: 0.55rem; }
   .allocation-field { min-inline-size: 0; display: grid; gap: 0.3rem; color: var(--fp-muted); font-size: 0.72rem; font-weight: 700; }
   .allocation-field input, .allocation-field select { min-inline-size: 0; inline-size: 100%; min-block-size: 2.5rem; padding: 0.4rem 0.5rem; border: 1px solid var(--fp-control-border); border-radius: 0.4rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .allocation-pet { min-inline-size: 0; }
   .allocation-remove { min-block-size: 2.5rem; padding: 0.4rem 0.65rem; border: 1px solid var(--fp-control-border); border-radius: 0.4rem; color: var(--fp-coral); background: var(--fp-paper-strong); font-size: 0.78rem; font-weight: 800; }
   .allocation-remove:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
   .allocation-summary { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin: 0.8rem 0 0; padding: 0.65rem 0.75rem; border-radius: 0.45rem; color: var(--fp-muted); background: rgb(23 40 62 / 0.06); font-size: 0.78rem; }
@@ -407,6 +409,27 @@ const styles = `
   .plan-item-save:disabled { cursor: wait; opacity: 0.55; }
   .plan-item-new-row { display: flex; justify-content: flex-end; margin-block-start: 1rem; }
   .plan-item-help { max-inline-size: 70ch; margin: 0.8rem 0 0; color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
+  .pets-view { max-inline-size: 62rem; padding-block: 1.8rem; }
+  .pets-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .pets-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
+  .pets-view-header p { max-inline-size: 48rem; margin: 0.5rem 0 0; color: var(--fp-muted); line-height: 1.45; }
+  .pet-list { display: grid; gap: 1rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+  .pet-card { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(10rem, 0.75fr); gap: 1rem; padding: 1.1rem; }
+  .pet-card--archived { background: rgb(247 247 244 / 0.7); }
+  .pet-card-header { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-block-end: 0.75rem; border-block-end: 1px solid var(--fp-line); }
+  .pet-card-header h3 { min-inline-size: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--fp-display); font-size: 1.3rem; line-height: 1; }
+  .pet-card-header p { flex: 0 0 auto; margin: 0; color: var(--fp-muted); font-size: 0.76rem; }
+  .pet-field { min-inline-size: 0; display: grid; align-content: start; gap: 0.35rem; color: var(--fp-muted); font-size: 0.78rem; font-weight: 700; }
+  .pet-field input { inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-control-border); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .pet-card-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.8rem; padding-block-start: 0.75rem; border-block-start: 1px solid var(--fp-line); }
+  .pet-save-status { flex: 1; min-block-size: 1.2rem; margin: 0; color: var(--fp-muted); font-size: 0.78rem; overflow-wrap: anywhere; }
+  .pet-save-status--error { color: var(--fp-coral); font-weight: 700; }
+  .pet-save, .pet-archive { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; font-weight: 800; }
+  .pet-save { color: var(--fp-paper); background: var(--fp-navy); }
+  .pet-save:hover { background: var(--fp-navy-deep); }
+  .pet-save:disabled { cursor: wait; opacity: 0.55; }
+  .pet-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
+  .pet-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
   .empty-state { margin-block-start: 1rem; padding: 2rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); text-align: center; }
 
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
@@ -437,6 +460,7 @@ const styles = `
     .plan-item-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .plan-item-field--wide, .plan-item-target { grid-column: span 2; }
     .plan-item-schedule { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pet-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
   @media (max-width: 45rem) {
@@ -467,7 +491,7 @@ const styles = `
     .statusbar { display: block; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
-    .review-view-header, .accounts-view-header, .plan-items-view-header, .import-strip, .excel-review-header { display: block; }
+    .review-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .import-strip, .excel-review-header { display: block; }
     .back-button { margin-block-start: 1rem; }
     .accounts-actions { margin-block-start: 1rem; }
     .account-card { grid-template-columns: 1fr; }
@@ -477,6 +501,9 @@ const styles = `
     .plan-item-fields, .plan-item-schedule { grid-template-columns: 1fr; }
     .plan-item-field--wide, .plan-item-target { grid-column: 1; }
     .plan-item-save, .plan-item-archive, .plan-item-new { inline-size: 100%; }
+    .pet-card { grid-template-columns: 1fr; }
+    .pet-card-actions { align-items: stretch; flex-direction: column; }
+    .pet-save, .pet-archive { inline-size: 100%; }
     .plan-item-new-row { display: block; }
     .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
     .excel-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -489,7 +516,7 @@ const styles = `
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input { border: 1px solid CanvasText; box-shadow: none; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -654,6 +681,12 @@ class FinanzplanerPanel extends HTMLElement {
     this._allocationSubmissions = new Set();
     this._allocationErrors = new Map();
     this._accountDrafts = new Map();
+    this._pets = [];
+    this._petsLoading = false;
+    this._petsLoadFailed = false;
+    this._petDrafts = new Map();
+    this._petSubmissions = new Set();
+    this._petErrors = new Map();
     this._excelPreview = null;
     this._message = "";
     this._loading = false;
@@ -701,24 +734,39 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _loadReviewData() {
-    const [bookingResponse, personsResponse] = await Promise.all([
+    const [bookingResponse, personsResponse, petsResponse] = await Promise.all([
       fetchWithHomeAssistantAuth(this._hass, REVIEW_URL),
       fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
+      fetchWithHomeAssistantAuth(this._hass, PETS_URL),
     ]);
-    const [bookingResult, personsResult] = await Promise.all([
+    const [bookingResult, personsResult, petsResult] = await Promise.all([
       readApiResponse(bookingResponse),
       readApiResponse(personsResponse),
+      readApiResponse(petsResponse),
     ]);
-    if (!bookingResponse.ok) {
-      throw new Error(apiErrorMessage(bookingResult, `HTTP ${bookingResponse.status}`));
+    if (!bookingResponse.ok || !petsResponse.ok) {
+      const failedResult = !bookingResponse.ok ? bookingResult : petsResult;
+      const failedResponse = !bookingResponse.ok ? bookingResponse : petsResponse;
+      throw new Error(apiErrorMessage(failedResult, `HTTP ${failedResponse.status}`));
     }
     this._bookings = bookingResult.bookings || [];
     this._persons = personsResponse.ok ? (personsResult.persons || []) : [];
+    this._pets = petsResponse.ok ? (petsResult.pets || []) : [];
     const bookingIds = new Set(this._bookings.map((booking) => String(booking.id)));
     for (const booking of this._bookings) {
       const bookingId = String(booking.id);
       if (!this._allocationDrafts.has(bookingId)) {
-        this._allocationDrafts.set(bookingId, equalAllocationDraft(booking.amount, ["household"]));
+        const storedAllocations = Array.isArray(booking.allocations) && booking.allocations.length
+          ? booking.allocations.map((allocation) => ({
+            target: allocation.target || "",
+            amount: Number(allocation.amount) || 0,
+            area: allocation.area || null,
+            category: allocation.category || null,
+            project: allocation.project || null,
+            pet_id: allocation.pet_id || null,
+          }))
+          : equalAllocationDraft(booking.amount, ["household"]);
+        this._allocationDrafts.set(bookingId, storedAllocations);
       }
     }
     for (const bookingId of this._allocationDrafts.keys()) {
@@ -778,6 +826,53 @@ class FinanzplanerPanel extends HTMLElement {
     this._render();
   }
 
+  _newPetDraft() {
+    return { name: "", pet_type: "", active: true };
+  }
+
+  _petDraftFromPet(pet) {
+    return {
+      name: pet.name || "",
+      pet_type: pet.pet_type || "",
+      active: pet.active !== false,
+    };
+  }
+
+  async _loadPets() {
+    const response = await fetchWithHomeAssistantAuth(this._hass, PETS_URL);
+    const result = await readApiResponse(response);
+    if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+    this._pets = Array.isArray(result.pets) ? result.pets : [];
+    if (!this._petDrafts.has("new")) this._petDrafts.set("new", this._newPetDraft());
+    const petIds = new Set(this._pets.map((pet) => String(pet.id)));
+    for (const pet of this._pets) {
+      const petId = String(pet.id);
+      if (!this._petDrafts.has(petId)) this._petDrafts.set(petId, this._petDraftFromPet(pet));
+    }
+    for (const petId of this._petDrafts.keys()) {
+      if (petId !== "new" && !petIds.has(petId)) this._petDrafts.delete(petId);
+    }
+  }
+
+  async _openPets() {
+    this._view = "pets";
+    this._message = "";
+    this._petsLoading = true;
+    this._petsLoadFailed = false;
+    this._render();
+    this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
+    try {
+      await this._loadPets();
+    } catch (error) {
+      this._pets = [];
+      this._petsLoadFailed = true;
+      this._message = error.message || "Tiere konnten nicht geladen werden.";
+    } finally {
+      this._petsLoading = false;
+    }
+    this._render();
+  }
+
   _newPlanItemDraft() {
     return {
       name: "",
@@ -793,6 +888,7 @@ class FinanzplanerPanel extends HTMLElement {
       start_date: "",
       end_date: "",
       target: "household",
+      pet_id: "",
       active: true,
     };
   }
@@ -813,25 +909,29 @@ class FinanzplanerPanel extends HTMLElement {
       start_date: item.start_date || "",
       end_date: item.end_date || "",
       target: item.target || "",
+      pet_id: item.pet_id || "",
       active: item.active !== false,
     };
   }
 
   async _loadPlanItems() {
-    const [planResponse, personsResponse] = await Promise.all([
+    const [planResponse, personsResponse, petsResponse] = await Promise.all([
       fetchWithHomeAssistantAuth(this._hass, PLAN_ITEMS_URL),
       fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
+      fetchWithHomeAssistantAuth(this._hass, PETS_URL),
     ]);
-    const [planResult, personsResult] = await Promise.all([
+    const [planResult, personsResult, petsResult] = await Promise.all([
       readApiResponse(planResponse),
       readApiResponse(personsResponse),
+      readApiResponse(petsResponse),
     ]);
-    if (!planResponse.ok || !personsResponse.ok) {
-      const failedResult = !planResponse.ok ? planResult : personsResult;
-      throw new Error(apiErrorMessage(failedResult, "Planposten oder Personen konnten nicht geladen werden."));
+    if (!planResponse.ok || !personsResponse.ok || !petsResponse.ok) {
+      const failedResult = !planResponse.ok ? planResult : !personsResponse.ok ? personsResult : petsResult;
+      throw new Error(apiErrorMessage(failedResult, "Planposten, Personen oder Tiere konnten nicht geladen werden."));
     }
     this._planItems = Array.isArray(planResult.plan_items) ? planResult.plan_items : [];
     this._persons = Array.isArray(personsResult.persons) ? personsResult.persons : [];
+    this._pets = Array.isArray(petsResult.pets) ? petsResult.pets : [];
     if (!this._planItemDrafts.has("new")) this._planItemDrafts.set("new", this._newPlanItemDraft());
     const itemIds = new Set(this._planItems.map((item) => String(item.id)));
     for (const item of this._planItems) {
@@ -857,6 +957,7 @@ class FinanzplanerPanel extends HTMLElement {
     } catch (error) {
       this._planItems = [];
       this._persons = [];
+      this._pets = [];
       this._planItemsLoadFailed = true;
       this._message = error.message || "Planposten konnten nicht geladen werden.";
     } finally {
@@ -881,6 +982,7 @@ class FinanzplanerPanel extends HTMLElement {
       start_date: value("start_date"),
       end_date: value("end_date"),
       target: value("target"),
+      pet_id: value("pet_id"),
       active: Boolean(form.querySelector("[data-plan-item-field='active']")?.checked),
     };
   }
@@ -916,6 +1018,7 @@ class FinanzplanerPanel extends HTMLElement {
       start_date: optional(draft.start_date),
       end_date: optional(draft.end_date),
       target: optional(draft.target),
+      pet_id: optional(draft.pet_id),
       active: draft.active !== false,
     };
   }
@@ -994,6 +1097,100 @@ class FinanzplanerPanel extends HTMLElement {
       button.disabled = false;
     } finally {
       this._planItemSubmissions.delete(itemId);
+    }
+  }
+
+  _capturePetDraft(form) {
+    const value = (field) => form.querySelector(`[data-pet-field="${field}"]`)?.value ?? "";
+    return {
+      name: value("name"),
+      pet_type: value("pet_type"),
+      active: Boolean(form.querySelector("[data-pet-field='active']")?.checked),
+    };
+  }
+
+  _updatePetDraft(event) {
+    const form = event.currentTarget.closest("[data-pet-form]");
+    if (!form) return;
+    const petId = String(form.dataset.petId);
+    this._petDrafts.set(petId, this._capturePetDraft(form));
+    this._petErrors.delete(petId);
+    const status = form.querySelector("[data-pet-save-status]");
+    status?.classList.remove("pet-save-status--error");
+    if (status) status.textContent = "";
+  }
+
+  async _handlePetSave(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const petId = String(form.dataset.petId);
+    if (this._petSubmissions.has(petId)) return;
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+    const draft = this._capturePetDraft(form);
+    this._petDrafts.set(petId, draft);
+    const button = form.querySelector("[type='submit']");
+    const status = form.querySelector("[data-pet-save-status]");
+    this._petSubmissions.add(petId);
+    form.setAttribute("aria-busy", "true");
+    if (button) button.disabled = true;
+    if (status) status.textContent = "Tier wird gespeichert …";
+    const url = petId === "new" ? PETS_URL : `${PETS_URL}/${encodeURIComponent(petId)}`;
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Das Tier konnte nicht gespeichert werden."));
+      this._petDrafts.delete(petId);
+      this._petErrors.delete(petId);
+      this._message = petId === "new" ? "Tier angelegt." : "Tier gespeichert.";
+      await this._loadPets();
+      this._render();
+    } catch (error) {
+      this._petErrors.set(petId, error.message || "Das Tier konnte nicht gespeichert werden.");
+      if (status) {
+        status.textContent = this._petErrors.get(petId);
+        status.classList.add("pet-save-status--error");
+      }
+      if (button) button.disabled = false;
+      form.removeAttribute("aria-busy");
+    } finally {
+      this._petSubmissions.delete(petId);
+    }
+  }
+
+  async _archivePet(event) {
+    const button = event.currentTarget;
+    const petId = String(button.dataset.petId);
+    const pet = this._pets.find((candidate) => String(candidate.id) === petId);
+    if (!pet || !window.confirm(`„${pet.name || "Tier"}“ archivieren?`)) return;
+    if (this._petSubmissions.has(petId)) return;
+    const form = button.closest("[data-pet-form]");
+    const status = form?.querySelector("[data-pet-save-status]");
+    this._petSubmissions.add(petId);
+    button.disabled = true;
+    if (status) status.textContent = "Tier wird archiviert …";
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${PETS_URL}/${encodeURIComponent(petId)}`, { method: "DELETE" });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Das Tier konnte nicht archiviert werden."));
+      this._petDrafts.delete(petId);
+      this._message = "Tier archiviert. Historische Zuordnungen bleiben erhalten.";
+      await this._loadPets();
+      this._render();
+    } catch (error) {
+      if (status) {
+        status.textContent = error.message || "Das Tier konnte nicht archiviert werden.";
+        status.classList.add("pet-save-status--error");
+      }
+      button.disabled = false;
+    } finally {
+      this._petSubmissions.delete(petId);
     }
   }
 
@@ -1190,6 +1387,7 @@ class FinanzplanerPanel extends HTMLElement {
       area: row.area || null,
       category: row.category || null,
       project: row.project || null,
+      pet_id: row.pet_id || null,
     }));
     this._allocationSubmissions.add(bookingId);
     form.setAttribute("aria-busy", "true");
@@ -1361,6 +1559,8 @@ class FinanzplanerPanel extends HTMLElement {
       ? this._reviewTemplate()
       : this._view === "plan_items"
         ? this._planItemsTemplate()
+        : this._view === "pets"
+          ? this._petsTemplate()
         : this._view === "accounts"
           ? this._accountsTemplate()
           : this._overviewTemplate();
@@ -1391,6 +1591,12 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-account-label], [data-account-bank], [data-account-iban]").forEach((input) => input.addEventListener("input", (event) => this._updateAccountDraft(event)));
     this.shadowRoot.querySelectorAll("[data-account-owners]").forEach((select) => select.addEventListener("change", (event) => { this._updateAccountDraft(event); this._updateAccountOwnerStatus(event); }));
     this.shadowRoot.querySelectorAll("[data-account-active]").forEach((input) => input.addEventListener("change", (event) => { this._updateAccountDraft(event); this._updateAccountActiveStatus(event); }));
+    this.shadowRoot.querySelectorAll("[data-pet-form]").forEach((form) => form.addEventListener("submit", (event) => this._handlePetSave(event)));
+    this.shadowRoot.querySelectorAll("[data-pet-field]").forEach((input) => {
+      input.addEventListener("input", (event) => this._updatePetDraft(event));
+      input.addEventListener("change", (event) => this._updatePetDraft(event));
+    });
+    this.shadowRoot.querySelectorAll("[data-pet-archive]").forEach((button) => button.addEventListener("click", (event) => this._archivePet(event)));
     this.shadowRoot.querySelectorAll("[data-plan-item-form]").forEach((form) => form.addEventListener("submit", (event) => this._handlePlanItemSave(event)));
     this.shadowRoot.querySelectorAll("[data-plan-item-field]").forEach((input) => {
       input.addEventListener("input", (event) => this._updatePlanItemDraft(event));
@@ -1401,9 +1607,10 @@ class FinanzplanerPanel extends HTMLElement {
       if (button.dataset.nav === "review") this._openReview();
       else if (button.dataset.nav === "plan_items") this._openPlanItems();
       else if (button.dataset.nav === "accounts") this._openAccounts();
+      else if (button.dataset.nav === "pets") this._openPets();
       else if (button.dataset.nav === "overview") this._view = "overview";
       else this._message = `${button.textContent.trim()} ist für die nächste Ausbaustufe vorbereitet.`;
-      if (!["review", "accounts"].includes(button.dataset.nav)) this._render();
+      if (!["review", "accounts", "pets", "plan_items"].includes(button.dataset.nav)) this._render();
     }));
   }
 
@@ -1416,6 +1623,7 @@ class FinanzplanerPanel extends HTMLElement {
       ["tasks", "tasks", "Aufgaben"],
       ["household", "household", "Haushalt"],
       ["people", "people", "Personen"],
+      ["pets", "paw", "Tiere"],
       ["accounts", "settings", "Konten"],
     ];
     return items.map(([id, iconName, label]) => {
@@ -1511,6 +1719,19 @@ class FinanzplanerPanel extends HTMLElement {
     return targets.map(([value, label]) => `<option value="${escapeHtml(value)}"${String(selectedTarget || "") === String(value) ? " selected" : ""}>${escapeHtml(label)}</option>`).join("");
   }
 
+  _petOptions(selectedPetId, { includeEmpty = true } = {}) {
+    const options = includeEmpty ? [`<option value=""${selectedPetId ? "" : " selected"}>Kein Tier</option>`] : [];
+    const pets = [...this._pets];
+    if (selectedPetId && !pets.some((pet) => String(pet.id) === String(selectedPetId))) {
+      pets.push({ id: selectedPetId, name: `Nicht mehr verfügbar: ${selectedPetId}`, active: false });
+    }
+    options.push(...pets.filter((pet) => pet.active !== false || String(pet.id) === String(selectedPetId)).map((pet) => {
+      const label = pet.active === false ? `${pet.name || pet.id} (archiviert)` : (pet.name || pet.id);
+      return `<option value="${escapeHtml(pet.id)}"${String(selectedPetId || "") === String(pet.id) ? " selected" : ""}>${escapeHtml(label)}</option>`;
+    }));
+    return options.join("");
+  }
+
   _planItemFormTemplate(item, index, isNew = false) {
     const itemId = isNew ? "new" : String(item.id);
     const draft = this._planItemDrafts.get(itemId)
@@ -1536,6 +1757,7 @@ class FinanzplanerPanel extends HTMLElement {
         <label class="plan-item-field" for="${fieldId("area")}">Bereich<input id="${fieldId("area")}" name="area" data-plan-item-field="area" type="text" value="${escapeHtml(draft.area || "")}" maxlength="120" autocomplete="off" placeholder="z. B. Hunde"></label>
         <label class="plan-item-field" for="${fieldId("project")}">Projekt<input id="${fieldId("project")}" name="project" data-plan-item-field="project" type="text" value="${escapeHtml(draft.project || "")}" maxlength="120" autocomplete="off" placeholder="optional"></label>
         <label class="plan-item-field plan-item-target" for="${fieldId("target")}">Planungsziel<select id="${fieldId("target")}" name="target" data-plan-item-field="target">${this._planItemTargetOptions(draft.target)}</select></label>
+        <label class="plan-item-field plan-item-target" for="${fieldId("pet_id")}">Tier (optional)<select id="${fieldId("pet_id")}" name="pet_id" data-plan-item-field="pet_id">${this._petOptions(draft.pet_id)}</select><small>Bleibt unabhängig von Person oder Haushalt erhalten.</small></label>
       </div>
       <fieldset class="plan-item-schedule"><legend>Rhythmus und Gültigkeit</legend>
         <label class="plan-item-field" for="${fieldId("frequency_months")}">Rhythmus<select id="${fieldId("frequency_months")}" name="frequency_months" data-plan-item-field="frequency_months">${this._planItemFrequencyOptions(draft.frequency_months)}</select></label>
@@ -1557,6 +1779,33 @@ class FinanzplanerPanel extends HTMLElement {
     const activeCount = this._planItems.filter((item) => item.active !== false).length;
     const content = `<main class="main" id="content" tabindex="-1"><div class="plan-items-view"><div class="plan-items-view-header"><div><h2>Planposten verwalten</h2><p>Ersetze deine Excel-Planung Schritt für Schritt: Betrag, Richtung, Rhythmus, Fälligkeit und fachliche Zuordnung bleiben direkt bearbeitbar.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Planposten</strong> · Einnahmen werden positiv, Ausgaben und Rücklagen negativ in der Übersicht berücksichtigt. Archivierte Einträge bleiben erhalten und können wieder aktiviert werden.</p>${list}</div></main>`;
     return this._shellTemplate(content);
+  }
+
+  _petsTemplate() {
+    const list = this._petsLoading
+      ? `<div class="empty-state">Tiere werden geladen …</div>`
+      : this._petsLoadFailed
+        ? `<div class="empty-state">Tiere stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
+        : `<ul class="pet-list" aria-label="Tiere"><li>${this._petFormTemplate({}, 0, true)}</li>${this._pets.map((pet, index) => `<li>${this._petFormTemplate(pet, index + 1)}</li>`).join("")}</ul>`;
+    const activeCount = this._pets.filter((pet) => pet.active !== false).length;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="pets-view"><div class="pets-view-header"><div><h2>Tiere verwalten</h2><p>Verwalte eigene Tierprofile für Futter und andere Zuordnungen. Tiere sind keine Home-Assistant-Personen; historische Buchungen behalten ihren damaligen Namen.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Tiere</strong> · Archivierte Profile bleiben für historische Zuordnungen auswählbar, aber nicht für neue Planposten.</p>${list}</div></main>`;
+    return this._shellTemplate(content);
+  }
+
+  _petFormTemplate(pet, index, isNew = false) {
+    const petId = isNew ? "new" : String(pet.id);
+    const draft = this._petDrafts.get(petId) || (isNew ? this._newPetDraft() : this._petDraftFromPet(pet));
+    const active = draft.active !== false;
+    const title = isNew ? "Neues Tier anlegen" : (draft.name || "Tier");
+    const fieldId = (field) => `pet-${field}-${isNew ? "new" : index}`;
+    const error = this._petErrors.get(petId) || "";
+    const action = isNew ? PETS_URL : `${PETS_URL}/${encodeURIComponent(petId)}`;
+    return `<form class="surface pet-card${active ? "" : " pet-card--archived"}" action="${escapeHtml(action)}" method="post" data-pet-form data-pet-id="${escapeHtml(petId)}" aria-labelledby="${fieldId("heading")}"${this._petSubmissions.has(petId) ? " aria-busy=\"true\"" : ""}>
+      <div class="pet-card-header"><h3 id="${fieldId("heading")}">${escapeHtml(title)}</h3><span class="plan-item-status${active ? "" : " plan-item-status--archived"}">${planItemStatus(active)}</span><p>${isNew ? "Manuell angelegt" : "Tierprofil"}</p></div>
+      <label class="pet-field" for="${fieldId("name")}">Name<input id="${fieldId("name")}" name="name" data-pet-field="name" type="text" value="${escapeHtml(draft.name || "")}" maxlength="80" autocomplete="off" required></label>
+      <label class="pet-field" for="${fieldId("pet_type")}">Tier-Typ (optional)<input id="${fieldId("pet_type")}" name="pet_type" data-pet-field="pet_type" type="text" value="${escapeHtml(draft.pet_type || "")}" maxlength="60" autocomplete="off" placeholder="z. B. Hund, Katze"></label>
+      <div class="pet-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-pet-field="active" type="checkbox"${active ? " checked" : ""}>Tierprofil aktiv</label><p class="pet-save-status${error ? " pet-save-status--error" : ""}" data-pet-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="pet-archive" type="button" data-pet-archive data-pet-id="${escapeHtml(petId)}">Archivieren</button>` : ""}<button class="pet-save" type="submit"${this._petSubmissions.has(petId) ? " disabled" : ""}>${isNew ? "Tier anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
+    </form>`;
   }
 
   _accountsTemplate() {
@@ -1674,6 +1923,7 @@ class FinanzplanerPanel extends HTMLElement {
     const rowMarkup = rows.map((row, rowIndex) => {
       const targetId = `allocation-target-${bookingIndex}-${rowIndex}`;
       const amountId = `allocation-amount-${bookingIndex}-${rowIndex}`;
+      const petId = `allocation-pet-${bookingIndex}-${rowIndex}`;
       const areaId = `allocation-area-${bookingIndex}-${rowIndex}`;
       const categoryId = `allocation-category-${bookingIndex}-${rowIndex}`;
       const projectId = `allocation-project-${bookingIndex}-${rowIndex}`;
@@ -1681,7 +1931,8 @@ class FinanzplanerPanel extends HTMLElement {
       return `<li class="allocation-row">
         <label class="allocation-field" for="${targetId}">Ziel<select id="${targetId}" data-allocation-field="target" data-allocation-index="${rowIndex}" required>${this._allocationTargetOptions(row.target)}</select></label>
         <label class="allocation-field" for="${amountId}">Betrag in Euro<input id="${amountId}" data-allocation-field="amount" data-allocation-index="${rowIndex}" type="text" inputmode="decimal" value="${escapeHtml(row.amount_input ?? (Number.isFinite(amount) ? amount.toFixed(2) : ""))}" required></label>
-        <label class="allocation-field" for="${areaId}">Bereich<select id="${areaId}" data-allocation-field="area" data-allocation-index="${rowIndex}"><option value=""${row.area ? "" : " selected"}>Kein Bereich</option><option value="Hunde"${row.area === "Hunde" ? " selected" : ""}>Hunde</option></select></label>
+        <label class="allocation-field allocation-pet" for="${petId}">Tier (optional)<select id="${petId}" data-allocation-field="pet_id" data-allocation-index="${rowIndex}">${this._petOptions(row.pet_id)}</select></label>
+        <label class="allocation-field" for="${areaId}">Bereich<input id="${areaId}" data-allocation-field="area" data-allocation-index="${rowIndex}" type="text" maxlength="120" value="${escapeHtml(row.area || "")}" autocomplete="off" placeholder="z. B. Haustiere"></label>
         <label class="allocation-field" for="${categoryId}">Kategorie (optional)<input id="${categoryId}" data-allocation-field="category" data-allocation-index="${rowIndex}" type="text" value="${escapeHtml(row.category || "")}" autocomplete="off"></label>
         <label class="allocation-field" for="${projectId}">Projekt (optional)<input id="${projectId}" data-allocation-field="project" data-allocation-index="${rowIndex}" type="text" value="${escapeHtml(row.project || "")}" autocomplete="off"></label>
         <button class="allocation-remove" type="button" data-allocation-remove data-allocation-index="${rowIndex}" aria-label="Zeile ${rowIndex + 1} aus der Aufteilung für ${escapeHtml(purpose)} entfernen">Entfernen</button>

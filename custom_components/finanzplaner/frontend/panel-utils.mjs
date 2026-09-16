@@ -84,6 +84,7 @@ export function addAllocationDraftRow(total, allocations = []) {
       area: current.area ?? null,
       category: current.category ?? null,
       project: current.project ?? null,
+      ...(Object.hasOwn(current, "pet_id") ? { pet_id: current.pet_id ?? null } : {}),
       ...(current && Object.hasOwn(current, "amount_input")
         ? { amount_input: current.amount_input }
         : {}),

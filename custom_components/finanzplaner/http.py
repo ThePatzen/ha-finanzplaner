@@ -22,6 +22,7 @@ from .core import (
     parse_camt053,
     parse_mt940,
     plan_item_totals,
+    validate_pet_payload,
     validate_plan_item_payload,
     split_amount,
 )
@@ -349,6 +350,48 @@ def plan_item_payload(item: dict[str, object]) -> dict[str, object]:
     return _response_payload(dict(item))  # type: ignore[return-value]
 
 
+def pet_payload(pet: dict[str, object]) -> dict[str, object]:
+    """Return one pet profile for the authenticated panel API."""
+
+    return _response_payload(dict(pet))  # type: ignore[return-value]
+
+
+def _pet_records(
+    coordinator: FinanzplanerCoordinator,
+    *,
+    active_only: bool = False,
+) -> dict[str, dict[str, object]]:
+    pets = coordinator.store.data.get("pets", [])
+    if not isinstance(pets, list):
+        return {}
+    return {
+        str(pet["id"]): pet
+        for pet in pets
+        if isinstance(pet, dict)
+        and isinstance(pet.get("id"), str)
+        and (not active_only or pet.get("active", True) is not False)
+    }
+
+
+def _allocation_pet_records(
+    coordinator: FinanzplanerCoordinator,
+    booking: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    """Allow active pets plus snapshots already attached to this booking."""
+
+    pets = _pet_records(coordinator, active_only=True)
+    all_pets = _pet_records(coordinator)
+    allocations = booking.get("allocations", [])
+    if isinstance(allocations, list):
+        for allocation in allocations:
+            if not isinstance(allocation, dict):
+                continue
+            pet_id = allocation.get("pet_id")
+            if isinstance(pet_id, str) and pet_id in all_pets:
+                pets[pet_id] = all_pets[pet_id]
+    return pets
+
+
 def _valid_plan_targets(hass: Any) -> set[str]:
     return {
         "household",
@@ -384,6 +427,7 @@ def _plan_item_draft(item: dict[str, object]) -> dict[str, object]:
         "start_date": item.get("start_date"),
         "end_date": item.get("end_date"),
         "target": item.get("target"),
+        "pet_id": item.get("pet_id"),
         "active": item.get("active", True),
     }
 
@@ -604,6 +648,120 @@ class AccountView(HomeAssistantView):
         return self.json(_response_payload({"account": account_payload(account)}))
 
 
+class PetsView(HomeAssistantView):
+    """List and create locally managed pet profiles."""
+
+    url = "/api/finanzplaner/pets"
+    name = "api:finanzplaner:pets"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        pets = [] if coordinator is None else coordinator.store.data.get("pets", [])
+        if not isinstance(pets, list):
+            pets = []
+        return self.json(
+            _response_payload(
+                {
+                    "pets": [
+                        pet_payload(pet)
+                        for pet in pets
+                        if isinstance(pet, dict)
+                    ]
+                }
+            )
+        )
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Tierdaten sind kein gültiges JSON.") from exc
+        try:
+            values = validate_pet_payload(payload)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        pet = {
+            "id": f"pet-{uuid4().hex}",
+            **values,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        pets = coordinator.store.data.get("pets")
+        if not isinstance(pets, list):
+            pets = []
+            coordinator.store.data["pets"] = pets
+        pets.append(pet)
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"pet": pet_payload(pet)}))
+
+
+class PetView(HomeAssistantView):
+    """Update or reversibly archive one pet profile."""
+
+    url = "/api/finanzplaner/pets/{pet_id}"
+    name = "api:finanzplaner:pet"
+    requires_auth = True
+
+    def _find_pet(
+        self,
+        coordinator: FinanzplanerCoordinator,
+        pet_id: str,
+    ) -> dict[str, object] | None:
+        return _pet_records(coordinator).get(pet_id)
+
+    async def post(self, request: web.Request, pet_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        pet = self._find_pet(coordinator, pet_id)
+        if pet is None:
+            raise web.HTTPNotFound(text="Tier nicht gefunden.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Tierdaten sind kein gültiges JSON.") from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Tierdaten müssen ein Objekt sein.")
+        try:
+            values = validate_pet_payload(
+                {
+                    "name": pet.get("name", ""),
+                    "pet_type": pet.get("pet_type"),
+                    "active": pet.get("active", True),
+                    **payload,
+                }
+            )
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+        pet.update(values)
+        pet["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"pet": pet_payload(pet)}))
+
+    async def delete(self, request: web.Request, pet_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        pet = self._find_pet(coordinator, pet_id)
+        if pet is None:
+            raise web.HTTPNotFound(text="Tier nicht gefunden.")
+        pet["active"] = False
+        pet["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(
+            _response_payload({"pet": pet_payload(pet), "archived": True})
+        )
+
+
 class PlanItemsView(HomeAssistantView):
     """List plan items and create a new recurring or one-time plan item."""
 
@@ -646,6 +804,7 @@ class PlanItemsView(HomeAssistantView):
             values = validate_plan_item_payload(
                 payload,
                 _valid_plan_targets(request.app["hass"]),
+                valid_pets=_pet_records(coordinator, active_only=True),
             )
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
@@ -703,6 +862,7 @@ class PlanItemView(HomeAssistantView):
             values = validate_plan_item_payload(
                 {**_plan_item_draft(item), **payload},
                 _valid_plan_targets(request.app["hass"]),
+                valid_pets=_pet_records(coordinator),
             )
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
@@ -794,6 +954,7 @@ class BookingAssignmentView(HomeAssistantView):
         area = payload.get("area") or None
         category = payload.get("category")
         project = payload.get("project")
+        pet_id = payload.get("pet_id")
         try:
             split = split_amount(float(booking.get("amount", 0)), targets)
             allocations = parse_allocation_payload(
@@ -804,11 +965,13 @@ class BookingAssignmentView(HomeAssistantView):
                         "area": area,
                         "category": category,
                         "project": project,
+                        "pet_id": pet_id,
                     }
                     for allocation in split
                 ],
                 float(booking.get("amount", 0)),
                 valid_targets,
+                _allocation_pet_records(coordinator, booking),
             )
         except (TypeError, ValueError) as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
@@ -819,6 +982,9 @@ class BookingAssignmentView(HomeAssistantView):
                 "area": allocation.area,
                 "category": allocation.category,
                 "project": allocation.project,
+                "pet_id": allocation.pet_id,
+                "pet_name": allocation.pet_name,
+                "pet_type": allocation.pet_type,
             }
             for allocation in allocations
         ]
@@ -879,6 +1045,7 @@ class BookingAllocationsView(HomeAssistantView):
                 allocation_payload,
                 float(booking.get("amount", 0)),
                 valid_targets,
+                _allocation_pet_records(coordinator, booking),
             )
         except (TypeError, ValueError) as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
@@ -890,6 +1057,9 @@ class BookingAllocationsView(HomeAssistantView):
                 "area": allocation.area,
                 "category": allocation.category,
                 "project": allocation.project,
+                "pet_id": allocation.pet_id,
+                "pet_name": allocation.pet_name,
+                "pet_type": allocation.pet_type,
             }
             for allocation in allocations
         ]

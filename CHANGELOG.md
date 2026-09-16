@@ -12,6 +12,9 @@ Das Projekt verwendet Semantic Versioning:
 
 - Planposten-Ansicht mit authentifiziertem CRUD-API, Rhythmus, Fälligkeit und Gültigkeitszeitraum ergänzt
 - Planposten werden beim Archivieren deaktiviert und bleiben für eine spätere Reaktivierung erhalten
+- lokale Tierprofile mit stabilem Schlüssel, Tier-Typ und reversibler Archivierung ergänzt
+- optionale Tierreferenzen in Planposten und Buchungsaufteilungen ergänzt; historische Namen bleiben als Snapshot erhalten
+- Bereiche in Aufteilungen sind frei benennbar und nicht mehr auf eine feste Whitelist begrenzt
 
 ## [0.3.0] – 2026-09-15
 

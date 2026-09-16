@@ -68,11 +68,14 @@ Bereits geliefert:
 - Planposten-Ansicht mit authentifiziertem CRUD-API für Einnahmen, Ausgaben und
   Rücklagen; wiederkehrende und einmalige Rhythmen, Fälligkeit, Gültigkeit,
   Zielperson/Haushalt sowie reversible Archivierung.
-- Individuelle Tier-Zuordnung und verbrauchsbasierte Futterprognose sind noch
+- Lokale Tierprofile mit stabiler `pet_id`, optionalem Tier-Typ, reversibler
+  Archivierung und Snapshot-Zuordnung in Planposten sowie Aufteilungen sind
+  umgesetzt.
+- Verbrauchsbasierte Futterprognose und automatische Erinnerungen sind noch
   nicht umgesetzt; die fachlichen Anforderungen dafür stehen unten fest.
 - HA-Personen und authentifizierte Panel-API-Aufrufe über
   `hass.fetchWithAuth()`.
-- 86 Python- und 21 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
+- 95 Python- und 25 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
   für den aktuellen Stand.
 
 Aktuelle Release-Situation:

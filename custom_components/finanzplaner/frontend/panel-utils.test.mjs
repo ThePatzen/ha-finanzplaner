@@ -117,6 +117,18 @@ test("adds a row, rebalances cents, and preserves manual row metadata", () => {
   );
 });
 
+test("preserves a pet reference while adding an allocation row", () => {
+  assert.deepEqual(
+    utils.addAllocationDraftRow(42, [
+      { target: "household", amount: 42, pet_id: "pet-fio", area: "Haustiere", category: "Futter", project: null },
+    ]),
+    [
+      { target: "household", amount: 21, pet_id: "pet-fio", area: "Haustiere", category: "Futter", project: null },
+      { target: "", amount: 21, area: null, category: null, project: null },
+    ],
+  );
+});
+
 test("updates and removes draft rows without mutating the existing draft", () => {
   const rows = [
     { target: "household", amount: 10, area: "Hunde", category: "Futter", project: "Welpe" },
@@ -197,6 +209,16 @@ test("exposes the authenticated plan item editor routes and form states", () => 
   assert.match(panelSource, /method: "DELETE"/);
   assert.match(panelSource, /aria-busy/);
   assert.match(panelSource, /data-action="accounts" aria-label="Konten verwalten"/);
+});
+
+test("exposes authenticated pet profile management and pet-aware assignment fields", () => {
+  assert.match(panelSource, /const PETS_URL = "\/api\/finanzplaner\/pets"/);
+  assert.match(panelSource, /\["pets", "paw", "Tiere"\]/);
+  assert.match(panelSource, /data-pet-form/);
+  assert.match(panelSource, /data-pet-archive/);
+  assert.match(panelSource, /data-plan-item-field="pet_id"/);
+  assert.match(panelSource, /data-allocation-field="pet_id"/);
+  assert.match(panelSource, /pet_id: row\.pet_id \|\| null/);
 });
 
 test("renders a skip link to focusable main content and reveals it on keyboard focus", () => {

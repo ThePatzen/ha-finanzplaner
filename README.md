@@ -17,6 +17,7 @@ Version 0.3.0 liefert die erste durchgängige Konten- und Aufteilungsstrecke:
 - Kontenpflege mit Anzeigename, mehreren Kontoinhabern und Archivstatus
 - Excel-Vorlage als prüfbare Vorschau mit Auswahl und Zuordnungsänderungen
 - eigene Planposten-Ansicht zum Anlegen, Bearbeiten und Archivieren von Einnahmen, Ausgaben und Rücklagen
+- eigene Tierprofile mit optionalem Tier-Typ und historischer Snapshot-Zuordnung
 - wiederkehrende und einmalige Planungen mit Betrag, Rhythmus, Fälligkeit und Gültigkeitszeitraum
 - centgenaue, bestätigungspflichtige Aufteilungen auf Personen oder `Haushalt`
 - gemeinsame Zuordnungen wie `Haushalt` mit dem Bereich `Hunde`
@@ -41,6 +42,16 @@ Danach erscheint Finanzplaner in der Home-Assistant-Seitenleiste. MT940- und CAM
 
 Archivieren deaktiviert einen Planposten nur; der Eintrag bleibt erhalten und kann über den Aktiv-Schalter wieder eingeschaltet werden. Beträge werden als positive Eurobeträge gespeichert, die Richtung bestimmt ihre Wirkung in der Übersicht.
 
+## Tiere zuordnen
+
+Über `Tiere` lassen sich lokale Profile wie `Fio` mit einem optionalen Tier-Typ
+anlegen, bearbeiten und archivieren. Ein Tier ist keine Home-Assistant-Person.
+Planposten und Buchungsaufteilungen können die stabile `pet_id` zusätzlich zum
+unabhängigen Ziel `Haushalt` oder einer Person speichern. Der damalige Tiername
+und Tier-Typ bleiben als Snapshot erhalten, auch wenn das Profil später
+archiviert wird. Verbrauchsintervalle und automatische Futterprognosen folgen
+in einem nächsten Ausbauschritt.
+
 ## Konten und Bankimport
 
 Beim Import einer CAMT.053- oder MT940-Datei erkennt Finanzplaner das verwendete Konto automatisch und verknüpft neue Buchungen mit diesem Konto. Vollständige IBANs bleiben ausschließlich im lokalen Speicher; die Oberfläche und API-Antworten zeigen nur maskierte Kontoangaben. Unbekannte Konten werden ohne automatische Zuordnung angelegt und können anschließend in der Ansicht `Konten` benannt, archiviert und mit mehreren Kontoinhabern gepflegt werden.
@@ -49,7 +60,7 @@ Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`per
 
 ## Buchungen aufteilen
 
-Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Bereich, Kategorie und Projekt tragen; eine gemeinsame Hundeausgabe wird beispielsweise als Ziel `Haushalt` mit Bereich `Hunde` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Automatische Regelvorschläge sind nicht Bestandteil dieser Version.
+Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Tier, Bereich, Kategorie und Projekt tragen; eine gemeinsame Futterausgabe wird beispielsweise als Ziel `Haushalt` mit Tier `Fio` und Bereich `Haustiere` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Automatische Regelvorschläge und Verbrauchsprognosen sind nicht Bestandteil dieser Version.
 
 ## Excel-Plan übernehmen
 

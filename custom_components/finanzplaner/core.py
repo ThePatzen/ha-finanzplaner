@@ -27,9 +27,12 @@ PLAN_ITEM_FIELDS = frozenset(
         "start_date",
         "end_date",
         "target",
+        "pet_id",
         "active",
     }
 )
+
+PET_FIELDS = frozenset({"name", "pet_type", "active"})
 
 
 def normalize_account_reference(value: str) -> str:
@@ -45,6 +48,37 @@ def account_id_for_reference(value: str) -> str | None:
     if not normalized:
         return None
     return f"account-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]}"
+
+
+def validate_pet_payload(payload: object, *, partial: bool = False) -> dict[str, object]:
+    """Validate one locally managed pet profile."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("Die Tierdaten müssen ein Objekt sein.")
+    unknown = set(payload) - PET_FIELDS
+    if unknown:
+        raise ValueError("Die Tierdaten enthalten ein unbekanntes Feld.")
+
+    normalized: dict[str, object] = {}
+    if not partial or "name" in payload:
+        name = payload.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Bitte einen Tiernamen eingeben.")
+        normalized["name"] = name.strip()
+        if len(normalized["name"]) > 80:
+            raise ValueError("Der Tiername darf höchstens 80 Zeichen enthalten.")
+
+    if not partial or "pet_type" in payload:
+        normalized["pet_type"] = _optional_plan_text(
+            payload.get("pet_type"), "Der Tier-Typ", max_length=60
+        )
+
+    if not partial or "active" in payload:
+        active = payload.get("active", True)
+        if not isinstance(active, bool):
+            raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
+        normalized["active"] = active
+    return normalized
 
 
 def _optional_plan_text(
@@ -100,6 +134,7 @@ def validate_plan_item_payload(
     valid_targets: set[str],
     *,
     partial: bool = False,
+    valid_pets: dict[str, dict[str, object]] | set[str] | None = None,
 ) -> dict[str, object]:
     """Validate editable plan-item fields and return normalized values."""
 
@@ -152,6 +187,31 @@ def validate_plan_item_payload(
             if target is not None and target not in valid_targets:
                 raise ValueError("Das Planungsziel verweist nicht auf eine bekannte Person.")
         normalized["target"] = target
+
+    if not partial or "pet_id" in payload:
+        pet_id = payload.get("pet_id")
+        if pet_id in (None, ""):
+            normalized["pet_id"] = None
+            normalized["pet_name"] = None
+            normalized["pet_type"] = None
+        elif not isinstance(pet_id, str) or not pet_id.strip():
+            raise ValueError("Die Tierzuordnung ist ungültig.")
+        elif valid_pets is None or pet_id.strip() not in valid_pets:
+            raise ValueError("Die Tierzuordnung verweist nicht auf ein bekanntes Tier.")
+        else:
+            pet_id = pet_id.strip()
+            normalized["pet_id"] = pet_id
+            pet = valid_pets.get(pet_id) if isinstance(valid_pets, dict) else None
+            normalized["pet_name"] = (
+                _optional_plan_text(pet.get("name"), "Der Tiername", max_length=80)
+                if pet is not None
+                else None
+            )
+            normalized["pet_type"] = (
+                _optional_plan_text(pet.get("pet_type"), "Der Tier-Typ", max_length=60)
+                if pet is not None
+                else None
+            )
 
     if not partial or "active" in payload:
         active = payload.get("active", True)
@@ -281,6 +341,9 @@ class Allocation:
     area: str | None = None
     category: str | None = None
     project: str | None = None
+    pet_id: str | None = None
+    pet_name: str | None = None
+    pet_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,6 +387,7 @@ def parse_allocation_payload(
     payload: object,
     total: float,
     valid_targets: set[str],
+    valid_pets: dict[str, dict[str, object]] | set[str] | None = None,
 ) -> list[Allocation]:
     """Validate a custom allocation payload without rounding monetary input."""
 
@@ -359,15 +423,35 @@ def parse_allocation_payload(
                 "Beträge müssen positiv sein und dürfen höchstens zwei Nachkommastellen haben."
             )
 
-        area = item.get("area")
-        if area not in (None, "Hunde"):
-            raise ValueError("Dieser Bereich ist noch nicht verfügbar.")
+        area = _optional_plan_text(item.get("area"), "Der Bereich")
         category = item.get("category")
         project = item.get("project")
         if category is not None and not isinstance(category, str):
             raise ValueError("Die Kategorie muss eine Zeichenfolge sein.")
         if project is not None and not isinstance(project, str):
             raise ValueError("Das Projekt muss eine Zeichenfolge sein.")
+        if isinstance(category, str):
+            category = category.strip() or None
+            if category is not None and len(category) > 120:
+                raise ValueError("Die Kategorie darf höchstens 120 Zeichen enthalten.")
+        if isinstance(project, str):
+            project = project.strip() or None
+            if project is not None and len(project) > 120:
+                raise ValueError("Das Projekt darf höchstens 120 Zeichen enthalten.")
+
+        pet_id = item.get("pet_id")
+        pet_name = None
+        pet_type = None
+        if pet_id not in (None, ""):
+            if not isinstance(pet_id, str) or not pet_id.strip():
+                raise ValueError("Die Tierzuordnung ist ungültig.")
+            pet_id = pet_id.strip()
+            if valid_pets is None or pet_id not in valid_pets:
+                raise ValueError("Die Tierzuordnung verweist nicht auf ein bekanntes Tier.")
+            pet = valid_pets.get(pet_id) if isinstance(valid_pets, dict) else None
+            if pet is not None:
+                pet_name = _optional_plan_text(pet.get("name"), "Der Tiername", max_length=80)
+                pet_type = _optional_plan_text(pet.get("pet_type"), "Der Tier-Typ", max_length=60)
 
         allocated_total += amount
         normalized.append(
@@ -377,6 +461,9 @@ def parse_allocation_payload(
                 "area": area,
                 "category": category,
                 "project": project,
+                "pet_id": pet_id,
+                "pet_name": pet_name,
+                "pet_type": pet_type,
             }
         )
 
@@ -398,6 +485,9 @@ def parse_allocation_payload(
             area=item["area"],
             category=item["category"],
             project=item["project"],
+            pet_id=item["pet_id"],
+            pet_name=item["pet_name"],
+            pet_type=item["pet_type"],
         )
         for item in normalized
     ]

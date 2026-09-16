@@ -70,7 +70,7 @@ class AllocationPayloadTests(unittest.TestCase):
             [{"target": "person.alex", "amount": 100.001}],
             [{"target": "person.alex", "amount": True}],
             [{"target": "person.alex", "amount": float("inf")}],
-            [{"target": "person.alex", "amount": 100.00, "area": "Haushalt"}],
+            [{"target": "person.alex", "amount": 100.00, "area": 1}],
             [{"target": "Hunde", "amount": 100.00}],
             [{"target": "person.alex", "amount": 100.00, "category": 1}],
             [{"target": "person.alex", "amount": 100.00, "project": False}],

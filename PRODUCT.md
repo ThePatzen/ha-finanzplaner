@@ -46,6 +46,8 @@ veröffentlicht:
 - eigene Planposten-Verwaltung mit Einnahmen, Ausgaben und Rücklagen
 - wiederkehrende und einmalige Planungen mit Fälligkeit und Gültigkeitszeitraum
 - authentifizierte Planposten-API mit reversibler Archivierung
+- lokale Tierprofile mit stabilem Schlüssel, optionalem Tier-Typ und reversibler Archivierung
+- optionale Tier-Snapshots in Planposten und Buchungsaufteilungen, unabhängig von `target`
 
 Weitere Produktfähigkeiten und Leitplanken:
 
