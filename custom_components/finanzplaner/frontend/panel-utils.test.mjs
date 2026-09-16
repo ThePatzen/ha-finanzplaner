@@ -347,6 +347,26 @@ test("keeps import account counts in the review feedback after reload", () => {
   assert.match(panelSource, /this\._message = feedback/);
 });
 
+test("offers ZIP uploads for multiple bank statement files", () => {
+  assert.match(panelSource, /\.zip/);
+  assert.match(panelSource, /application\/zip/);
+  assert.match(panelSource, /ZIP mit mehreren Buchungsdateien/);
+  assert.match(panelSource, /result\.format === "ZIP"/);
+  assert.match(panelSource, /result\.files\?\.length/);
+});
+
+test("provides overview pages for every prepared navigation section", () => {
+  assert.match(panelSource, /const SECTION_VIEWS = \["energy", "calendar", "tasks", "household", "people"\]/);
+  assert.match(panelSource, /else if \(SECTION_VIEWS\.includes\(button\.dataset\.nav\)\) this\._openSectionOverview\(button\.dataset\.nav\)/);
+  assert.match(panelSource, /async _openSectionOverview\(view\)/);
+  assert.match(panelSource, /_sectionOverviewTemplate\(this\._view\)/);
+  assert.match(panelSource, /Energieposten/);
+  assert.match(panelSource, /Monatskalender/);
+  assert.match(panelSource, /Als Nächstes/);
+  assert.match(panelSource, /Personen im Haushalt/);
+  assert.doesNotMatch(panelSource, /für die nächste Ausbaustufe vorbereitet/);
+});
+
 test("uses the Home Assistant authenticated request method for protected panel APIs", async () => {
   const hass = {
     fetchWithAuth: async (path, options) => {

@@ -14,6 +14,34 @@ const EXCEL_PREVIEW_URL = "/api/finanzplaner/excel/preview";
 const EXCEL_CONFIRM_URL = "/api/finanzplaner/excel/confirm";
 const PAPER_TEXTURE_PATH = "assets/plates/main-paper-sample.png";
 const PAPER_TEXTURE_URL = new URL(PAPER_TEXTURE_PATH, import.meta.url).href;
+const SECTION_VIEWS = ["energy", "calendar", "tasks", "household", "people"];
+const SECTION_OVERVIEW_META = {
+  energy: {
+    title: "Energie",
+    kicker: "Energie im Haushalt",
+    description: "Behalte Strom- und Energieposten im Monatskontext und springe direkt in die Planung.",
+  },
+  calendar: {
+    title: "Kalender",
+    kicker: "Monatsrhythmus",
+    description: "Lies den finanziellen Monatsverlauf an wenigen klaren Referenzpunkten.",
+  },
+  tasks: {
+    title: "Aufgaben",
+    kicker: "Nächste Entscheidungen",
+    description: "Offene Buchungen und anstehende Futterkäufe an einem Ort bündeln.",
+  },
+  household: {
+    title: "Haushalt",
+    kicker: "Gemeinsamer Überblick",
+    description: "Einnahmen, Ausgaben, Rücklagen und verfügbarer Betrag für den ausgewählten Monat.",
+  },
+  people: {
+    title: "Personen",
+    kicker: "Home-Assistant-Personen",
+    description: "Die Personen, die für Kontoinhaber und Buchungsaufteilungen im Haushalt verfügbar sind.",
+  },
+};
 
 function apiErrorMessage(body, fallback) {
   if (typeof body === "string") return body || fallback;
@@ -496,6 +524,45 @@ const styles = `
   .catalog-kind-nav button:hover { color: var(--fp-ink); background: rgb(255 254 249 / 0.8); }
   .catalog-kind-nav button.catalog-kind-nav--active { border-color: var(--fp-navy); color: var(--fp-paper); background: var(--fp-navy); }
   .empty-state { margin-block-start: 1rem; padding: 2rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); text-align: center; }
+  .section-view { inline-size: 100%; padding-block: clamp(1.5rem, 3vw, 2.75rem); }
+  .section-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.25rem; }
+  .section-view-header h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; letter-spacing: -0.03em; text-wrap: balance; }
+  .section-kicker { margin: 0 0 0.45rem; color: var(--fp-cyan); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+  .section-view-header p:not(.section-kicker) { max-inline-size: 58rem; margin: 0.55rem 0 0; color: var(--fp-muted); line-height: 1.45; }
+  .section-view-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.55rem; }
+  .section-view-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-block-start: 1.35rem; }
+  .section-card { min-inline-size: 0; padding: 1.1rem 1.2rem; }
+  .section-card--wide { grid-column: span 2; }
+  .section-card h3 { margin: 0; font-family: var(--fp-display); font-size: 1.35rem; line-height: 1.05; letter-spacing: -0.02em; }
+  .section-card > p { margin: 0.45rem 0 0; color: var(--fp-muted); font-size: 0.8rem; line-height: 1.45; }
+  .section-stat-label { margin: 0; color: var(--fp-muted); font-size: 0.75rem; font-weight: 800; }
+  .section-stat-value { margin: 0.55rem 0 0; color: var(--fp-ink); font-family: var(--fp-data); font-size: clamp(1.55rem, 2.5vw, 2.2rem); font-weight: 700; letter-spacing: -0.065em; line-height: 1; white-space: nowrap; }
+  .section-stat-value--positive { color: var(--fp-green); }
+  .section-stat-value--negative { color: var(--fp-coral); }
+  .section-stat-caption { margin: 0.45rem 0 0; color: var(--fp-muted); font-size: 0.75rem; line-height: 1.35; }
+  .section-data-table-wrap { overflow-x: auto; margin-block-start: 0.9rem; border: 1px solid var(--fp-line); border-radius: 0.55rem; }
+  .section-data-table { inline-size: 100%; min-inline-size: 32rem; border-collapse: collapse; }
+  .section-data-table th, .section-data-table td { padding: 0.7rem 0.75rem; border-block-end: 1px solid var(--fp-line); text-align: start; }
+  .section-data-table th { color: var(--fp-muted); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+  .section-data-table tbody th { color: var(--fp-ink); font-size: 0.82rem; letter-spacing: 0; text-transform: none; }
+  .section-data-table tbody tr:last-child th, .section-data-table tbody tr:last-child td { border-block-end: 0; }
+  .section-data-table .section-table-number { font-family: var(--fp-data); white-space: nowrap; }
+  .section-data-table .section-table-muted { color: var(--fp-muted); }
+  .section-empty { display: grid; justify-items: start; gap: 0.75rem; margin-block-start: 0.9rem; padding: 1rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); font-size: 0.82rem; line-height: 1.45; }
+  .section-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-block-start: 1rem; }
+  .section-action { min-block-size: 2.65rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; padding: 0.55rem 0.8rem; border: 1px solid var(--fp-control-border); border-radius: 0.5rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 0.78rem; font-weight: 800; }
+  .section-action:hover { border-color: var(--fp-navy); background: var(--fp-cyan-soft); }
+  .section-action--primary { border-color: var(--fp-navy); color: var(--fp-paper); background: var(--fp-navy); }
+  .section-action--primary:hover { background: var(--fp-navy-deep); }
+  .section-action--accent { border-color: var(--fp-amber); color: var(--fp-navy-deep); background: var(--fp-amber); }
+  .section-action--accent:hover { background: #f0aa43; }
+  .section-note { display: flex; align-items: flex-start; gap: 0.65rem; margin-block-start: 1rem; padding-block-start: 0.9rem; border-block-start: 1px solid var(--fp-line); color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
+  .section-note svg { flex: 0 0 auto; color: var(--fp-cyan); }
+  .section-person-list { display: grid; gap: 0.55rem; margin: 0.9rem 0 0; padding: 0; list-style: none; }
+  .section-person { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem; border: 1px solid var(--fp-line); background: rgb(255 254 249 / 0.75); }
+  .section-person-name { min-inline-size: 0; overflow: hidden; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+  .section-person-id { color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.68rem; overflow-wrap: anywhere; text-align: end; }
+  .section-status { margin-block-start: 1rem; }
   .management-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-block-start: 1rem; }
   .management-list-toolbar p { margin: 0; color: var(--fp-muted); font-size: 0.8rem; }
   .management-toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
@@ -553,6 +620,8 @@ const styles = `
     .plan-item-schedule { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .pet-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .feed-profile-fields, .feed-profile-forecast { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .section-view-grid { grid-template-columns: 1fr; }
+    .section-card--wide { grid-column: auto; }
   }
 
   @media (max-width: 45rem) {
@@ -583,8 +652,9 @@ const styles = `
     .statusbar { display: block; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
-    .review-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .feed-profiles-view-header, .catalogs-view-header, .import-strip, .excel-review-header { display: block; }
+    .review-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .feed-profiles-view-header, .catalogs-view-header, .section-view-header, .import-strip, .excel-review-header { display: block; }
     .back-button { margin-block-start: 1rem; }
+    .section-view-actions { justify-content: flex-start; margin-block-start: 1rem; }
     .accounts-actions { margin-block-start: 1rem; }
     .account-card { grid-template-columns: 1fr; }
     .account-card-header, .account-card-actions { grid-column: 1; }
@@ -622,7 +692,7 @@ const styles = `
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .catalog-section, .catalog-entry-form, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select, .catalog-field input { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .catalog-section, .catalog-entry-form, .section-card, .section-note, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select, .catalog-field input { border: 1px solid CanvasText; box-shadow: none; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -862,6 +932,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._catalogOverviewKind = "categories";
     this._catalogEditor = null;
     this._excelPreview = null;
+    this._sectionLoading = false;
+    this._sectionLoadFailed = false;
     this._message = "";
     this._loading = false;
     this._handleBeforeUnload = (event) => {
@@ -916,6 +988,35 @@ class FinanzplanerPanel extends HTMLElement {
       this._message = error.message || "Die Prüfliste konnte nicht geladen werden.";
     }
     this._render();
+  }
+
+  async _openSectionOverview(view) {
+    if (!SECTION_VIEWS.includes(view) || !this._confirmDiscardUnsavedChanges()) return;
+    this._view = view;
+    this._message = "";
+    this._sectionLoading = view === "people";
+    this._sectionLoadFailed = false;
+    this._render();
+    this._focusContent();
+    if (view !== "people") return;
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, PERSONS_URL);
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+      this._persons = Array.isArray(result.persons) ? result.persons : [];
+    } catch (error) {
+      if (this._view === view) {
+        this._persons = [];
+        this._sectionLoadFailed = true;
+        this._message = error.message || "Personen konnten nicht geladen werden.";
+      }
+    } finally {
+      if (this._view === view) {
+        this._sectionLoading = false;
+        this._render();
+        this._focusContent();
+      }
+    }
   }
 
   _accountDraftFromAccount(account) {
@@ -2342,7 +2443,8 @@ class FinanzplanerPanel extends HTMLElement {
       const response = await fetchWithHomeAssistantAuth(this._hass, IMPORT_URL, { method: "POST", body: form });
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Import fehlgeschlagen"));
-      const feedback = `${result.format}: ${result.accepted} Buchungen übernommen, ${result.duplicates} Duplikate übersprungen; ${result.new_accounts || 0} neue Konten, ${result.unconfigured_accounts || 0} ohne konfigurierte Inhaber.`;
+      const fileFeedback = result.format === "ZIP" ? ` · ${result.files?.length || 0} Dateien geprüft` : "";
+      const feedback = `${result.format}: ${result.accepted} Buchungen übernommen, ${result.duplicates} Duplikate übersprungen${fileFeedback}; ${result.new_accounts || 0} neue Konten, ${result.unconfigured_accounts || 0} ohne konfigurierte Inhaber.`;
       await this._loadOverview();
       await this._openReview();
       this._message = feedback;
@@ -2469,6 +2571,8 @@ class FinanzplanerPanel extends HTMLElement {
               ? this._catalogsTemplate()
             : this._view === "accounts"
               ? this._accountsTemplate()
+              : SECTION_VIEWS.includes(this._view)
+                ? this._sectionOverviewTemplate(this._view)
               : this._overviewTemplate();
     this.shadowRoot.innerHTML = `<style>${styles}</style>${template}`;
     this._bindEvents();
@@ -2536,6 +2640,18 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-plan-item-archive]").forEach((button) => button.addEventListener("click", (event) => this._archivePlanItem(event)));
     this.shadowRoot.querySelectorAll("[data-open-plan-item-editor]").forEach((button) => button.addEventListener("click", () => this._openPlanItemEditor(button.dataset.planItemId)));
     this.shadowRoot.querySelector("[data-close-plan-item-editor]")?.addEventListener("click", () => this._closePlanItemEditor());
+    this.shadowRoot.querySelector("[data-section-retry]")?.addEventListener("click", () => this._openSectionOverview(this._view));
+    this.shadowRoot.querySelectorAll("[data-section-nav]").forEach((button) => button.addEventListener("click", () => {
+      const target = button.dataset.sectionNav;
+      if (target === "review") this._openReview();
+      else if (target === "plan_items") this._openPlanItems();
+      else if (target === "accounts") this._openAccounts();
+      else if (target === "pets") this._openPets();
+      else if (target === "feed_profiles") this._openFeedProfiles();
+      else if (target === "catalogs") this._openCatalogs();
+      else if (target === "overview") this._navigateToOverview();
+      else if (SECTION_VIEWS.includes(target)) this._openSectionOverview(target);
+    }));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.nav === "review") this._openReview();
       else if (button.dataset.nav === "plan_items") this._openPlanItems();
@@ -2543,9 +2659,8 @@ class FinanzplanerPanel extends HTMLElement {
       else if (button.dataset.nav === "pets") this._openPets();
       else if (button.dataset.nav === "feed_profiles") this._openFeedProfiles();
       else if (button.dataset.nav === "catalogs") this._openCatalogs();
-      else if (button.dataset.nav === "overview") this._view = "overview";
-      else this._message = `${button.textContent.trim()} ist für die nächste Ausbaustufe vorbereitet.`;
-      if (!["review", "accounts", "pets", "feed_profiles", "catalogs", "plan_items"].includes(button.dataset.nav)) this._render();
+      else if (button.dataset.nav === "overview") this._navigateToOverview();
+      else if (SECTION_VIEWS.includes(button.dataset.nav)) this._openSectionOverview(button.dataset.nav);
     }));
   }
 
@@ -2638,6 +2753,85 @@ class FinanzplanerPanel extends HTMLElement {
       </div>
       <footer class="statusbar"><span>Datenstand: <strong>${new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date())}</strong> · ${data.demo ? "Demo-Daten" : "lokale Daten"}</span><span>Fin Zuhause · Viele Bereiche · Fin Plan</span></footer>
     </main>`;
+    return this._shellTemplate(content);
+  }
+
+  _sectionOverviewTemplate(view) {
+    const meta = SECTION_OVERVIEW_META[view] || SECTION_OVERVIEW_META.household;
+    const data = dataWithDefaults(this._data);
+    const household = data.household || demoHousehold;
+    const metricCard = (label, value, caption, tone = "") => `<article class="surface section-card"><p class="section-stat-label">${escapeHtml(label)}</p><p class="section-stat-value${tone ? ` section-stat-value--${tone}` : ""}">${value}</p><p class="section-stat-caption">${escapeHtml(caption)}</p></article>`;
+    const actionButton = (target, label, iconName = "arrowRight", tone = "") => `<button class="section-action${tone ? ` section-action--${tone}` : ""}" type="button" data-section-nav="${escapeHtml(target)}">${escapeHtml(label)} ${icon(iconName, 17)}</button>`;
+    let body;
+
+    if (this._sectionLoading) {
+      body = `<div class="empty-state section-status" role="status">Personen werden geladen …</div>`;
+    } else if (this._sectionLoadFailed) {
+      body = `<div class="empty-state section-status" role="alert">Personen stehen derzeit nicht zur Verfügung.<br><button class="section-action section-action--primary" type="button" data-section-retry>Erneut versuchen ${icon("arrowRight", 17)}</button></div>`;
+    } else if (view === "energy") {
+      const energyEntries = new Map();
+      [...data.areas.map((entry) => ({ ...entry, kind: "Bereich" })), ...data.categories.map((entry) => ({ ...entry, kind: "Kategorie" }))]
+        .filter((entry) => /energie|strom|pv|solar|photovoltaik|elektr/i.test(String(entry.name || "")))
+        .forEach((entry) => energyEntries.set(`${entry.kind}:${entry.name}`, entry));
+      const entries = [...energyEntries.values()];
+      const energyActual = entries.reduce((sum, entry) => sum + Number(entry.actual ?? entry.value ?? 0), 0);
+      const energyPlan = entries.reduce((sum, entry) => sum + Number(entry.plan ?? 0), 0);
+      const energyRows = entries.map((entry) => `<tr><th scope="row">${escapeHtml(entry.name)}</th><td class="section-table-muted">${escapeHtml(entry.kind)}</td><td class="section-table-number">${formatEuro(entry.actual ?? entry.value ?? 0)}</td><td class="section-table-number">${formatEuro(entry.plan ?? 0)}</td></tr>`).join("");
+      body = `<div class="section-view-grid">
+        ${metricCard("Energie · Ist", formatEuro(energyActual), entries.length ? `${entries.length} erkannte Energieposten` : "Noch nicht klassifiziert", energyActual < 0 ? "negative" : "positive")}
+        ${metricCard("Energie · Plan", formatEuro(energyPlan), entries.length ? "Planwert der erkannten Posten" : "Noch kein Planwert", energyPlan < 0 ? "negative" : "positive")}
+        ${metricCard("Monatsergebnis", formatEuro(data.forecast), `${monthLabel(this._month)} · Prognose`, data.forecast < 0 ? "negative" : "positive")}
+        <section class="surface section-card section-card--wide" aria-labelledby="energy-breakdown-heading"><h3 id="energy-breakdown-heading">Energieposten</h3><p>Bereiche und Kategorien mit Energiebezug aus der aktuellen Monatsauswertung.</p>${entries.length ? `<div class="section-data-table-wrap"><table class="section-data-table"><caption class="visually-hidden">Energieposten im Monatsvergleich</caption><thead><tr><th scope="col">Bezeichnung</th><th scope="col">Typ</th><th scope="col">Ist</th><th scope="col">Plan</th></tr></thead><tbody>${energyRows}</tbody></table></div>` : `<div class="section-empty">Noch keine Energieposten in der Auswertung gefunden. Ordne einen Planposten oder eine Buchung einer Kategorie bzw. einem Bereich wie Strom oder PV zu.${actionButton("plan_items", "Planposten öffnen", "arrowRight", "primary")}</div>`}</section>
+        <section class="surface section-card" aria-labelledby="energy-next-heading"><h3 id="energy-next-heading">Weiter planen</h3><p>Die Detailzuordnung bleibt in den Planposten nachvollziehbar und änderbar.</p><div class="section-actions">${actionButton("plan_items", "Planposten öffnen", "arrowRight", "primary")}${actionButton("catalogs", "Stammdaten öffnen")}</div></section>
+      </div>`;
+    } else if (view === "calendar") {
+      const trend = data.trend || {};
+      const series = [trend.planned || [], trend.forecast || [], trend.actual || []];
+      const count = Math.max(2, ...series.map((values) => values.length));
+      const todayIndex = Math.min(count - 1, Math.max(0, Number(trend.today_index || 0)));
+      const checkpoints = [...new Set([0, todayIndex, count - 1])];
+      const checkpointLabel = (index) => index === todayIndex && trend.today_label ? `Heute · ${trend.today_label}` : index === 0 ? "Monatsbeginn" : index === count - 1 ? "Monatsende" : `Tag ${index + 1}`;
+      const trendValue = (values, index) => Number.isFinite(Number(values[index])) ? formatEuro(values[index]) : "—";
+      const calendarRows = checkpoints.map((index) => `<tr><th scope="row">${escapeHtml(checkpointLabel(index))}</th><td class="section-table-number">${trendValue(trend.planned || [], index)}</td><td class="section-table-number">${trendValue(trend.forecast || [], index)}</td><td class="section-table-number">${trendValue(trend.actual || [], index)}</td></tr>`).join("");
+      body = `<div class="section-view-grid">
+        ${metricCard("Planung", formatEuro(data.plan), "geplantes Monatsergebnis", data.plan < 0 ? "negative" : "positive")}
+        ${metricCard("Prognose", formatEuro(data.forecast), "erwartetes Monatsergebnis", data.forecast < 0 ? "negative" : "positive")}
+        ${metricCard("Ist", formatEuro(data.actual), "bisher gebuchtes Ergebnis", data.actual < 0 ? "negative" : "positive")}
+        <section class="surface section-card section-card--wide" aria-labelledby="calendar-table-heading"><h3 id="calendar-table-heading">Monatskalender</h3><p>Finanzielle Referenzpunkte für ${monthLabel(this._month)} · kumulierte Werte in Euro.</p><div class="section-data-table-wrap"><table class="section-data-table"><caption class="visually-hidden">Kumulierte Werte im Monatsverlauf</caption><thead><tr><th scope="col">Referenzpunkt</th><th scope="col">Planung</th><th scope="col">Prognose</th><th scope="col">Ist</th></tr></thead><tbody>${calendarRows}</tbody></table></div></section>
+        <section class="surface section-card" aria-labelledby="calendar-next-heading"><h3 id="calendar-next-heading">Termine vorbereiten</h3><p>Planposten bilden die wiederkehrenden und einmaligen Zahlungstermine für den Monatsverlauf.</p><div class="section-actions">${actionButton("plan_items", "Planposten öffnen", "arrowRight", "primary")}</div><div class="section-note">${icon("calendarSmall", 18)}<span>Die Ansicht zeigt derzeit finanzielle Monatsmarken. Ein eigener Ereigniskalender folgt, sobald dafür Daten im Finanzplaner vorhanden sind.</span></div></section>
+      </div>`;
+    } else if (view === "tasks") {
+      const unresolvedCount = Number(data.unresolved_count) || 0;
+      const feedForecast = Number(data.feed_forecast_total) || 0;
+      body = `<div class="section-view-grid">
+        ${metricCard("Offene Buchungen", escapeHtml(unresolvedCount), unresolvedCount ? "Prüfung erforderlich" : "Alles zugeordnet", unresolvedCount ? "negative" : "positive")}
+        ${metricCard("Futterprognose", formatEuro(feedForecast), feedForecast ? "geplante Käufe im Monat" : "Keine Kaufprognose", feedForecast ? "negative" : "positive")}
+        ${metricCard("Planabweichung", formatEuro(data.variance), "Prognose gegenüber Planung", data.variance < 0 ? "negative" : "positive")}
+        <section class="surface section-card section-card--wide" aria-labelledby="tasks-next-heading"><h3 id="tasks-next-heading">Als Nächstes</h3><p>Die wichtigsten offenen Schritte für den ausgewählten Monat.</p><div class="section-actions">${actionButton("review", unresolvedCount ? "Buchungen prüfen" : "Prüfliste öffnen", "arrowRight", unresolvedCount ? "accent" : "primary")}${actionButton("feed_profiles", "Futterplanung öffnen", "cart")}</div><div class="section-note">${icon(unresolvedCount ? "warning" : "check", 18)}<span>${unresolvedCount ? `${unresolvedCount} Buchungen warten auf Ziel, Bereich, Kategorie oder Projekt.` : "Aktuell sind keine ungeklärten Buchungen gemeldet."}</span></div></section>
+        <section class="surface section-card" aria-labelledby="tasks-context-heading"><h3 id="tasks-context-heading">Kontext</h3><p>Nach dem Erledigen einer Aufgabe aktualisiert sich die Monatsübersicht automatisch.</p><div class="section-actions">${actionButton("overview", "Zur Übersicht", "chevronLeft")}</div></section>
+      </div>`;
+    } else if (view === "household") {
+      body = `<div class="section-view-grid">
+        ${metricCard("Einnahmen", formatEuro(household.income), planShareCaption(household.income, household.income_plan, "kein Planwert"), "positive")}
+        ${metricCard("Ausgaben", formatEuro(household.expenses), planShareCaption(household.expenses, household.expenses_plan, "kein Planwert"), "negative")}
+        ${metricCard("Rücklagen", formatEuro(household.savings), planShareCaption(household.savings, household.savings_plan, "kein Planwert"), "negative")}
+        ${metricCard("Verfügbar", formatEuro(household.available), "bisheriger Saldo", household.available < 0 ? "negative" : "positive")}
+        <section class="surface section-card section-card--wide" aria-labelledby="household-plan-heading"><h3 id="household-plan-heading">Haushaltsplan</h3><p>Vergleich der Planwerte mit dem aktuellen Monatsstand für ${monthLabel(this._month)}.</p><div class="section-data-table-wrap"><table class="section-data-table"><caption class="visually-hidden">Haushaltswerte im Vergleich</caption><thead><tr><th scope="col">Wert</th><th scope="col">Ist</th><th scope="col">Plan</th></tr></thead><tbody><tr><th scope="row">Einnahmen</th><td class="section-table-number">${formatEuro(household.income)}</td><td class="section-table-number">${formatEuro(household.income_plan)}</td></tr><tr><th scope="row">Ausgaben</th><td class="section-table-number">${formatEuro(household.expenses)}</td><td class="section-table-number">${formatEuro(-Math.abs(Number(household.expenses_plan) || 0))}</td></tr><tr><th scope="row">Rücklagen</th><td class="section-table-number">${formatEuro(household.savings)}</td><td class="section-table-number">${formatEuro(-Math.abs(Number(household.savings_plan) || 0))}</td></tr><tr><th scope="row">Verfügbar</th><td class="section-table-number">${formatEuro(household.available)}</td><td class="section-table-number">${formatEuro(household.available_plan)}</td></tr></tbody></table></div></section>
+        <section class="surface section-card" aria-labelledby="household-manage-heading"><h3 id="household-manage-heading">Verwalten</h3><p>Konten und Tierprofile liegen in eigenen, übersichtlichen Verwaltungsansichten.</p><div class="section-actions">${actionButton("accounts", "Konten öffnen", "settings", "primary")}${actionButton("pets", "Tiere öffnen", "paw")}</div></section>
+      </div>`;
+    } else {
+      const people = Array.isArray(this._persons) ? this._persons : [];
+      const personRows = people.map((person) => `<li class="section-person"><span class="section-person-name">${escapeHtml(person.name || person.entity_id || "Person")}</span><span class="section-person-id">${escapeHtml(person.entity_id || "")}</span></li>`).join("");
+      body = `<div class="section-view-grid">
+        ${metricCard("Verfügbare Personen", escapeHtml(people.length), people.length ? "Home-Assistant-Personen" : "Noch keine Personen gefunden", people.length ? "positive" : "negative")}
+        ${metricCard("Buchungsziele", escapeHtml(people.length + 1), "inklusive gemeinsamer Haushalt", "positive")}
+        ${metricCard("Aktueller Monat", escapeHtml(monthLabel(this._month)), "für Finanzzuordnungen verfügbar")}
+        <section class="surface section-card section-card--wide" aria-labelledby="people-list-heading"><h3 id="people-list-heading">Personen im Haushalt</h3><p>Diese Liste stammt aus Home Assistant und steht für Kontoinhaber, Planungsziele und Buchungsaufteilungen zur Verfügung.</p>${personRows ? `<ul class="section-person-list">${personRows}</ul>` : `<div class="section-empty">Home Assistant liefert derzeit keine Personen für den Finanzplaner. Prüfe die Personeneinrichtung und öffne danach Konten oder die Prüfliste erneut.${actionButton("accounts", "Konten öffnen", "settings", "primary")}</div>`}</section>
+        <section class="surface section-card" aria-labelledby="people-next-heading"><h3 id="people-next-heading">Personen verwenden</h3><p>Beim Prüfen einer Buchung oder Bearbeiten eines Kontos können Personen als Ziel ausgewählt werden.</p><div class="section-actions">${actionButton("review", "Buchungen prüfen", "arrowRight", "accent")}${actionButton("accounts", "Konten öffnen", "settings")}</div></section>
+      </div>`;
+    }
+
+    const content = `<main class="main" id="content" tabindex="-1"><div class="section-view"><div class="section-view-header"><div><p class="section-kicker">${escapeHtml(meta.kicker)}</p><h2>${escapeHtml(meta.title)}</h2><p>${escapeHtml(meta.description)} · ${monthLabel(this._month)}</p></div><div class="section-view-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>${body}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -3097,7 +3291,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _reviewTemplate() {
-    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 für Buchungen · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking, index) => {
+    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking, index) => {
       const total = Math.abs(Number(booking.amount) || 0);
       return `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${escapeHtml(booking.purpose || booking.counterparty || "Ohne Verwendungszweck")}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._allocationEditorTemplate(booking, index)}</form></li>`;
     }).join("")}</ul>` : `<div class="empty-state">Noch keine importierten Buchungen in der Prüfliste. Lade eine Bankdatei hoch oder importiere eine Excel-Vorlage.</div>`}</div></main>`;

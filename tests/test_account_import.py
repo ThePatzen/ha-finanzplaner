@@ -4,6 +4,7 @@ import io
 import sys
 import types
 import unittest
+from zipfile import ZIP_DEFLATED, ZipFile
 from copy import deepcopy
 from unittest.mock import patch
 
@@ -179,7 +180,8 @@ class BankImportViewTests(unittest.TestCase):
         self.app = {"hass": hass}
 
     def _request(self, filename, raw):
-        upload = self.file_field_type(filename, raw.encode("utf-8"))
+        raw_bytes = raw if isinstance(raw, bytes) else raw.encode("utf-8")
+        upload = self.file_field_type(filename, raw_bytes)
 
         class Request:
             app = self.app
@@ -191,6 +193,13 @@ class BankImportViewTests(unittest.TestCase):
 
     def _import(self, filename, raw):
         return asyncio.run(self.http.ImportView().post(self._request(filename, raw)))
+
+    def _zip(self, files):
+        buffer = io.BytesIO()
+        with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+            for filename, raw in files.items():
+                archive.writestr(filename, raw)
+        return buffer.getvalue()
 
     def _json_request(self, payload, *, month=None):
         class Request:
@@ -305,6 +314,41 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(result["accepted"], 0)
         self.assertEqual(result["duplicates"], 1)
         self.assertEqual(len(self.coordinator.store.data["bookings"]), 1)
+
+    def test_zip_import_accepts_multiple_bank_files_and_records_file_summaries(self):
+        camt = """<?xml version="1.0"?><Document><BkToCstmrStmt><Stmt>
+          <Acct><Id><IBAN>AT12 3456 7890 1234 5678</IBAN></Id></Acct>
+          <Ntry><Amt Ccy="EUR">12.50</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+            <BookgDt><Dt>2026-09-04</Dt></BookgDt><NtryDtls><TxDtls>
+            <Refs><EndToEndId>ZIP-CAMT-42</EndToEndId></Refs><RmtInf><Ustrd>Strom</Ustrd></RmtInf>
+          </TxDtls></NtryDtls></Ntry></Stmt></BkToCstmrStmt></Document>"""
+        mt940 = (
+            ":20:ZIP-STATEMENT-42\n"
+            ":25:BANK-ACCOUNT-42\n"
+            ":61:2609050905C7,50NTRFZIPMT\n"
+            ":86:Gehalt\n"
+        )
+
+        result = self._import("bankauszüge.zip", self._zip({"januar.xml": camt, "februar.sta": mt940}))
+
+        self.assertEqual(result["format"], "ZIP")
+        self.assertEqual(result["accepted"], 2)
+        self.assertEqual(result["duplicates"], 0)
+        self.assertEqual(len(result["files"]), 2)
+        self.assertEqual({item["format"] for item in result["files"]}, {"CAMT.053", "MT940"})
+        self.assertEqual(len(self.coordinator.store.data["bookings"]), 2)
+        self.assertEqual(self.coordinator.store.data["imports"][0]["format"], "ZIP")
+        self.assertEqual(len(self.coordinator.store.data["imports"][0]["files"]), 2)
+
+    def test_invalid_zip_does_not_mutate_store(self):
+        valid = ":20:VALID\n:25:BANK-ACCOUNT-42\n:61:2609050905C7,50NTRFZIPMT\n:86:Gehalt\n"
+        before = deepcopy(self.coordinator.store.data)
+
+        with self.assertRaises(self.bad_request):
+            self._import("bankauszüge.zip", self._zip({"valid.sta": valid, "broken.xml": "<Document><broken>"}))
+
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
 
     def test_parser_error_does_not_mutate_accounts_or_imports(self):
         before = deepcopy(self.coordinator.store.data)

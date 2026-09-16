@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 import hashlib
+import io
 import re
 from typing import Any
 from uuid import uuid4
+import zipfile
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
@@ -45,6 +47,8 @@ from .importers.excel_template import (
 
 
 EXCEL_MAX_BYTES = 10 * 1024 * 1024
+BANK_MAX_BYTES = 10 * 1024 * 1024
+BANK_MAX_FILES = 500
 _IBAN_PATTERN = re.compile(
     r"(?<![A-Z0-9])([A-Z]{2}\s*\d{2}(?:\s*[A-Z0-9]){11,30})(?![A-Z0-9])",
     re.IGNORECASE,
@@ -1576,11 +1580,74 @@ class BookingAllocationsView(HomeAssistantView):
 
 
 class ImportView(HomeAssistantView):
-    """Import one MT940 or CAMT.053 file after an explicit user upload."""
+    """Import MT940/CAMT.053 files after an explicit user upload."""
 
     url = "/api/finanzplaner/import"
     name = "api:finanzplaner:import"
     requires_auth = True
+
+    @staticmethod
+    def _decode_bank_file(raw_bytes: bytes) -> str:
+        try:
+            return raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return raw_bytes.decode("latin-1")
+
+    @classmethod
+    def _parse_bank_file(
+        cls,
+        filename: str,
+        raw_bytes: bytes,
+        *,
+        require_bookings: bool = False,
+    ) -> tuple[list[Booking], str]:
+        if len(raw_bytes) > BANK_MAX_BYTES:
+            raise ValueError("Die Buchungsdatei ist größer als 10 MB.")
+        raw = cls._decode_bank_file(raw_bytes)
+        if filename.lower().endswith((".xml", ".camt", ".camt053")) or "<Document" in raw:
+            parsed = parse_camt053(raw)
+            format_name = "CAMT.053"
+        else:
+            parsed = parse_mt940(raw)
+            format_name = "MT940"
+        if require_bookings and not parsed:
+            raise ValueError(f"{filename} enthält keine lesbaren Buchungen.")
+        return parsed, format_name
+
+    @classmethod
+    def _archive_files(
+        cls,
+        raw_bytes: bytes,
+    ) -> list[tuple[str, bytes, list[Booking], str]]:
+        if len(raw_bytes) > BANK_MAX_BYTES:
+            raise ValueError("Die ZIP-Datei ist größer als 10 MB.")
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(raw_bytes))
+        except zipfile.BadZipFile as exc:
+            raise ValueError("Die ZIP-Datei konnte nicht gelesen werden.") from exc
+
+        members = []
+        total_uncompressed = 0
+        with archive:
+            for info in archive.infolist():
+                member_name = info.filename.replace("\\", "/")
+                if info.is_dir() or member_name.startswith("__MACOSX/") or member_name == ".DS_Store" or member_name.endswith("/.DS_Store") or member_name.rsplit("/", 1)[-1].startswith("._"):
+                    continue
+                if member_name.startswith("/") or ".." in member_name.split("/"):
+                    raise ValueError(f"Unsicherer Dateipfad im ZIP: {info.filename}")
+                if len(members) >= BANK_MAX_FILES:
+                    raise ValueError(f"Ein ZIP darf höchstens {BANK_MAX_FILES} Buchungsdateien enthalten.")
+                if info.file_size > BANK_MAX_BYTES or total_uncompressed + info.file_size > BANK_MAX_BYTES:
+                    raise ValueError("Die entpackten ZIP-Dateien sind zusammen größer als 10 MB.")
+                if info.file_size < 1:
+                    raise ValueError(f"{info.filename} ist leer.")
+                member_bytes = archive.read(info)
+                total_uncompressed += len(member_bytes)
+                parsed, format_name = cls._parse_bank_file(member_name, member_bytes, require_bookings=True)
+                members.append((member_name, member_bytes, parsed, format_name))
+        if not members:
+            raise ValueError("Das ZIP enthält keine Buchungsdateien.")
+        return members
 
     async def post(self, request: web.Request) -> web.Response:
         coordinator = _coordinator(request.app["hass"])
@@ -1589,20 +1656,15 @@ class ImportView(HomeAssistantView):
         form = await request.post()
         upload = form.get("file")
         if not isinstance(upload, web.FileField):
-            raise web.HTTPBadRequest(text="Bitte eine MT940- oder CAMT.053-Datei auswählen.")
-        raw_bytes = upload.file.read()
-        try:
-            raw = raw_bytes.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            raw = raw_bytes.decode("latin-1")
+            raise web.HTTPBadRequest(text="Bitte eine MT940-, CAMT.053- oder ZIP-Datei auswählen.")
+        raw_bytes = upload.file.read(BANK_MAX_BYTES + 1)
         filename = upload.filename or "Import"
         try:
-            if filename.lower().endswith((".xml", ".camt", ".camt053")) or "<Document" in raw:
-                parsed = parse_camt053(raw)
-                format_name = "CAMT.053"
+            if filename.lower().endswith(".zip"):
+                import_files = self._archive_files(raw_bytes)
             else:
-                parsed = parse_mt940(raw)
-                format_name = "MT940"
+                parsed, format_name = self._parse_bank_file(filename, raw_bytes)
+                import_files = [(filename, raw_bytes, parsed, format_name)]
         except Exception as exc:
             raise web.HTTPBadRequest(text=f"Import konnte nicht gelesen werden: {exc}") from exc
 
@@ -1613,46 +1675,67 @@ class ImportView(HomeAssistantView):
         duplicates = 0
         new_account_ids: set[str] = set()
         unconfigured_account_ids: set[str] = set()
-        for booking in parsed:
-            payload = _booking_payload(booking)
-            if payload["id"] in existing:
-                duplicates += 1
-                continue
-            account, created = ensure_account(
-                coordinator.store.data,
-                booking.account,
-                booking.account if format_name == "CAMT.053" else None,
-            )
-            if account is not None:
-                account_id = account.get("id")
-                payload["account_id"] = account_id
-                if isinstance(account_id, str):
-                    if created:
-                        new_account_ids.add(account_id)
-                    if not account.get("owner_targets"):
-                        unconfigured_account_ids.add(account_id)
-            existing.add(payload["id"])
-            coordinator.store.data["bookings"].append(payload)
-            accepted.append(payload)
+        file_summaries = []
+        for source_filename, source_bytes, parsed, format_name in import_files:
+            file_accepted = 0
+            file_duplicates = 0
+            for booking in parsed:
+                payload = _booking_payload(booking)
+                if payload["id"] in existing:
+                    duplicates += 1
+                    file_duplicates += 1
+                    continue
+                account, created = ensure_account(
+                    coordinator.store.data,
+                    booking.account,
+                    booking.account if format_name == "CAMT.053" else None,
+                )
+                if account is not None:
+                    account_id = account.get("id")
+                    payload["account_id"] = account_id
+                    if isinstance(account_id, str):
+                        if created:
+                            new_account_ids.add(account_id)
+                        if not account.get("owner_targets"):
+                            unconfigured_account_ids.add(account_id)
+                existing.add(payload["id"])
+                coordinator.store.data["bookings"].append(payload)
+                accepted.append(payload)
+                file_accepted += 1
+            if len(import_files) > 1:
+                file_summaries.append(
+                    {
+                        "filename": source_filename,
+                        "format": format_name,
+                        "sha256": hashlib.sha256(source_bytes).hexdigest(),
+                        "accepted": file_accepted,
+                        "duplicates": file_duplicates,
+                    }
+                )
+        archive_import = filename.lower().endswith(".zip")
+        import_record = {
+            "format": "ZIP" if archive_import else import_files[0][3],
+            "filename": filename,
+            "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+            "accepted": len(accepted),
+            "duplicates": duplicates,
+        }
+        if archive_import:
+            import_record["files"] = file_summaries
         coordinator.store.data["imports"].append(
-            {
-                "format": format_name,
-                "filename": filename,
-                "sha256": hashlib.sha256(raw_bytes).hexdigest(),
-                "accepted": len(accepted),
-                "duplicates": duplicates,
-            }
+            import_record
         )
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
         return self.json(
             _response_payload(
                 {
-                    "format": format_name,
+                    "format": "ZIP" if archive_import else import_files[0][3],
                     "accepted": len(accepted),
                     "duplicates": duplicates,
                     "new_accounts": len(new_account_ids),
                     "unconfigured_accounts": len(unconfigured_account_ids),
+                    "files": file_summaries if archive_import else [],
                     "preview": accepted,
                 }
             )

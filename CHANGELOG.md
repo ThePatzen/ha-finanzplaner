@@ -10,6 +10,10 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+- Energie, Kalender, Aufgaben, Haushalt und Personen als nutzbare Übersichtsansichten ergänzt
+- Mehrere MT940- und CAMT.053-Buchungsdateien können gemeinsam als geprüftes ZIP importiert werden
+- ZIP-Bankimporte erlauben bis zu 500 Dateien für umfangreiche Jahresimporte
+
 ## [0.3.4] – 2026-09-16
 
 - Live-Dashboard ergänzt um echte Haushalts-, Bereichs- und Kategorieauswertungen sowie Monatsverlauf aus Planposten, Buchungen und Futterprognosen
