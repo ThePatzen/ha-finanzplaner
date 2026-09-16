@@ -86,10 +86,10 @@ Bereits geliefert:
 Aktuelle Release-Situation:
 
 - Code-Stand enthält die Bank-/IBAN-Erweiterung in den Commits `f36ffc6` und
-  `5a4c682`.
+  `5a4c682` sowie den lokalen Versionstand `0.3.1` aus `b05c4b6`.
 - Der lokale Tag `v0.3.0` zeigt noch auf den vorherigen Stand `d01a588`.
-- Für einen HACS-Release Manifest, Changelog, neuer Tag `v0.3.1`, GitHub-Release
-  und gegebenenfalls das erwartete ZIP-Asset gemeinsam aktualisieren.
+- Für den HACS-Release fehlen noch der lokale Tag `v0.3.1`, der GitHub-Release
+  und gegebenenfalls das erwartete ZIP-Asset.
 - Nichts zu GitHub pushen, solange der Nutzer keinen ausdrücklichen
   Release-/Push-Auftrag erteilt.
 

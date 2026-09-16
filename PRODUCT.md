@@ -32,7 +32,7 @@ Die bestehende Excel-Datei dient als fachliche Referenz und als Quelle für eine
 
 ## Capabilities and Constraints
 
-Mit Version 0.3.0 geliefert:
+Mit Version 0.3.1 geliefert:
 
 - automatische lokale Kontoerkennung aus CAMT.053 und MT940
 - Kontenpflege mit mehreren Home-Assistant-Personen oder `Haushalt` als Kontoinhaber
@@ -40,8 +40,7 @@ Mit Version 0.3.0 geliefert:
 - eine oder mehrere bestätigungspflichtige, centgenaue Aufteilungen pro Buchung
 - gemeinsame Aufteilungen mit `target="household"` und optional `area="Hunde"`
 
-Im aktuellen Arbeitsstand zusätzlich umgesetzt, aber noch nicht als Release
-veröffentlicht:
+Zusätzlich enthalten:
 
 - eigene Planposten-Verwaltung mit Einnahmen, Ausgaben und Rücklagen
 - wiederkehrende und einmalige Planungen mit Fälligkeit und Gültigkeitszeitraum

@@ -10,6 +10,8 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+## [0.3.1] – 2026-09-16
+
 - Planposten-Ansicht mit authentifiziertem CRUD-API, Rhythmus, Fälligkeit und Gültigkeitszeitraum ergänzt
 - Planposten werden beim Archivieren deaktiviert und bleiben für eine spätere Reaktivierung erhalten
 - lokale Tierprofile mit stabilem Schlüssel, Tier-Typ und reversibler Archivierung ergänzt
