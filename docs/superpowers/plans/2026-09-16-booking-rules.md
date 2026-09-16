@@ -254,10 +254,10 @@ def test_percentage_materialization_assigns_rounding_remainder_to_first_row(self
         {"target": "household", "share_percent": 33.33,
          "area_id": None, "category_id": None, "project_id": None,
          "pet_id": None},
-        {"target": "household", "share_percent": 33.33,
+        {"target": "person.alex", "share_percent": 33.33,
          "area_id": None, "category_id": None, "project_id": None,
          "pet_id": None},
-        {"target": "household", "share_percent": 33.34,
+        {"target": "person.sam", "share_percent": 33.34,
          "area_id": None, "category_id": None, "project_id": None,
          "pet_id": None},
     ]
@@ -266,7 +266,7 @@ def test_percentage_materialization_assigns_rounding_remainder_to_first_row(self
          "purpose": "Einkauf", "amount": -100.00},
         [RuleMatchingTests()._rule("rule-split", allocations=allocations)],
         accounts={"account-giro": {"label": "Giro"}},
-        valid_targets={"household"},
+        valid_targets={"household", "person.alex", "person.sam"},
         catalogs={"categories": [], "areas": [], "projects": []},
         pets={},
     )
@@ -288,7 +288,7 @@ def test_rule_rejects_share_sum_other_than_one_hundred(self):
             pets={},
         )
 
-def test_rule_rejects_unknown_target_and_archived_catalog(self):
+def test_rule_rejects_unknown_target(self):
     core = load_core()
     rule = RuleMatchingTests()._rule("rule-invalid")
     rule["allocations"][0]["target"] = "person.unknown"
@@ -298,6 +298,23 @@ def test_rule_rejects_unknown_target_and_archived_catalog(self):
             valid_targets={"household"},
             accounts={"account-giro": {"active": True}},
             catalogs={"categories": [], "areas": [], "projects": []},
+            pets={},
+        )
+
+def test_rule_rejects_archived_catalog(self):
+    core = load_core()
+    rule = RuleMatchingTests()._rule("rule-archived")
+    rule["allocations"][0]["category_id"] = "category-old"
+    with self.assertRaises(ValueError):
+        core.validate_rule_payload(
+            rule,
+            valid_targets={"household"},
+            accounts={"account-giro": {"active": True}},
+            catalogs={
+                "categories": [{"id": "category-old", "active": False}],
+                "areas": [],
+                "projects": [],
+            },
             pets={},
         )
 
@@ -371,7 +388,11 @@ POST /api/finanzplaner/rules/from-booking/{booking_id}
 ```python
 def test_current_store_adds_empty_rules_without_changing_bookings(self):
     data = storage.normalize_current_store_data(
-        {"version": storage.STORAGE_VERSION, "bookings": [{"id": "booking-1"}]},
+        {
+            "version": storage.STORAGE_VERSION,
+            "rules": {"invalid": True},
+            "bookings": [{"id": "booking-1"}],
+        },
         "Testhaushalt",
     )
     self.assertEqual(data["rules"], [])
@@ -399,19 +420,30 @@ Expected: PASS.
 
 - [ ] **Step 5: Schreibe fehlschlagende Authentifizierungs- und CRUD-Tests.**
 
-```python
-def test_rules_get_requires_authentication(self): ...
-def test_rules_post_normalizes_and_persists_rule(self): ...
-def test_rule_post_updates_only_editable_fields(self): ...
-def test_invalid_rule_post_does_not_mutate_or_save(self): ...
-def test_rule_archive_sets_active_false_without_deleting(self): ...
-def test_from_booking_requires_resolved_booking(self): ...
-def test_from_resolved_booking_creates_rule_template(self): ...
-```
+Ergänze in `tests/test_rule_payloads.py` diese Testmethoden mit den
+vorhandenen Request-, Coordinator- und Home-Assistant-State-Fakes:
 
-Die Tests verwenden dieselben kleinen Request-, Coordinator- und Home-
-Assistant-State-Fakes wie die bestehenden API-Testdateien. Jeder ungültige
-Request prüft `store.save_count == 0` und die Unverändertheit der Daten.
+- `test_rules_get_requires_authentication`: Rufe `RulesView().get` ohne
+  Authentifizierung auf und erwarte HTTP 401.
+- `test_rules_post_normalizes_and_persists_rule`: Sende eine gültige Regel mit
+  umgebenden Leerzeichen und prüfe die normalisierten Werte, eine neue ID,
+  `active=True`, einen Save-Aufruf und die Antwort unter `rule`.
+- `test_rule_post_updates_only_editable_fields`: Lege eine Regel mit
+  `created_at` an, sende eine Änderung und prüfe, dass die ID und
+  `created_at` erhalten bleiben, während `updated_at` neu gesetzt wird.
+- `test_invalid_rule_post_does_not_mutate_or_save`: Sende eine unbekannte
+  Zielreferenz und prüfe HTTP 400, unveränderte Regelwerte und
+  `store.save_count == 0`.
+- `test_rule_archive_sets_active_false_without_deleting`: Sende `active=False`
+  und prüfe, dass die Regel in `store.data["rules"]` erhalten bleibt.
+- `test_from_booking_requires_resolved_booking`: Sende eine ungeklärte
+  Buchungs-ID und erwarte HTTP 400 ohne Save-Aufruf.
+- `test_from_resolved_booking_creates_rule_template`: Sende eine bestätigte
+  Buchung mit zwei Aufteilungen und prüfe Konto, Zahlungsempfänger, leeren
+  Verwendungszweckfilter sowie die normalisierten Prozentanteile.
+
+Jeder ungültige Request prüft `store.save_count == 0` und die Unverändertheit
+der Daten.
 
 - [ ] **Step 6: Führe einen einzelnen neuen API-Test aus und bestätige RED.**
 
@@ -490,7 +522,23 @@ def test_unresolved_list_exposes_suggestion_without_mutating_store(self):
         "allocations": [],
     }
     self.coordinator.store.data["bookings"] = [booking]
-    self.coordinator.store.data["rules"] = [self._rule_for_supermarket()]
+    self.coordinator.store.data["rules"] = [{
+        "id": "rule-1",
+        "label": "Supermarkt",
+        "active": True,
+        "priority": 100,
+        "account_id": "account-giro",
+        "counterparty": "Supermarkt AG",
+        "purpose_contains": None,
+        "allocations": [{
+            "target": "household",
+            "share_percent": 100.0,
+            "area_id": None,
+            "category_id": None,
+            "project_id": None,
+            "pet_id": None,
+        }],
+    }]
 
     response = asyncio.run(UnresolvedBookingsView().get(self._request()))
 
@@ -517,11 +565,17 @@ Verwende anschließend `_response_payload`, ohne den Store zu schreiben oder
 
 - [ ] **Step 4: Ergänze Tests für Konflikte, ungültige Referenzen und resolved-Buchungen.**
 
-```python
-def test_conflicting_rules_are_visible_without_selection(self): ...
-def test_invalid_rule_reference_stays_unresolved_with_reason(self): ...
-def test_resolved_booking_is_not_returned_by_unresolved_view(self): ...
-```
+Implementiere diese Testmethoden in der Projektion-Testklasse:
+
+- `test_conflicting_rules_are_visible_without_selection`: Lege zwei
+  gleich priorisierte Regeln an und prüfe `status == "conflict"`, beide
+  Regel-IDs in `conflicts` und unveränderte Buchungsdaten.
+- `test_invalid_rule_reference_stays_unresolved_with_reason`: Lege eine Regel
+  mit einem archivierten Katalogeintrag an und prüfe den Status
+  `unresolved`, eine verständliche Begründung und keine Mutation.
+- `test_resolved_booking_is_not_returned_by_unresolved_view`: Lege eine
+  Buchung mit `status == "resolved"` an und prüfe, dass die View sie nicht
+  zurückgibt.
 
 - [ ] **Step 5: Führe die fokussierten und alle Python-Tests aus.**
 
@@ -624,9 +678,33 @@ View keine API-Struktur selbst interpretieren muss.
 - [ ] **Step 4: Führe die Utility-Tests aus und erweitere Grenzfälle.**
 
 ```javascript
-test("suggestionDraft returns an empty list for unresolved bookings", () => { ... });
-test("ruleStatusLabel explains conflict status", () => { ... });
-test("rulePayloadFromForm trims text and keeps null filters", () => { ... });
+test("suggestionDraft returns an empty list for unresolved bookings", () => {
+  assert.deepEqual(utils.suggestionDraft({ status: "unresolved" }), []);
+});
+
+test("ruleStatusLabel explains conflict status", () => {
+  assert.equal(utils.ruleStatusLabel("conflict"), "Regelkonflikt");
+});
+
+test("rulePayloadFromForm trims text and keeps null filters", () => {
+  assert.deepEqual(utils.rulePayloadFromForm({
+    label: "  Supermarkt  ",
+    active: true,
+    priority: "20",
+    account_id: "account-giro",
+    counterparty: "  Supermarkt AG ",
+    purpose_contains: "  ",
+    allocations: [{ target: "household", share_percent: 100 }],
+  }), {
+    label: "Supermarkt",
+    active: true,
+    priority: 20,
+    account_id: "account-giro",
+    counterparty: "Supermarkt AG",
+    purpose_contains: null,
+    allocations: [{ target: "household", share_percent: 100 }],
+  });
+});
 ```
 
 Run: `node --test custom_components/finanzplaner/frontend/panel-utils.test.mjs`
@@ -790,22 +868,27 @@ git commit -m "feat: add booking rule review ui"
 - Consumes: die fertig implementierten Core-, API- und Panel-Verträge aus Tasks 1 bis 5.
 - Produces: konsistente Produktbeschreibung, aktuelle Bedienungsdokumentation und einen nachvollziehbaren Unreleased-Eintrag.
 
-- [ ] **Step 1: Schreibe den fehlschlagenden Dokumentations-Check.**
+- [ ] **Step 1: Prüfe den aktuellen Dokumentationsstand vor dem Editieren.**
 
-Prüfe mit einer kleinen textuellen Regression, dass die drei Produktdokumente
-die neue Fähigkeit nennen:
+Prüfe, dass die drei Produktdokumente die neue ausgelieferte Fähigkeit noch
+nicht vollständig dokumentieren:
 
 ```bash
-rg -n "regelbasierte|Regelvorschlag|Buchungsregeln|Vorschlag übernehmen" PRODUCT.md README.md CHANGELOG.md
+if rg -q "Regelverwaltung.*Vorschlag übernehmen" PRODUCT.md README.md CHANGELOG.md; then
+  echo "Dokumentationssatz ist bereits vorhanden"
+  exit 1
+fi
 ```
 
-Expected: Der Check findet vor der Dokumentationsänderung keinen vollständigen
-Eintrag für die ausgelieferte Regelverwaltung und den bestätigungspflichtigen
-Vorschlag.
+Expected: Der Check beendet sich vor der Dokumentationsänderung mit Exit-Code
+0, weil der vollständige Dokumentationssatz noch fehlt. Dokumentationsdateien
+brauchen keinen Produktionscode-Test; der Check dient als klare Vorher-/Nachher-
+Grenze.
 
 - [ ] **Step 2: Aktualisiere `PRODUCT.md`.**
 
-Verschiebe die Aussage „regelbasierte Vorschläge ... sind noch nicht geliefert“
+Verschiebe die Aussage „regelbasierte Vorschläge und automatische Zuordnung
+von Buchungen sind noch nicht geliefert“
 in eine gelieferte Fähigkeit und dokumentiere die Grenzen: manuelle
 Bestätigung, Konfliktstatus, lokale Verarbeitung und keine automatische
 Speicherung.
