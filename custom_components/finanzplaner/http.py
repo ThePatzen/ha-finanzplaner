@@ -32,6 +32,7 @@ from .core import (
     plan_item_totals,
     record_feed_profile_purchase,
     rule_payload_from_booking,
+    rule_suggestion,
     validate_pet_payload,
     validate_catalog_payload,
     validate_feed_profile_payload,
@@ -1664,7 +1665,25 @@ class UnresolvedBookingsView(HomeAssistantView):
         coordinator = _coordinator(request.app["hass"])
         bookings = [] if not coordinator or not coordinator.data else coordinator.data.get("bookings", [])
         unresolved = [booking for booking in bookings if booking.get("status") != "resolved"]
-        return self.json(_response_payload({"bookings": unresolved}))
+        if coordinator is None:
+            return self.json(_response_payload({"bookings": unresolved}))
+        accounts = _rule_accounts(coordinator)
+        catalogs = _rule_catalogs(coordinator)
+        pets = _pet_records(coordinator)
+        rules = _rule_list(coordinator)
+        targets = _valid_plan_targets(request.app["hass"])
+        projected = []
+        for booking in unresolved:
+            suggestion = rule_suggestion(
+                booking,
+                rules,
+                accounts=accounts,
+                valid_targets=targets,
+                catalogs=catalogs,
+                pets=pets,
+            )
+            projected.append({**booking, **suggestion})
+        return self.json(_response_payload({"bookings": projected}))
 
 
 class BookingAssignmentView(HomeAssistantView):

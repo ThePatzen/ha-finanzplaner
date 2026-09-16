@@ -300,11 +300,16 @@ class RuleViewTests(unittest.TestCase):
             rule["id"] for rule in self.coordinator.store.data["rules"]
         }
 
-        result = asyncio.run(
-            self.http.RulesView().post(
-                self._request(self._valid_rule_payload())
+        with patch.object(
+            self.http,
+            "uuid4",
+            return_value=types.SimpleNamespace(hex="0123456789abcdef0123456789abcdef"),
+        ):
+            result = asyncio.run(
+                self.http.RulesView().post(
+                    self._request(self._valid_rule_payload())
+                )
             )
-        )
 
         created = self.coordinator.store.data["rules"][-1]
         self.assertNotIn(created["id"], existing_ids)
@@ -431,6 +436,103 @@ class RuleViewTests(unittest.TestCase):
         self.assertEqual(result["rules"], [])
         self.assertEqual(self.coordinator.store.data, before)
         self.assertEqual(self.coordinator.store.save_count, 0)
+
+
+class UnresolvedRuleProjectionTests(unittest.TestCase):
+    setUp = RuleViewTests.setUp
+    _request = RuleViewTests._request
+
+    def test_unresolved_list_exposes_suggestion_without_mutating_store(self):
+        booking = {
+            "id": "booking-1",
+            "status": "unresolved",
+            "account_id": "account-giro",
+            "counterparty": "Supermarkt AG",
+            "purpose": "Einkauf",
+            "amount": -42.37,
+            "allocations": [],
+        }
+        self.coordinator.store.data["accounts"] = [{"id": "account-giro"}]
+        self.coordinator.store.data["bookings"] = [booking]
+        self.coordinator.store.data["rules"] = [{
+            "id": "rule-1",
+            "label": "Supermarkt",
+            "active": True,
+            "priority": 100,
+            "account_id": "account-giro",
+            "counterparty": "Supermarkt AG",
+            "purpose_contains": None,
+            "allocations": [{
+                "target": "household",
+                "share_percent": 100.0,
+                "area_id": None,
+                "category_id": None,
+                "project_id": None,
+                "pet_id": None,
+            }],
+        }]
+
+        body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+
+        self.assertEqual(body["bookings"][0]["status"], "suggested")
+        self.assertEqual(body["bookings"][0]["suggestion"]["rule_id"], "rule-1")
+        self.assertEqual(booking["status"], "unresolved")
+        self.assertEqual(booking["allocations"], [])
+
+    def test_conflicting_rules_are_visible_without_selection(self):
+        booking = {
+            "id": "booking-1",
+            "status": "unresolved",
+            "account_id": "account-1",
+            "counterparty": "Supermarkt",
+            "purpose": "Einkauf",
+            "amount": -42.37,
+            "allocations": [],
+        }
+        second_rule = deepcopy(self.coordinator.store.data["rules"][0])
+        second_rule["id"] = "rule-2"
+        self.coordinator.store.data["bookings"] = [booking]
+        self.coordinator.store.data["rules"].append(second_rule)
+
+        body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+
+        projected = body["bookings"][0]
+        self.assertEqual(projected["status"], "conflict")
+        self.assertEqual(set(projected["conflicts"]), {"rule-1", "rule-2"})
+        self.assertEqual(booking["status"], "unresolved")
+        self.assertEqual(booking["allocations"], [])
+
+    def test_invalid_rule_reference_stays_unresolved_with_reason(self):
+        booking = {
+            "id": "booking-1",
+            "status": "unresolved",
+            "account_id": "account-1",
+            "counterparty": "Supermarkt",
+            "purpose": "Einkauf",
+            "amount": -42.37,
+            "allocations": [],
+        }
+        self.coordinator.store.data["catalogs"]["categories"][0]["active"] = False
+        self.coordinator.store.data["bookings"] = [booking]
+
+        body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+
+        projected = body["bookings"][0]
+        self.assertEqual(projected["status"], "unresolved")
+        self.assertIn("Keine aktive Regel", projected["reason"])
+        self.assertEqual(booking["status"], "unresolved")
+        self.assertEqual(booking["allocations"], [])
+
+    def test_resolved_booking_is_not_returned_by_unresolved_view(self):
+        self.coordinator.store.data["bookings"] = [{
+            "id": "booking-resolved",
+            "status": "resolved",
+            "allocations": [],
+        }]
+
+        body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+
+        self.assertEqual(body["bookings"], [])
 
 
 class RuleRegistrationTests(unittest.TestCase):
