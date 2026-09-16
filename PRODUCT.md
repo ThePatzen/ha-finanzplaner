@@ -51,6 +51,8 @@ veröffentlicht:
 - lokale Futterprofile mit Verpackungseinheit, erwarteten Kaufkosten, Verbrauchsintervall und Vorwarnfenster
 - nächste Kaufprognose aus manuellem Intervall oder durchschnittlichem Abstand bestätigter Käufe
 - bestätigte Futterkäufe verschieben das letzte Kaufdatum; erwartete Käufe werden einmalig in der Monatsprognose berücksichtigt
+- Futter-Erinnerungsstatus als automationstauglicher Binary-Sensor und HA-Service zur Kaufbestätigung
+- lokal verwaltete Stammdaten für Kategorien, Bereiche und Projekte mit stabilen IDs und historischen Namens-Snapshots
 
 Weitere Produktfähigkeiten und Leitplanken:
 

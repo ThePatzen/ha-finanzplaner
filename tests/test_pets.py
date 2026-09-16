@@ -10,12 +10,15 @@ from unittest.mock import patch
 from custom_components import finanzplaner
 from custom_components.finanzplaner.const import DOMAIN
 from custom_components.finanzplaner.core import (
+    catalog_id_for_label,
     feed_profile_forecast,
     feed_profile_month_values,
     parse_allocation_payload,
     validate_pet_payload,
+    validate_catalog_payload,
     validate_feed_profile_payload,
     validate_plan_item_payload,
+    record_feed_profile_purchase,
 )
 from custom_components.finanzplaner.storage import migrate_store_data
 
@@ -95,6 +98,73 @@ class FeedProfileDomainTests(unittest.TestCase):
                 {"pet_id": "pet-fio", "product": "", "package_unit": "Sack", "expected_cost": 1},
                 {"pet-fio": {"name": "Fio"}},
             )
+
+    def test_confirmed_purchase_uses_one_shared_validation_path(self):
+        profile = {
+            "active": True,
+            "purchase_dates": ["2026-08-01"],
+        }
+
+        normalized = record_feed_profile_purchase(
+            profile, "2026-09-10", today=date(2026, 9, 16)
+        )
+
+        self.assertEqual(normalized, "2026-09-10")
+        self.assertEqual(profile["last_purchase_date"], "2026-09-10")
+        with self.assertRaisesRegex(ValueError, "Zukunft"):
+            record_feed_profile_purchase(profile, "2026-09-17", today=date(2026, 9, 16))
+
+
+class CatalogDomainTests(unittest.TestCase):
+    def test_catalogs_are_backfilled_from_legacy_labels(self):
+        migrated = migrate_store_data(
+            {
+                "version": 2,
+                "plan_items": [
+                    {
+                        "name": "Miete",
+                        "category": "Wohnen",
+                        "area": "Haushalt",
+                        "project": "PV-Anlage",
+                    }
+                ],
+                "bookings": [
+                    {
+                        "allocations": [
+                            {"category": "Futter", "area": "Haustiere", "project": None}
+                        ]
+                    }
+                ],
+            },
+            "Testhaushalt",
+        )
+
+        catalogs = migrated["catalogs"]
+        self.assertEqual(
+            [entry["label"] for entry in catalogs["categories"]],
+            ["Futter", "Wohnen"],
+        )
+        self.assertEqual([entry["label"] for entry in catalogs["areas"]], ["Haushalt", "Haustiere"])
+        self.assertEqual([entry["label"] for entry in catalogs["projects"]], ["PV-Anlage"])
+        self.assertEqual(
+            catalogs["categories"][0]["id"], catalog_id_for_label("categories", "Futter")
+        )
+        self.assertEqual(
+            migrated["plan_items"][0]["category_id"],
+            catalog_id_for_label("categories", "Wohnen"),
+        )
+        self.assertEqual(
+            migrated["bookings"][0]["allocations"][0]["area_id"],
+            catalog_id_for_label("areas", "Haustiere"),
+        )
+
+    def test_catalog_payload_is_strict_and_normalized(self):
+        self.assertEqual(
+            validate_catalog_payload({"label": "  Hunde  ", "active": True}),
+            {"label": "Hunde", "active": True},
+        )
+        with self.assertRaisesRegex(ValueError, "unbekanntes Feld"):
+            validate_catalog_payload({"label": "Hunde", "color": "red"})
 
 
 class PetDomainTests(unittest.TestCase):
@@ -273,6 +343,17 @@ class PetApiTests(unittest.TestCase):
                             "active": True,
                         }
                     ],
+                    "catalogs": {
+                        "categories": [
+                            {
+                                "id": "catalog-category-wohnen",
+                                "label": "Wohnen",
+                                "active": True,
+                            }
+                        ],
+                        "areas": [],
+                        "projects": [],
+                    },
                     "plan_items": [],
                     "bookings": [
                         {
@@ -387,6 +468,50 @@ class PetApiTests(unittest.TestCase):
         self.assertEqual(allocation["pet_type"], "Hund")
         self.assertEqual(allocation_result["booking"]["status"], "resolved")
 
+    def test_catalog_ids_are_accepted_for_plan_items_and_allocations(self):
+        category_id = self.coordinator.store.data["catalogs"]["categories"][0]["id"]
+        plan_result = asyncio.run(
+            self.http.PlanItemsView().post(
+                self._request(
+                    {
+                        "name": "Wohnkosten",
+                        "direction": "expense",
+                        "amount": 100,
+                        "frequency_months": 1,
+                        "target": "household",
+                        "category_id": category_id,
+                    }
+                )
+            )
+        )
+        plan_item = self.coordinator.store.data["plan_items"][-1]
+        self.assertEqual(plan_item["category_id"], category_id)
+        self.assertEqual(plan_item["category"], "Wohnen")
+        self.assertEqual(plan_result["plan_item"]["category_id"], category_id)
+
+        allocation_result = asyncio.run(
+            self.http.BookingAllocationsView().post(
+                self._request(
+                    {
+                        "allocations": [
+                            {
+                                "target": "household",
+                                "amount": 42,
+                                "category_id": category_id,
+                            }
+                        ]
+                    }
+                ),
+                "booking-1",
+            )
+        )
+        allocation = self.coordinator.store.data["bookings"][0]["allocations"][0]
+        self.assertEqual(allocation["category_id"], category_id)
+        self.assertEqual(allocation["category"], "Wohnen")
+        self.assertEqual(
+            allocation_result["booking"]["allocations"][0]["category_id"], category_id
+        )
+
     def test_invalid_pet_reference_does_not_mutate_or_save(self):
         before = deepcopy(self.coordinator.store.data)
         with self.assertRaises(self.bad_request):
@@ -442,6 +567,91 @@ class PetApiTests(unittest.TestCase):
         self.assertEqual(purchased["purchase_date"], "2026-09-10")
         self.assertEqual(self.coordinator.store.save_count, 2)
 
+    def test_catalogs_can_be_created_renamed_and_archived_reversibly(self):
+        created = asyncio.run(
+            self.http.CatalogEntriesView().post(
+                self._request({"label": " Haustiere ", "active": True}),
+                "areas",
+            )
+        )
+        entry = self.coordinator.store.data["catalogs"]["areas"][-1]
+        self.assertEqual(created["catalog"]["label"], "Haustiere")
+        self.assertTrue(entry["id"].startswith("catalog-area-"))
+
+        self.coordinator.store.data["plan_items"].extend(
+            [
+                {"area": "Haustiere"},
+                {
+                    "id": "plan-item-canonical",
+                    "name": "Historische Zuordnung",
+                    "direction": "expense",
+                    "amount": 1,
+                    "frequency_months": 1,
+                    "target": "household",
+                    "active": True,
+                    "area": "Haustiere",
+                    "area_id": entry["id"],
+                },
+            ]
+        )
+        updated = asyncio.run(
+            self.http.CatalogEntryView().post(
+                self._request({"label": "Tierbedarf", "active": True}),
+                "areas",
+                entry["id"],
+            )
+        )
+        self.assertEqual(updated["catalog"]["label"], "Tierbedarf")
+        self.assertEqual(self.coordinator.store.data["plan_items"][0]["area"], "Tierbedarf")
+        self.assertEqual(self.coordinator.store.data["plan_items"][1]["area"], "Haustiere")
+        self.assertEqual(self.coordinator.store.data["plan_items"][1]["area_id"], entry["id"])
+        asyncio.run(
+            self.http.PlanItemView().post(
+                self._request({"name": "Historische Zuordnung angepasst"}),
+                "plan-item-canonical",
+            )
+        )
+        self.assertEqual(self.coordinator.store.data["plan_items"][1]["area"], "Haustiere")
+        self.assertEqual(self.coordinator.store.data["plan_items"][1]["area_id"], entry["id"])
+        self.assertEqual(
+            [catalog["label"] for catalog in self.coordinator.store.data["catalogs"]["areas"]],
+            ["Tierbedarf"],
+        )
+
+        archived = asyncio.run(
+            self.http.CatalogEntryView().delete(self._request(), "areas", entry["id"])
+        )
+        self.assertTrue(archived["archived"])
+        self.assertFalse(entry["active"])
+
+        reactivated = asyncio.run(
+            self.http.CatalogEntryView().post(
+                self._request({"label": "Tierbedarf", "active": True}),
+                "areas",
+                entry["id"],
+            )
+        )
+        self.assertTrue(reactivated["catalog"]["active"])
+        self.assertTrue(entry["active"])
+
+        asyncio.run(self.http.CatalogEntryView().delete(self._request(), "areas", entry["id"]))
+
+        with self.assertRaises(self.bad_request):
+            asyncio.run(
+                self.http.PlanItemsView().post(
+                    self._request(
+                        {
+                            "name": "Neue Zuordnung",
+                            "direction": "expense",
+                            "amount": 1,
+                            "frequency_months": 1,
+                            "target": "household",
+                            "area": "Tierbedarf",
+                        }
+                    )
+                )
+            )
+
 
 class PetRegistrationTests(unittest.TestCase):
     def test_async_setup_registers_pet_views(self):
@@ -460,6 +670,9 @@ class PetRegistrationTests(unittest.TestCase):
         self.assertIn(http.FeedProfilesView, registered)
         self.assertIn(http.FeedProfileView, registered)
         self.assertIn(http.FeedProfilePurchaseView, registered)
+        self.assertIn(http.CatalogsView, registered)
+        self.assertIn(http.CatalogEntriesView, registered)
+        self.assertIn(http.CatalogEntryView, registered)
         self.assertTrue(http.PetView.requires_auth)
 
 

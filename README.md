@@ -6,7 +6,8 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.3.0 liefert die erste durchgängige Konten- und Aufteilungsstrecke:
+Der aktuelle Arbeitsstand auf Basis von Version 0.3.0 umfasst die erste
+durchgängige Konten- und Aufteilungsstrecke sowie die folgenden Erweiterungen:
 
 - HACS-fähige Custom Integration mit Config Flow
 - native Home-Assistant-Seitenleiste mit schneller Monatsübersicht
@@ -19,6 +20,8 @@ Version 0.3.0 liefert die erste durchgängige Konten- und Aufteilungsstrecke:
 - eigene Planposten-Ansicht zum Anlegen, Bearbeiten und Archivieren von Einnahmen, Ausgaben und Rücklagen
 - eigene Tierprofile mit optionalem Tier-Typ und historischer Snapshot-Zuordnung
 - Futterprofile je Tier mit Kaufkosten, Verbrauchsintervall und nächster Kaufprognose
+- Stammdatenverwaltung für Kategorien, Bereiche und Projekte mit stabilen IDs und Namens-Snapshots
+- automationstauglicher HA-Status `Futterkauf fällig` und Service zum Bestätigen eines Kaufs
 - wiederkehrende und einmalige Planungen mit Betrag, Rhythmus, Fälligkeit und Gültigkeitszeitraum
 - centgenaue, bestätigungspflichtige Aufteilungen auf Personen oder `Haushalt`
 - gemeinsame Zuordnungen wie `Haushalt` mit dem Bereich `Hunde`
@@ -39,7 +42,7 @@ Danach erscheint Finanzplaner in der Home-Assistant-Seitenleiste. MT940- und CAM
 
 ## Planposten verwalten
 
-Über `Planposten` lassen sich neue Einnahmen, Ausgaben und Rücklagen direkt im Finanzplaner anlegen. Ein Planposten kann monatlich, in längeren Abständen oder einmalig gelten und optional einen Fälligkeitstag, ein Datum sowie einen Gültigkeitszeitraum erhalten. Kategorien, Bereiche, Projekte und ein Planungsziel (`Haushalt` oder eine vorhandene Home-Assistant-Person) bleiben getrennt pflegbar.
+Über `Planposten` lassen sich neue Einnahmen, Ausgaben und Rücklagen direkt im Finanzplaner anlegen. Ein Planposten kann monatlich, in längeren Abständen oder einmalig gelten und optional einen Fälligkeitstag, ein Datum sowie einen Gültigkeitszeitraum erhalten. Kategorien, Bereiche und Projekte werden über `Stammdaten` gepflegt; Planposten speichern deren stabile ID und zusätzlich den damaligen Namen als Snapshot. Ein Planungsziel (`Haushalt` oder eine vorhandene Home-Assistant-`person.*`-Entität) bleibt davon getrennt.
 
 Archivieren deaktiviert einen Planposten nur; der Eintrag bleibt erhalten und kann über den Aktiv-Schalter wieder eingeschaltet werden. Beträge werden als positive Eurobeträge gespeichert, die Richtung bestimmt ihre Wirkung in der Übersicht.
 
@@ -57,8 +60,21 @@ Historie fortgeschrieben und der nächste voraussichtliche Kauf neu berechnet;
 der erwartete Betrag zählt als konkretes Prognoseereignis und nicht noch einmal
 als Monatsbudget. Der Home-Assistant-Sensor `Nächster Futterkauf` liefert das
 nächste Datum sowie Status, Tier, Produkt und Berechnungsgrund als Attribute.
-Es werden weder Bankbuchungen automatisch erzeugt noch ungefragt
-Benachrichtigungen verschickt.
+Der zusätzliche Binary-Sensor `Futterkauf fällig` wird bei bald fälligen,
+heute fälligen oder überfälligen Profilen eingeschaltet. Seine Attribute
+enthalten die betroffenen Profil-IDs und Kaufdaten, damit du in Home Assistant
+eine eigene Benachrichtigung mit frei wählbarem Empfänger und Zeitplan anlegen
+kannst. Der Service `finanzplaner.confirm_feed_purchase` bestätigt einen Kauf
+auch aus einer HA-Aktion heraus. Es werden weder Bankbuchungen automatisch
+erzeugt noch ungefragt Benachrichtigungen verschickt.
+
+## Stammdaten
+
+Über `Stammdaten` lassen sich Kategorien, Bereiche und Projekte anlegen,
+umbenennen, archivieren und wieder aktivieren. Beim Umbenennen bleiben
+bestehende Verknüpfungen über ihre stabile ID erhalten; gespeicherte Namen
+bleiben als historische Snapshots verfügbar. Archivierte Einträge werden für
+neue Zuordnungen nicht angeboten, bleiben in alten Buchungen aber sichtbar.
 
 ## Konten und Bankimport
 
@@ -68,7 +84,7 @@ Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`per
 
 ## Buchungen aufteilen
 
-Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Tier, Bereich, Kategorie und Projekt tragen; eine gemeinsame Futterausgabe wird beispielsweise als Ziel `Haushalt` mit Tier `Fio` und Bereich `Haustiere` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Automatische Regelvorschläge und automatische Benachrichtigungen sind nicht Bestandteil dieser Version.
+Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Tier, Bereich, Kategorie und Projekt tragen; eine gemeinsame Futterausgabe wird beispielsweise als Ziel `Haushalt` mit Tier `Fio` und Bereich `Haustiere` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Automatische Regelvorschläge sind nicht Bestandteil dieser Version; Benachrichtigungen werden nicht ungefragt verschickt.
 
 ## Excel-Plan übernehmen
 

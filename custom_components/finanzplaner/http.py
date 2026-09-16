@@ -14,7 +14,10 @@ from homeassistant.components.http import HomeAssistantView
 from .const import DOMAIN
 from .core import (
     Booking,
+    CATALOG_KINDS,
+    CATALOG_VALUE_FIELDS,
     booking_fingerprint,
+    catalog_id_for_label,
     ensure_account,
     feed_profile_forecast,
     normalize_account_reference,
@@ -23,12 +26,15 @@ from .core import (
     parse_camt053,
     parse_mt940,
     plan_item_totals,
+    record_feed_profile_purchase,
     validate_pet_payload,
+    validate_catalog_payload,
     validate_feed_profile_payload,
     validate_plan_item_payload,
     split_amount,
 )
 from .coordinator import FinanzplanerCoordinator
+from .storage import ensure_catalog_entries, rename_catalog_references
 from .importers.excel_template import (
     XlsxImportError,
     confirm_suggestions,
@@ -358,6 +364,12 @@ def pet_payload(pet: dict[str, object]) -> dict[str, object]:
     return _response_payload(dict(pet))  # type: ignore[return-value]
 
 
+def catalog_payload(entry: dict[str, object]) -> dict[str, object]:
+    """Return one category, area or project entry for the panel API."""
+
+    return _response_payload(dict(entry))  # type: ignore[return-value]
+
+
 def feed_profile_payload(profile: dict[str, object]) -> dict[str, object]:
     """Return a profile together with its explainable forecast fields."""
 
@@ -427,6 +439,76 @@ def _valid_plan_targets(hass: Any) -> set[str]:
     }
 
 
+def _catalog_link_payload(
+    coordinator: FinanzplanerCoordinator,
+    payload: object,
+    *,
+    allow_archived: bool = False,
+) -> object:
+    """Resolve catalog IDs and labels without breaking legacy API clients."""
+
+    if not isinstance(payload, dict):
+        return payload
+    result = dict(payload)
+    for kind, field in CATALOG_VALUE_FIELDS.items():
+        id_field = f"{field}_id"
+        if id_field not in result and field not in result:
+            continue
+        requested_id = result.get(id_field)
+        label = result.get(field)
+        entries = _catalog_entries(coordinator, kind)
+        entry = next(
+            (
+                candidate
+                for candidate in entries
+                if isinstance(requested_id, str)
+                and candidate.get("id") == requested_id
+            ),
+            None,
+        ) if requested_id else None
+        if requested_id and entry is None:
+            raise ValueError(f"Die Zuordnung für {field} verweist auf keinen Stammdateneintrag.")
+        if entry is not None:
+            if entry.get("active", True) is False and not allow_archived:
+                raise ValueError(f"Die Zuordnung für {field} verweist auf einen archivierten Eintrag.")
+            result[id_field] = entry.get("id")
+            result[field] = entry.get("label")
+            continue
+        if isinstance(label, str) and label.strip():
+            matching_label = next(
+                (
+                    candidate
+                    for candidate in entries
+                    if str(candidate.get("label", "")).casefold()
+                    == label.strip().casefold()
+                ),
+                None,
+            )
+            if (
+                matching_label is not None
+                and matching_label.get("active", True) is False
+                and not allow_archived
+            ):
+                raise ValueError(
+                    f"Die Zuordnung für {field} verweist auf einen archivierten Eintrag."
+                )
+            matching = next(
+                (
+                    candidate
+                    for candidate in entries
+                    if candidate.get("active", True) is not False
+                    and str(candidate.get("label", "")).casefold() == label.strip().casefold()
+                ),
+                None,
+            )
+            result[id_field] = matching.get("id") if matching else None
+            if matching is not None:
+                result[field] = matching.get("label")
+        else:
+            result[id_field] = None
+    return result
+
+
 def _plan_item_draft(item: dict[str, object]) -> dict[str, object]:
     """Keep only editable fields when validating an existing item."""
 
@@ -442,8 +524,11 @@ def _plan_item_draft(item: dict[str, object]) -> dict[str, object]:
         "name": item.get("name", ""),
         "direction": direction,
         "category": item.get("category"),
+        "category_id": item.get("category_id"),
         "area": item.get("area"),
+        "area_id": item.get("area_id"),
         "project": item.get("project"),
+        "project_id": item.get("project_id"),
         "amount": abs(numeric_amount),
         "frequency_months": item.get("frequency_months", 1),
         "due_day": item.get("due_day"),
@@ -786,6 +871,168 @@ class PetView(HomeAssistantView):
         )
 
 
+def _catalog_entries(
+    coordinator: FinanzplanerCoordinator, kind: str
+) -> list[dict[str, object]]:
+    catalogs = coordinator.store.data.get("catalogs", {})
+    entries = catalogs.get(kind, []) if isinstance(catalogs, dict) else []
+    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
+
+
+def _catalog_kind(kind: str) -> str:
+    if kind not in CATALOG_KINDS:
+        raise ValueError("Die Stammdatenart ist ungültig.")
+    return kind
+
+
+def _materialize_catalog_entry(
+    values: dict[str, object], *, entry_id: str, now_iso: str
+) -> dict[str, object]:
+    return {
+        "id": entry_id,
+        **values,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+
+
+class CatalogsView(HomeAssistantView):
+    """List the first-class categories, areas and projects."""
+
+    url = "/api/finanzplaner/catalogs"
+    name = "api:finanzplaner:catalogs"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        catalogs = (
+            {kind: [] for kind in CATALOG_KINDS}
+            if coordinator is None
+            else {
+                kind: [catalog_payload(entry) for entry in _catalog_entries(coordinator, kind)]
+                for kind in CATALOG_KINDS
+            }
+        )
+        return self.json(_response_payload({"catalogs": catalogs}))
+
+
+class CatalogEntriesView(HomeAssistantView):
+    """Create one category, area or project."""
+
+    url = "/api/finanzplaner/catalogs/{kind}"
+    name = "api:finanzplaner:catalogs:entries"
+    requires_auth = True
+
+    async def post(self, request: web.Request, kind: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            kind = _catalog_kind(kind)
+            payload = await request.json()
+            values = validate_catalog_payload(payload)
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        entries = _catalog_entries(coordinator, kind)
+        label = str(values["label"])
+        if any(str(entry.get("label", "")).casefold() == label.casefold() for entry in entries):
+            raise web.HTTPBadRequest(text="Diese Bezeichnung ist bereits vorhanden.")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        entry = _materialize_catalog_entry(
+            values,
+            entry_id=catalog_id_for_label(kind, label),
+            now_iso=now_iso,
+        )
+        catalogs = coordinator.store.data.setdefault("catalogs", {})
+        if not isinstance(catalogs, dict):
+            catalogs = {catalog_kind: [] for catalog_kind in CATALOG_KINDS}
+            coordinator.store.data["catalogs"] = catalogs
+        kind_entries = catalogs.get(kind)
+        if not isinstance(kind_entries, list):
+            kind_entries = []
+            catalogs[kind] = kind_entries
+        kind_entries.append(entry)
+        kind_entries.sort(key=lambda item: str(item.get("label", "")).casefold())
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"catalog": catalog_payload(entry), "kind": kind}))
+
+
+class CatalogEntryView(HomeAssistantView):
+    """Update or reversibly archive one catalog entry."""
+
+    url = "/api/finanzplaner/catalogs/{kind}/{entry_id}"
+    name = "api:finanzplaner:catalog"
+    requires_auth = True
+
+    def _find_entry(
+        self,
+        coordinator: FinanzplanerCoordinator,
+        kind: str,
+        entry_id: str,
+    ) -> dict[str, object] | None:
+        return next(
+            (entry for entry in _catalog_entries(coordinator, kind) if entry.get("id") == entry_id),
+            None,
+        )
+
+    async def post(self, request: web.Request, kind: str, entry_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            kind = _catalog_kind(kind)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+        entry = self._find_entry(coordinator, kind, entry_id)
+        if entry is None:
+            raise web.HTTPNotFound(text="Stammdateneintrag nicht gefunden.")
+        try:
+            payload = await request.json()
+            values = validate_catalog_payload(
+                {"label": entry.get("label", ""), "active": entry.get("active", True), **payload}
+            )
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        label = str(values["label"])
+        if any(
+            other is not entry
+            and str(other.get("label", "")).casefold() == label.casefold()
+            for other in _catalog_entries(coordinator, kind)
+        ):
+            raise web.HTTPBadRequest(text="Diese Bezeichnung ist bereits vorhanden.")
+        old_label = str(entry.get("label", ""))
+        rename_catalog_references(
+            coordinator.store.data, kind, old_label, label, str(entry.get("id", entry_id))
+        )
+        entry.update(values)
+        entry["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"catalog": catalog_payload(entry), "kind": kind}))
+
+    async def delete(self, request: web.Request, kind: str, entry_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            kind = _catalog_kind(kind)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+        entry = self._find_entry(coordinator, kind, entry_id)
+        if entry is None:
+            raise web.HTTPNotFound(text="Stammdateneintrag nicht gefunden.")
+        entry["active"] = False
+        entry["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(
+            _response_payload({"catalog": catalog_payload(entry), "kind": kind, "archived": True})
+        )
+
+
 def _feed_profile_draft(profile: dict[str, object]) -> dict[str, object]:
     """Keep only editable feed-profile fields for update validation."""
 
@@ -964,10 +1211,6 @@ class FeedProfilePurchaseView(HomeAssistantView):
         profile = FeedProfileView()._find_profile(coordinator, feed_profile_id)
         if profile is None:
             raise web.HTTPNotFound(text="Futterprofil nicht gefunden.")
-        if profile.get("active", True) is False:
-            raise web.HTTPBadRequest(
-                text="Ein archiviertes Futterprofil muss vor dem Kauf reaktiviert werden."
-            )
         try:
             payload = await request.json()
         except (TypeError, ValueError) as exc:
@@ -978,30 +1221,12 @@ class FeedProfilePurchaseView(HomeAssistantView):
             raise web.HTTPBadRequest(text="Der Kauf muss als Objekt übermittelt werden.")
         if set(payload) - {"purchase_date"}:
             raise web.HTTPBadRequest(text="Der Kauf enthält ein unbekanntes Feld.")
-        purchase_date = payload.get("purchase_date", date.today().isoformat())
-        if not isinstance(purchase_date, str) or not purchase_date.strip():
-            raise web.HTTPBadRequest(text="Bitte ein Kaufdatum im Format JJJJ-MM-TT angeben.")
-        normalized_date = purchase_date.strip()
         try:
-            parsed_purchase_date = date.fromisoformat(normalized_date)
-        except ValueError as exc:
-            raise web.HTTPBadRequest(
-                text="Das Kaufdatum muss im Format JJJJ-MM-TT angegeben werden."
-            ) from exc
-        if parsed_purchase_date.isoformat() != normalized_date:
-            raise web.HTTPBadRequest(
-                text="Das Kaufdatum muss im Format JJJJ-MM-TT angegeben werden."
+            normalized_date = record_feed_profile_purchase(
+                profile, payload.get("purchase_date")
             )
-        if parsed_purchase_date > date.today():
-            raise web.HTTPBadRequest(text="Das Kaufdatum darf nicht in der Zukunft liegen.")
-
-        history = profile.get("purchase_dates", [])
-        purchase_dates = set(history) if isinstance(history, list) else set()
-        purchase_dates.add(normalized_date)
-        profile["purchase_dates"] = sorted(
-            value for value in purchase_dates if isinstance(value, str)
-        )
-        profile["last_purchase_date"] = profile["purchase_dates"][-1]
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
         profile["updated_at"] = datetime.now(timezone.utc).isoformat()
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
@@ -1054,6 +1279,7 @@ class PlanItemsView(HomeAssistantView):
         if isinstance(payload, dict) and "frequency_months" not in payload:
             payload = {**payload, "frequency_months": 1}
         try:
+            payload = _catalog_link_payload(coordinator, payload)
             values = validate_plan_item_payload(
                 payload,
                 _valid_plan_targets(request.app["hass"]),
@@ -1070,6 +1296,7 @@ class PlanItemsView(HomeAssistantView):
             updated_at=now_iso,
         )
         coordinator.store.data.setdefault("plan_items", []).append(item)
+        ensure_catalog_entries(coordinator.store.data, values)
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
         return self.json(_response_payload({"plan_item": plan_item_payload(item)}))
@@ -1112,6 +1339,7 @@ class PlanItemView(HomeAssistantView):
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="Die Planpostendaten müssen ein Objekt sein.")
         try:
+            payload = _catalog_link_payload(coordinator, payload, allow_archived=True)
             values = validate_plan_item_payload(
                 {**_plan_item_draft(item), **payload},
                 _valid_plan_targets(request.app["hass"]),
@@ -1128,6 +1356,7 @@ class PlanItemView(HomeAssistantView):
                 updated_at=datetime.now(timezone.utc).isoformat(),
             )
         )
+        ensure_catalog_entries(coordinator.store.data, values)
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
         return self.json(_response_payload({"plan_item": plan_item_payload(item)}))
@@ -1205,23 +1434,34 @@ class BookingAssignmentView(HomeAssistantView):
             raise web.HTTPNotFound(text="Buchung nicht gefunden.")
 
         area = payload.get("area") or None
+        area_id = payload.get("area_id")
         category = payload.get("category")
+        category_id = payload.get("category_id")
         project = payload.get("project")
+        project_id = payload.get("project_id")
         pet_id = payload.get("pet_id")
         try:
             split = split_amount(float(booking.get("amount", 0)), targets)
-            allocations = parse_allocation_payload(
-                [
+            allocation_payload = [
+                _catalog_link_payload(
+                    coordinator,
                     {
                         "target": allocation.target,
                         "amount": allocation.amount,
                         "area": area,
+                        "area_id": area_id,
                         "category": category,
+                        "category_id": category_id,
                         "project": project,
+                        "project_id": project_id,
                         "pet_id": pet_id,
-                    }
-                    for allocation in split
-                ],
+                    },
+                    allow_archived=True,
+                )
+                for allocation in split
+            ]
+            allocations = parse_allocation_payload(
+                allocation_payload,
                 float(booking.get("amount", 0)),
                 valid_targets,
                 _allocation_pet_records(coordinator, booking),
@@ -1233,14 +1473,19 @@ class BookingAssignmentView(HomeAssistantView):
                 "target": allocation.target,
                 "amount": allocation.amount,
                 "area": allocation.area,
+                "area_id": allocation.area_id,
                 "category": allocation.category,
+                "category_id": allocation.category_id,
                 "project": allocation.project,
+                "project_id": allocation.project_id,
                 "pet_id": allocation.pet_id,
                 "pet_name": allocation.pet_name,
                 "pet_type": allocation.pet_type,
             }
             for allocation in allocations
         ]
+        for allocation in booking["allocations"]:
+            ensure_catalog_entries(coordinator.store.data, allocation)
         booking["status"] = "resolved"
         await coordinator.store.async_save()
         await coordinator.async_refresh()
@@ -1294,6 +1539,10 @@ class BookingAllocationsView(HomeAssistantView):
             ),
         }
         try:
+            allocation_payload = [
+                _catalog_link_payload(coordinator, item, allow_archived=True)
+                for item in allocation_payload
+            ]
             allocations = parse_allocation_payload(
                 allocation_payload,
                 float(booking.get("amount", 0)),
@@ -1308,14 +1557,19 @@ class BookingAllocationsView(HomeAssistantView):
                 "target": allocation.target,
                 "amount": allocation.amount,
                 "area": allocation.area,
+                "area_id": allocation.area_id,
                 "category": allocation.category,
+                "category_id": allocation.category_id,
                 "project": allocation.project,
+                "project_id": allocation.project_id,
                 "pet_id": allocation.pet_id,
                 "pet_name": allocation.pet_name,
                 "pet_type": allocation.pet_type,
             }
             for allocation in allocations
         ]
+        for allocation in booking["allocations"]:
+            ensure_catalog_entries(coordinator.store.data, allocation)
         booking["status"] = "resolved"
         await coordinator.store.async_save()
         await coordinator.async_refresh()
@@ -1469,6 +1723,8 @@ class ExcelConfirmView(HomeAssistantView):
         for item in items:
             item["import_id"] = import_id
         coordinator.store.data.setdefault("plan_items", []).extend(items)
+        for item in items:
+            ensure_catalog_entries(coordinator.store.data, item)
         coordinator.store.data.setdefault("imports", []).append(
             {
                 "format": "XLSX",

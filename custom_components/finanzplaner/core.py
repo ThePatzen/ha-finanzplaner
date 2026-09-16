@@ -18,8 +18,11 @@ PLAN_ITEM_FIELDS = frozenset(
         "name",
         "direction",
         "category",
+        "category_id",
         "area",
+        "area_id",
         "project",
+        "project_id",
         "amount",
         "frequency_months",
         "due_day",
@@ -31,6 +34,22 @@ PLAN_ITEM_FIELDS = frozenset(
         "active",
     }
 )
+
+CATALOG_KINDS = ("categories", "areas", "projects")
+CATALOG_FIELDS = frozenset({"label", "active"})
+CATALOG_VALUE_FIELDS = {
+    "categories": "category",
+    "areas": "area",
+    "projects": "project",
+}
+
+
+def catalog_id_for_label(kind: str, label: str) -> str:
+    """Return a deterministic local ID for a catalog label."""
+
+    material = f"{kind}:{label.casefold()}"
+    prefix = CATALOG_VALUE_FIELDS.get(kind, kind.rstrip("s"))
+    return f"catalog-{prefix}-{hashlib.sha256(material.encode('utf-8')).hexdigest()[:16]}"
 
 PET_FIELDS = frozenset({"name", "pet_type", "active"})
 FEED_PROFILE_FIELDS = frozenset(
@@ -84,6 +103,34 @@ def validate_pet_payload(payload: object, *, partial: bool = False) -> dict[str,
         normalized["pet_type"] = _optional_plan_text(
             payload.get("pet_type"), "Der Tier-Typ", max_length=60
         )
+
+    if not partial or "active" in payload:
+        active = payload.get("active", True)
+        if not isinstance(active, bool):
+            raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
+        normalized["active"] = active
+    return normalized
+
+
+def validate_catalog_payload(
+    payload: object, *, partial: bool = False
+) -> dict[str, object]:
+    """Validate one editable category, area or project entry."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("Die Stammdaten müssen ein Objekt sein.")
+    unknown = set(payload) - CATALOG_FIELDS
+    if unknown:
+        raise ValueError("Die Stammdaten enthalten ein unbekanntes Feld.")
+
+    normalized: dict[str, object] = {}
+    if not partial or "label" in payload:
+        label = payload.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("Bitte eine Bezeichnung eingeben.")
+        normalized["label"] = label.strip()
+        if len(normalized["label"]) > 120:
+            raise ValueError("Die Bezeichnung darf höchstens 120 Zeichen enthalten.")
 
     if not partial or "active" in payload:
         active = payload.get("active", True)
@@ -286,6 +333,11 @@ def validate_plan_item_payload(
     ):
         if not partial or field in payload:
             normalized[field] = _optional_plan_text(payload.get(field), label)
+        id_field = f"{field}_id"
+        if not partial or id_field in payload:
+            normalized[id_field] = _optional_plan_text(
+                payload.get(id_field), f"Die ID für {label[4:].lower()}", max_length=120
+            )
 
     if not partial or "target" in payload:
         target = payload.get("target")
@@ -451,6 +503,9 @@ class Allocation:
     pet_id: str | None = None
     pet_name: str | None = None
     pet_type: str | None = None
+    area_id: str | None = None
+    category_id: str | None = None
+    project_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -531,8 +586,11 @@ def parse_allocation_payload(
             )
 
         area = _optional_plan_text(item.get("area"), "Der Bereich")
+        area_id = _optional_plan_text(item.get("area_id"), "Die Bereichs-ID", max_length=120)
         category = item.get("category")
+        category_id = _optional_plan_text(item.get("category_id"), "Die Kategorie-ID", max_length=120)
         project = item.get("project")
+        project_id = _optional_plan_text(item.get("project_id"), "Die Projekt-ID", max_length=120)
         if category is not None and not isinstance(category, str):
             raise ValueError("Die Kategorie muss eine Zeichenfolge sein.")
         if project is not None and not isinstance(project, str):
@@ -566,8 +624,11 @@ def parse_allocation_payload(
                 "target": target,
                 "amount": amount,
                 "area": area,
+                "area_id": area_id,
                 "category": category,
+                "category_id": category_id,
                 "project": project,
+                "project_id": project_id,
                 "pet_id": pet_id,
                 "pet_name": pet_name,
                 "pet_type": pet_type,
@@ -590,8 +651,11 @@ def parse_allocation_payload(
             target=str(item["target"]),
             amount=float(item["amount"]),
             area=item["area"],
+            area_id=item["area_id"],
             category=item["category"],
+            category_id=item["category_id"],
             project=item["project"],
+            project_id=item["project_id"],
             pet_id=item["pet_id"],
             pet_name=item["pet_name"],
             pet_type=item["pet_type"],
@@ -755,6 +819,55 @@ def feed_profile_forecast(
         "status": status,
         "days_until_purchase": days_until,
     }
+
+
+def record_feed_profile_purchase(
+    profile: dict[str, object],
+    purchase_date: object = None,
+    *,
+    today: date | None = None,
+) -> str:
+    """Record one confirmed purchase and return its normalized ISO date."""
+
+    if profile.get("active", True) is False:
+        raise ValueError(
+            "Ein archiviertes Futterprofil muss vor dem Kauf reaktiviert werden."
+        )
+    reference_date = today or date.today()
+    normalized_date = (
+        reference_date.isoformat()
+        if purchase_date in (None, "")
+        else purchase_date.strip()
+        if isinstance(purchase_date, str)
+        else None
+    )
+    if not normalized_date:
+        raise ValueError("Bitte ein Kaufdatum im Format JJJJ-MM-TT angeben.")
+    try:
+        parsed_purchase_date = date.fromisoformat(normalized_date)
+    except ValueError as exc:
+        raise ValueError(
+            "Das Kaufdatum muss im Format JJJJ-MM-TT angegeben werden."
+        ) from exc
+    if parsed_purchase_date.isoformat() != normalized_date:
+        raise ValueError(
+            "Das Kaufdatum muss im Format JJJJ-MM-TT angegeben werden."
+        )
+    if parsed_purchase_date > reference_date:
+        raise ValueError("Das Kaufdatum darf nicht in der Zukunft liegen.")
+
+    history = profile.get("purchase_dates", [])
+    history_values = history if isinstance(history, list) else []
+    purchase_dates = {
+        value
+        for value in history_values
+        if isinstance(value, str)
+        and _stored_plan_date(value) is not None
+    }
+    purchase_dates.add(normalized_date)
+    profile["purchase_dates"] = sorted(purchase_dates)
+    profile["last_purchase_date"] = profile["purchase_dates"][-1]
+    return normalized_date
 
 
 def feed_profile_month_values(

@@ -4,7 +4,8 @@ DOMAIN = "finanzplaner"
 STORAGE_VERSION = 2
 STORAGE_KEY = f"{DOMAIN}.data"
 PANEL_URL = DOMAIN
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "binary_sensor"]
+SERVICE_CONFIRM_FEED_PURCHASE = "confirm_feed_purchase"
 
 CONF_HOUSEHOLD_NAME = "household_name"
 DEFAULT_HOUSEHOLD_NAME = "Gemeinsamer Haushalt"

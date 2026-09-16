@@ -5,6 +5,7 @@ const PLAN_ITEMS_URL = "/api/finanzplaner/plan-items";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
 const PETS_URL = "/api/finanzplaner/pets";
 const FEED_PROFILES_URL = "/api/finanzplaner/feed-profiles";
+const CATALOGS_URL = "/api/finanzplaner/catalogs";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
 const BOOKINGS_URL = "/api/finanzplaner/bookings";
@@ -37,6 +38,7 @@ const iconPaths = {
   cart: "M3 4h2l2 11h10l2-8H6m3 12.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm8 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z",
   bolt: "m13 2-8 11h6l-1 9 8-12h-6Z",
   paw: "M7.5 10a2 2 0 1 0-2-2 2 2 0 0 0 2 2Zm9 0a2 2 0 1 0-2-2 2 2 0 0 0 2 2Zm-5 1c-3.1 0-5.5 2.2-5.5 5 0 1.5 1 2.5 2.5 2.5 1.2 0 2-.8 3-.8s1.8.8 3 .8c1.5 0 2.5-1 2.5-2.5 0-2.8-2.4-5-5.5-5Z",
+  tags: "M4 5.5A1.5 1.5 0 0 1 5.5 4H11l9 9-7 7-9-9V5.5ZM7.5 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
   car: "m5 16 1-5 2-4h8l2 4 1 5m-14 0h14M7 16v2m10-2v2M7 11h10M4 13h2m12 0h2",
   file: "M6 3h8l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm8 0v5h4M8 12h6m-6 4h6",
   check: "m5 12 4 4L19 6",
@@ -465,6 +467,29 @@ const styles = `
   .feed-profile-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
   .feed-profile-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
   .feed-profile-save:disabled, .feed-profile-purchase:disabled { cursor: wait; opacity: 0.55; }
+  .catalogs-view { max-inline-size: 72rem; padding-block: 1.8rem; }
+  .catalogs-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .catalogs-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
+  .catalogs-view-header p { max-inline-size: 56rem; margin: 0.5rem 0 0; color: var(--fp-muted); line-height: 1.45; }
+  .catalogs-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-block-start: 1rem; }
+  .catalog-section { min-inline-size: 0; display: grid; align-content: start; gap: 0.75rem; padding: 1rem; }
+  .catalog-section-header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; padding-block-end: 0.65rem; border-block-end: 1px solid var(--fp-line); }
+  .catalog-section-header h3 { margin: 0; font-family: var(--fp-display); font-size: 1.35rem; line-height: 1; }
+  .catalog-section-header span { color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.72rem; }
+  .catalog-entry-list { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
+  .catalog-entry-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.45rem; padding: 0.6rem; border: 1px solid var(--fp-line); background: rgb(255 254 249 / 0.72); }
+  .catalog-entry-form--archived { background: rgb(247 247 244 / 0.7); }
+  .catalog-field { min-inline-size: 0; display: grid; gap: 0.25rem; color: var(--fp-muted); font-size: 0.7rem; font-weight: 800; }
+  .catalog-field input { inline-size: 100%; min-block-size: 2.75rem; min-inline-size: 0; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-control-border); border-radius: 0.4rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .catalog-field input:user-invalid { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .catalog-entry-actions { display: flex; align-items: center; gap: 0.35rem; }
+  .catalog-entry-actions button { min-block-size: 2.75rem; padding: 0.5rem 0.65rem; border: 1px solid var(--fp-navy); border-radius: 0.4rem; color: var(--fp-paper); background: var(--fp-navy); font-size: 0.75rem; font-weight: 800; }
+  .catalog-entry-actions button:hover { background: var(--fp-navy-deep); }
+  .catalog-entry-actions .catalog-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
+  .catalog-entry-actions .catalog-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .catalog-entry-status { grid-column: 1 / -1; min-block-size: 1.1rem; margin: 0; color: var(--fp-muted); font-size: 0.7rem; overflow-wrap: anywhere; }
+  .catalog-entry-status--error { color: var(--fp-coral); font-weight: 700; }
+  .catalog-help { margin: 0; color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
   .empty-state { margin-block-start: 1rem; padding: 2rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); text-align: center; }
 
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
@@ -527,7 +552,7 @@ const styles = `
     .statusbar { display: block; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
-    .review-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .feed-profiles-view-header, .import-strip, .excel-review-header { display: block; }
+    .review-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .feed-profiles-view-header, .catalogs-view-header, .import-strip, .excel-review-header { display: block; }
     .back-button { margin-block-start: 1rem; }
     .accounts-actions { margin-block-start: 1rem; }
     .account-card { grid-template-columns: 1fr; }
@@ -543,6 +568,10 @@ const styles = `
     .feed-profile-fields, .feed-profile-forecast { grid-template-columns: 1fr; }
     .feed-profile-card-header, .feed-profile-card-actions { align-items: stretch; flex-direction: column; }
     .feed-profile-save, .feed-profile-archive, .feed-profile-purchase { inline-size: 100%; }
+    .catalogs-grid { grid-template-columns: 1fr; }
+    .catalog-entry-form { grid-template-columns: 1fr; }
+    .catalog-entry-actions { flex-direction: column; align-items: stretch; }
+    .catalog-entry-actions button { inline-size: 100%; }
     .plan-item-new-row { display: block; }
     .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
     .excel-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -555,7 +584,7 @@ const styles = `
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .catalog-section, .catalog-entry-form, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select, .catalog-field input { border: 1px solid CanvasText; box-shadow: none; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -648,6 +677,14 @@ function feedSourceLabel(source) {
     average: "Durchschnitt bestätigter Käufe",
     none: "noch keine ausreichende Historie",
   }[source] || "noch keine ausreichende Historie";
+}
+
+function catalogKindLabel(kind) {
+  return {
+    categories: "Kategorien",
+    areas: "Bereiche",
+    projects: "Projekte",
+  }[kind] || kind;
 }
 
 function percentBelowPlan(variance, plan) {
@@ -749,6 +786,12 @@ class FinanzplanerPanel extends HTMLElement {
     this._feedProfileDrafts = new Map();
     this._feedProfileSubmissions = new Set();
     this._feedProfileErrors = new Map();
+    this._catalogs = { categories: [], areas: [], projects: [] };
+    this._catalogsLoading = false;
+    this._catalogsLoadFailed = false;
+    this._catalogDrafts = new Map();
+    this._catalogSubmissions = new Set();
+    this._catalogErrors = new Map();
     this._excelPreview = null;
     this._message = "";
     this._loading = false;
@@ -796,24 +839,27 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _loadReviewData() {
-    const [bookingResponse, personsResponse, petsResponse] = await Promise.all([
+    const [bookingResponse, personsResponse, petsResponse, catalogsResponse] = await Promise.all([
       fetchWithHomeAssistantAuth(this._hass, REVIEW_URL),
       fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
       fetchWithHomeAssistantAuth(this._hass, PETS_URL),
+      fetchWithHomeAssistantAuth(this._hass, CATALOGS_URL),
     ]);
-    const [bookingResult, personsResult, petsResult] = await Promise.all([
+    const [bookingResult, personsResult, petsResult, catalogsResult] = await Promise.all([
       readApiResponse(bookingResponse),
       readApiResponse(personsResponse),
       readApiResponse(petsResponse),
+      readApiResponse(catalogsResponse),
     ]);
-    if (!bookingResponse.ok || !petsResponse.ok) {
-      const failedResult = !bookingResponse.ok ? bookingResult : petsResult;
-      const failedResponse = !bookingResponse.ok ? bookingResponse : petsResponse;
+    if (!bookingResponse.ok || !petsResponse.ok || !catalogsResponse.ok) {
+      const failedResult = !bookingResponse.ok ? bookingResult : !petsResponse.ok ? petsResult : catalogsResult;
+      const failedResponse = !bookingResponse.ok ? bookingResponse : !petsResponse.ok ? petsResponse : catalogsResponse;
       throw new Error(apiErrorMessage(failedResult, `HTTP ${failedResponse.status}`));
     }
     this._bookings = bookingResult.bookings || [];
     this._persons = personsResponse.ok ? (personsResult.persons || []) : [];
     this._pets = petsResponse.ok ? (petsResult.pets || []) : [];
+    this._catalogs = catalogsResult.catalogs || { categories: [], areas: [], projects: [] };
     const bookingIds = new Set(this._bookings.map((booking) => String(booking.id)));
     for (const booking of this._bookings) {
       const bookingId = String(booking.id);
@@ -823,8 +869,11 @@ class FinanzplanerPanel extends HTMLElement {
             target: allocation.target || "",
             amount: Number(allocation.amount) || 0,
             area: allocation.area || null,
+            area_id: allocation.area_id || null,
             category: allocation.category || null,
+            category_id: allocation.category_id || null,
             project: allocation.project || null,
+            project_id: allocation.project_id || null,
             pet_id: allocation.pet_id || null,
           }))
           : equalAllocationDraft(booking.amount, ["household"]);
@@ -1013,13 +1062,198 @@ class FinanzplanerPanel extends HTMLElement {
     this._render();
   }
 
+  _catalogEntries(kind) {
+    const entries = this._catalogs?.[kind];
+    return Array.isArray(entries) ? entries : [];
+  }
+
+  _catalogKey(kind, entryId) {
+    return `${kind}:${entryId}`;
+  }
+
+  _catalogDraftFromEntry(entry) {
+    return {
+      label: entry.label || "",
+      active: entry.active !== false,
+    };
+  }
+
+  async _loadCatalogs() {
+    const response = await fetchWithHomeAssistantAuth(this._hass, CATALOGS_URL);
+    const result = await readApiResponse(response);
+    if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+    const catalogs = result.catalogs || {};
+    this._catalogs = {
+      categories: Array.isArray(catalogs.categories) ? catalogs.categories : [],
+      areas: Array.isArray(catalogs.areas) ? catalogs.areas : [],
+      projects: Array.isArray(catalogs.projects) ? catalogs.projects : [],
+    };
+    for (const kind of ["categories", "areas", "projects"]) {
+      const newKey = this._catalogKey(kind, "new");
+      if (!this._catalogDrafts.has(newKey)) this._catalogDrafts.set(newKey, { label: "", active: true });
+      for (const entry of this._catalogEntries(kind)) {
+        const key = this._catalogKey(kind, String(entry.id));
+        if (!this._catalogDrafts.has(key)) this._catalogDrafts.set(key, this._catalogDraftFromEntry(entry));
+      }
+    }
+    const knownKeys = new Set(["categories", "areas", "projects"].flatMap((kind) => [
+      this._catalogKey(kind, "new"),
+      ...this._catalogEntries(kind).map((entry) => this._catalogKey(kind, String(entry.id))),
+    ]));
+    for (const key of this._catalogDrafts.keys()) {
+      if (!knownKeys.has(key)) this._catalogDrafts.delete(key);
+    }
+  }
+
+  async _openCatalogs() {
+    this._view = "catalogs";
+    this._message = "";
+    this._catalogsLoading = true;
+    this._catalogsLoadFailed = false;
+    this._render();
+    this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
+    try {
+      await this._loadCatalogs();
+    } catch (error) {
+      this._catalogs = { categories: [], areas: [], projects: [] };
+      this._catalogsLoadFailed = true;
+      this._message = error.message || "Stammdaten konnten nicht geladen werden.";
+    } finally {
+      this._catalogsLoading = false;
+    }
+    this._render();
+  }
+
+  _captureCatalogDraft(form) {
+    return {
+      label: form.querySelector("[data-catalog-field='label']")?.value || "",
+      active: Boolean(form.querySelector("[data-catalog-field='active']")?.checked),
+    };
+  }
+
+  _updateCatalogDraft(event) {
+    const form = event.currentTarget.closest("[data-catalog-form]");
+    if (!form) return;
+    const key = this._catalogKey(form.dataset.catalogKind, form.dataset.catalogId);
+    this._catalogDrafts.set(key, this._captureCatalogDraft(form));
+    this._catalogErrors.delete(key);
+    const status = form.querySelector("[data-catalog-save-status]");
+    status?.classList.remove("catalog-entry-status--error");
+    if (status) status.textContent = "";
+  }
+
+  _catalogPayload(draft) {
+    return { label: draft.label, active: draft.active !== false };
+  }
+
+  async _handleCatalogSave(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const kind = String(form.dataset.catalogKind);
+    const entryId = String(form.dataset.catalogId);
+    const key = this._catalogKey(kind, entryId);
+    if (this._catalogSubmissions.has(key)) return;
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+    const draft = this._captureCatalogDraft(form);
+    this._catalogDrafts.set(key, draft);
+    const button = form.querySelector("[type='submit']");
+    const status = form.querySelector("[data-catalog-save-status]");
+    this._catalogSubmissions.add(key);
+    form.setAttribute("aria-busy", "true");
+    if (button) button.disabled = true;
+    if (status) status.textContent = "Wird gespeichert …";
+    const url = entryId === "new"
+      ? `${CATALOGS_URL}/${encodeURIComponent(kind)}`
+      : `${CATALOGS_URL}/${encodeURIComponent(kind)}/${encodeURIComponent(entryId)}`;
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(this._catalogPayload(draft)),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Der Stammdateneintrag konnte nicht gespeichert werden."));
+      this._catalogDrafts.delete(key);
+      this._catalogErrors.delete(key);
+      this._message = entryId === "new" ? `${draft.label.trim()} angelegt.` : `${draft.label.trim()} gespeichert.`;
+      await this._loadCatalogs();
+      this._render();
+    } catch (error) {
+      this._catalogErrors.set(key, error.message || "Der Stammdateneintrag konnte nicht gespeichert werden.");
+      if (status) {
+        status.textContent = this._catalogErrors.get(key);
+        status.classList.add("catalog-entry-status--error");
+      }
+      if (button) button.disabled = false;
+      form.removeAttribute("aria-busy");
+    } finally {
+      this._catalogSubmissions.delete(key);
+    }
+  }
+
+  async _archiveCatalog(event) {
+    const button = event.currentTarget;
+    const kind = String(button.dataset.catalogKind);
+    const entryId = String(button.dataset.catalogId);
+    const entry = this._catalogEntries(kind).find((candidate) => String(candidate.id) === entryId);
+    if (!entry || !window.confirm(`„${entry.label || "Eintrag"}“ archivieren?`)) return;
+    const key = this._catalogKey(kind, entryId);
+    if (this._catalogSubmissions.has(key)) return;
+    const form = button.closest("[data-catalog-form]");
+    const status = form?.querySelector("[data-catalog-save-status]");
+    this._catalogSubmissions.add(key);
+    button.disabled = true;
+    if (status) status.textContent = "Wird archiviert …";
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${CATALOGS_URL}/${encodeURIComponent(kind)}/${encodeURIComponent(entryId)}`, { method: "DELETE" });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Der Stammdateneintrag konnte nicht archiviert werden."));
+      this._catalogDrafts.delete(key);
+      this._message = `${entry.label} archiviert. Bestehende Zuordnungen bleiben erhalten.`;
+      await this._loadCatalogs();
+      this._render();
+    } catch (error) {
+      if (status) {
+        status.textContent = error.message || "Der Stammdateneintrag konnte nicht archiviert werden.";
+        status.classList.add("catalog-entry-status--error");
+      }
+      button.disabled = false;
+    } finally {
+      this._catalogSubmissions.delete(key);
+    }
+  }
+
+  _catalogOptions(kind, selectedLabel, emptyLabel = "Keine Auswahl") {
+    const selected = String(selectedLabel || "");
+    const entries = this._catalogEntries(kind)
+      .filter((entry) => entry.active !== false || String(entry.label || "") === selected || String(entry.id || "") === selected)
+      .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), "de"));
+    const selectedEntry = entries.find((entry) => String(entry.id || "") === selected || String(entry.label || "") === selected);
+    const selectedId = selectedEntry ? String(selectedEntry.id) : selected;
+    const options = [`<option value=""${selected ? "" : " selected"}>${emptyLabel}</option>`];
+    if (selected && !selectedEntry) {
+      options.push(`<option value="" data-catalog-label="${escapeHtml(selected)}" selected>Nicht mehr verfügbar: ${escapeHtml(selected)}</option>`);
+    }
+    options.push(...entries.map((entry) => {
+      const label = entry.active === false ? `${entry.label} (archiviert)` : entry.label;
+      return `<option value="${escapeHtml(entry.id)}" data-catalog-label="${escapeHtml(entry.label)}"${String(entry.id) === selectedId ? " selected" : ""}>${escapeHtml(label)}</option>`;
+    }));
+    return options.join("");
+  }
+
   _newPlanItemDraft() {
     return {
       name: "",
       direction: "expense",
       category: "",
+      category_id: "",
       area: "",
+      area_id: "",
       project: "",
+      project_id: "",
       amount: "",
       amount_input: "",
       frequency_months: 1,
@@ -1039,8 +1273,11 @@ class FinanzplanerPanel extends HTMLElement {
       name: item.name || "",
       direction: item.direction || (numericAmount >= 0 ? "income" : "expense"),
       category: item.category || "",
+      category_id: item.category_id || "",
       area: item.area || "",
+      area_id: item.area_id || "",
       project: item.project || "",
+      project_id: item.project_id || "",
       amount: Math.abs(numericAmount) || 0,
       amount_input: Number.isFinite(numericAmount) ? Math.abs(numericAmount).toFixed(2) : "",
       frequency_months: item.frequency_months ?? 1,
@@ -1055,23 +1292,26 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _loadPlanItems() {
-    const [planResponse, personsResponse, petsResponse] = await Promise.all([
+    const [planResponse, personsResponse, petsResponse, catalogsResponse] = await Promise.all([
       fetchWithHomeAssistantAuth(this._hass, PLAN_ITEMS_URL),
       fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
       fetchWithHomeAssistantAuth(this._hass, PETS_URL),
+      fetchWithHomeAssistantAuth(this._hass, CATALOGS_URL),
     ]);
-    const [planResult, personsResult, petsResult] = await Promise.all([
+    const [planResult, personsResult, petsResult, catalogsResult] = await Promise.all([
       readApiResponse(planResponse),
       readApiResponse(personsResponse),
       readApiResponse(petsResponse),
+      readApiResponse(catalogsResponse),
     ]);
-    if (!planResponse.ok || !personsResponse.ok || !petsResponse.ok) {
-      const failedResult = !planResponse.ok ? planResult : !personsResponse.ok ? personsResult : petsResult;
+    if (!planResponse.ok || !personsResponse.ok || !petsResponse.ok || !catalogsResponse.ok) {
+      const failedResult = !planResponse.ok ? planResult : !personsResponse.ok ? personsResult : !petsResponse.ok ? petsResult : catalogsResult;
       throw new Error(apiErrorMessage(failedResult, "Planposten, Personen oder Tiere konnten nicht geladen werden."));
     }
     this._planItems = Array.isArray(planResult.plan_items) ? planResult.plan_items : [];
     this._persons = Array.isArray(personsResult.persons) ? personsResult.persons : [];
     this._pets = Array.isArray(petsResult.pets) ? petsResult.pets : [];
+    this._catalogs = catalogsResult.catalogs || { categories: [], areas: [], projects: [] };
     if (!this._planItemDrafts.has("new")) this._planItemDrafts.set("new", this._newPlanItemDraft());
     const itemIds = new Set(this._planItems.map((item) => String(item.id)));
     for (const item of this._planItems) {
@@ -1108,12 +1348,26 @@ class FinanzplanerPanel extends HTMLElement {
 
   _capturePlanItemDraft(form) {
     const value = (field) => form.querySelector(`[data-plan-item-field="${field}"]`)?.value ?? "";
+    const catalogValue = (field) => {
+      const select = form.querySelector(`[data-plan-item-field="${field}"]`);
+      const option = select?.selectedOptions?.[0];
+      return {
+        id: option?.value || "",
+        label: option?.dataset.catalogLabel || "",
+      };
+    };
+    const category = catalogValue("category");
+    const area = catalogValue("area");
+    const project = catalogValue("project");
     return {
       name: value("name"),
       direction: value("direction") || "expense",
-      category: value("category"),
-      area: value("area"),
-      project: value("project"),
+      category: category.label,
+      category_id: category.id,
+      area: area.label,
+      area_id: area.id,
+      project: project.label,
+      project_id: project.id,
       amount: value("amount"),
       amount_input: value("amount"),
       frequency_months: value("frequency_months") === "" ? null : Number(value("frequency_months")),
@@ -1149,8 +1403,11 @@ class FinanzplanerPanel extends HTMLElement {
       name: draft.name,
       direction: draft.direction,
       category: optional(draft.category),
+      category_id: optional(draft.category_id),
       area: optional(draft.area),
+      area_id: optional(draft.area_id),
       project: optional(draft.project),
+      project_id: optional(draft.project_id),
       amount: String(draft.amount_input ?? draft.amount ?? "").trim(),
       frequency_months: frequency,
       due_day: dueDay ? Number(dueDay) : null,
@@ -1611,10 +1868,17 @@ class FinanzplanerPanel extends HTMLElement {
     const index = Number(input.dataset.allocationIndex);
     if (!form || !rows?.[index]) return;
     const field = input.dataset.allocationField;
-    this._allocationDrafts.set(
-      form.dataset.bookingId,
-      updateAllocationDraftRow(rows, index, field, input.value),
+    const catalogKind = { category: "categories", area: "areas", project: "projects" }[field];
+    let updatedRows = updateAllocationDraftRow(
+      rows,
+      index,
+      catalogKind ? `${field}_id` : field,
+      input.value,
     );
+    if (catalogKind && updatedRows[index]) {
+      updatedRows[index][field] = input.selectedOptions?.[0]?.dataset.catalogLabel || null;
+    }
+    this._allocationDrafts.set(form.dataset.bookingId, updatedRows);
     this._allocationErrors.delete(form.dataset.bookingId);
     const status = form.querySelector("[data-allocation-status]");
     if (status) status.textContent = "";
@@ -1679,8 +1943,11 @@ class FinanzplanerPanel extends HTMLElement {
       target: row.target,
       amount: row.amount,
       area: row.area || null,
+      area_id: row.area_id || null,
       category: row.category || null,
+      category_id: row.category_id || null,
       project: row.project || null,
+      project_id: row.project_id || null,
       pet_id: row.pet_id || null,
     }));
     this._allocationSubmissions.add(bookingId);
@@ -1777,7 +2044,10 @@ class FinanzplanerPanel extends HTMLElement {
     const input = event.currentTarget;
     const suggestion = this._excelPreview?.suggestions.find((item) => item.id === input.dataset.suggestionId);
     if (!suggestion) return;
-    suggestion[input.dataset.field] = input.value || null;
+    const catalogField = { category: "categories", area: "areas", project: "projects" }[input.dataset.field];
+    suggestion[input.dataset.field] = catalogField
+      ? (input.selectedOptions?.[0]?.dataset.catalogLabel || null)
+      : (input.value || null);
     if (input.dataset.field === "direction") {
       suggestion.direction = input.value;
     }
@@ -1855,8 +2125,10 @@ class FinanzplanerPanel extends HTMLElement {
         ? this._planItemsTemplate()
       : this._view === "pets"
           ? this._petsTemplate()
-          : this._view === "feed_profiles"
+      : this._view === "feed_profiles"
             ? this._feedProfilesTemplate()
+            : this._view === "catalogs"
+              ? this._catalogsTemplate()
             : this._view === "accounts"
               ? this._accountsTemplate()
               : this._overviewTemplate();
@@ -1880,7 +2152,10 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-excel-select]").forEach((input) => input.addEventListener("change", (event) => this._updateExcelSelection(event)));
     this.shadowRoot.querySelectorAll("[data-excel-field]").forEach((input) => input.addEventListener("change", (event) => this._updateExcelField(event)));
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAssignment(event)));
-    this.shadowRoot.querySelectorAll("[data-allocation-field]").forEach((input) => input.addEventListener("input", (event) => this._updateAllocationField(event)));
+    this.shadowRoot.querySelectorAll("[data-allocation-field]").forEach((input) => {
+      input.addEventListener("input", (event) => this._updateAllocationField(event));
+      input.addEventListener("change", (event) => this._updateAllocationField(event));
+    });
     this.shadowRoot.querySelectorAll("[data-allocation-add]").forEach((button) => button.addEventListener("click", (event) => this._addAllocationRow(event)));
     this.shadowRoot.querySelectorAll("[data-allocation-remove]").forEach((button) => button.addEventListener("click", (event) => this._removeAllocationRow(event)));
     this.shadowRoot.querySelectorAll("[data-account-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAccountSave(event)));
@@ -1900,6 +2175,12 @@ class FinanzplanerPanel extends HTMLElement {
     });
     this.shadowRoot.querySelectorAll("[data-feed-profile-archive]").forEach((button) => button.addEventListener("click", (event) => this._archiveFeedProfile(event)));
     this.shadowRoot.querySelectorAll("[data-feed-profile-purchase]").forEach((button) => button.addEventListener("click", (event) => this._confirmFeedPurchase(event)));
+    this.shadowRoot.querySelectorAll("[data-catalog-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleCatalogSave(event)));
+    this.shadowRoot.querySelectorAll("[data-catalog-field]").forEach((input) => {
+      input.addEventListener("input", (event) => this._updateCatalogDraft(event));
+      input.addEventListener("change", (event) => this._updateCatalogDraft(event));
+    });
+    this.shadowRoot.querySelectorAll("[data-catalog-archive]").forEach((button) => button.addEventListener("click", (event) => this._archiveCatalog(event)));
     this.shadowRoot.querySelectorAll("[data-plan-item-form]").forEach((form) => form.addEventListener("submit", (event) => this._handlePlanItemSave(event)));
     this.shadowRoot.querySelectorAll("[data-plan-item-field]").forEach((input) => {
       input.addEventListener("input", (event) => this._updatePlanItemDraft(event));
@@ -1912,9 +2193,10 @@ class FinanzplanerPanel extends HTMLElement {
       else if (button.dataset.nav === "accounts") this._openAccounts();
       else if (button.dataset.nav === "pets") this._openPets();
       else if (button.dataset.nav === "feed_profiles") this._openFeedProfiles();
+      else if (button.dataset.nav === "catalogs") this._openCatalogs();
       else if (button.dataset.nav === "overview") this._view = "overview";
       else this._message = `${button.textContent.trim()} ist für die nächste Ausbaustufe vorbereitet.`;
-      if (!["review", "accounts", "pets", "feed_profiles", "plan_items"].includes(button.dataset.nav)) this._render();
+      if (!["review", "accounts", "pets", "feed_profiles", "catalogs", "plan_items"].includes(button.dataset.nav)) this._render();
     }));
   }
 
@@ -1929,6 +2211,7 @@ class FinanzplanerPanel extends HTMLElement {
       ["people", "people", "Personen"],
       ["pets", "paw", "Tiere"],
       ["feed_profiles", "cart", "Futter"],
+      ["catalogs", "tags", "Stammdaten"],
       ["accounts", "settings", "Konten"],
     ];
     return items.map(([id, iconName, label]) => {
@@ -2058,9 +2341,9 @@ class FinanzplanerPanel extends HTMLElement {
         <label class="plan-item-field plan-item-field--wide" for="${fieldId("name")}">Bezeichnung<input id="${fieldId("name")}" name="name" data-plan-item-field="name" type="text" value="${escapeHtml(draft.name || "")}" maxlength="120" autocomplete="off" required></label>
         <label class="plan-item-field" for="${fieldId("direction")}">Richtung<select id="${fieldId("direction")}" name="direction" data-plan-item-field="direction" required><option value="income"${draft.direction === "income" ? " selected" : ""}>Einnahme</option><option value="expense"${draft.direction === "expense" ? " selected" : ""}>Ausgabe</option><option value="saving"${draft.direction === "saving" ? " selected" : ""}>Rücklage</option></select></label>
         <label class="plan-item-field" for="${fieldId("amount")}">Betrag pro Zahlung<input id="${fieldId("amount")}" name="amount" data-plan-item-field="amount" type="text" inputmode="decimal" value="${escapeHtml(draft.amount_input ?? draft.amount ?? "")}" placeholder="z. B. 125,50" aria-describedby="${fieldId("amount-help")}" required><small id="${fieldId("amount-help")}">Positive Eurobeträge, maximal 2 Nachkommastellen</small></label>
-        <label class="plan-item-field" for="${fieldId("category")}">Kategorie<input id="${fieldId("category")}" name="category" data-plan-item-field="category" type="text" value="${escapeHtml(draft.category || "")}" maxlength="120" autocomplete="off"></label>
-        <label class="plan-item-field" for="${fieldId("area")}">Bereich<input id="${fieldId("area")}" name="area" data-plan-item-field="area" type="text" value="${escapeHtml(draft.area || "")}" maxlength="120" autocomplete="off" placeholder="z. B. Hunde"></label>
-        <label class="plan-item-field" for="${fieldId("project")}">Projekt<input id="${fieldId("project")}" name="project" data-plan-item-field="project" type="text" value="${escapeHtml(draft.project || "")}" maxlength="120" autocomplete="off" placeholder="optional"></label>
+        <label class="plan-item-field" for="${fieldId("category")}">Kategorie<select id="${fieldId("category")}" name="category_id" data-plan-item-field="category">${this._catalogOptions("categories", draft.category_id || draft.category, "Keine Kategorie")}</select></label>
+        <label class="plan-item-field" for="${fieldId("area")}">Bereich<select id="${fieldId("area")}" name="area_id" data-plan-item-field="area">${this._catalogOptions("areas", draft.area_id || draft.area, "Kein Bereich")}</select></label>
+        <label class="plan-item-field" for="${fieldId("project")}">Projekt<select id="${fieldId("project")}" name="project_id" data-plan-item-field="project">${this._catalogOptions("projects", draft.project_id || draft.project, "Kein Projekt")}</select></label>
         <label class="plan-item-field plan-item-target" for="${fieldId("target")}">Planungsziel<select id="${fieldId("target")}" name="target" data-plan-item-field="target">${this._planItemTargetOptions(draft.target)}</select></label>
         <label class="plan-item-field plan-item-target" for="${fieldId("pet_id")}">Tier (optional)<select id="${fieldId("pet_id")}" name="pet_id" data-plan-item-field="pet_id">${this._petOptions(draft.pet_id)}</select><small>Bleibt unabhängig von Person oder Haushalt erhalten.</small></label>
       </div>
@@ -2151,6 +2434,35 @@ class FinanzplanerPanel extends HTMLElement {
     return this._shellTemplate(content);
   }
 
+  _catalogEntryFormTemplate(kind, entry, index, isNew = false) {
+    const entryId = isNew ? "new" : String(entry.id);
+    const key = this._catalogKey(kind, entryId);
+    const draft = this._catalogDrafts.get(key)
+      || (isNew ? { label: "", active: true } : this._catalogDraftFromEntry(entry));
+    const active = draft.active !== false;
+    const fieldId = `catalog-${kind}-label-${isNew ? "new" : index}`;
+    const statusId = `catalog-${kind}-status-${isNew ? "new" : index}`;
+    const error = this._catalogErrors.get(key) || "";
+    const action = isNew
+      ? `${CATALOGS_URL}/${kind}`
+      : `${CATALOGS_URL}/${kind}/${encodeURIComponent(entryId)}`;
+    return `<form class="catalog-entry-form${active ? "" : " catalog-entry-form--archived"}" action="${escapeHtml(action)}" method="post" data-catalog-form data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-labelledby="${fieldId}-heading"${this._catalogSubmissions.has(key) ? " aria-busy=\"true\"" : ""}>
+      <label class="catalog-field" for="${fieldId}"><span id="${fieldId}-heading">Bezeichnung</span><input id="${fieldId}" name="label" data-catalog-field="label" type="text" value="${escapeHtml(draft.label || "")}" maxlength="120" autocomplete="off" required></label>
+      <div class="catalog-entry-actions"><label class="account-toggle" for="${fieldId}-active"><input id="${fieldId}-active" name="active" data-catalog-field="active" type="checkbox"${active ? " checked" : ""}>Aktiv</label>${!isNew && active ? `<button class="catalog-archive" type="button" data-catalog-archive data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}">Archivieren</button>` : ""}<button type="submit">${isNew ? "Anlegen" : "Speichern"}</button></div>
+      <p class="catalog-entry-status${error ? " catalog-entry-status--error" : ""}" id="${statusId}" data-catalog-save-status aria-live="polite">${escapeHtml(error)}</p>
+    </form>`;
+  }
+
+  _catalogsTemplate() {
+    const kinds = ["categories", "areas", "projects"];
+    const content = this._catalogsLoading
+      ? `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="empty-state">Stammdaten werden geladen …</div></div></main>`
+      : this._catalogsLoadFailed
+        ? `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><div class="empty-state">Stammdaten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div></div></main>`
+        : `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="catalogs-view-header"><div><h2>Stammdaten</h2><p>Verwalte die Begriffe, mit denen du Planposten und Buchungen einheitlich ordnest. Beim Umbenennen werden bestehende Zuordnungen automatisch mitgeführt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="catalog-help">Archivierte Einträge bleiben in historischen Buchungen sichtbar und können wieder aktiviert werden. Neue Freitextwerte aus Importen werden als Stammdaten ergänzt.</p><div class="catalogs-grid">${kinds.map((kind) => `<section class="surface catalog-section" aria-labelledby="catalog-${kind}-heading"><div class="catalog-section-header"><h3 id="catalog-${kind}-heading">${catalogKindLabel(kind)}</h3><span>${this._catalogEntries(kind).filter((entry) => entry.active !== false).length} aktiv</span></div><ul class="catalog-entry-list" aria-label="${catalogKindLabel(kind)}"><li>${this._catalogEntryFormTemplate(kind, {}, 0, true)}</li>${this._catalogEntries(kind).map((entry, index) => `<li>${this._catalogEntryFormTemplate(kind, entry, index + 1)}</li>`).join("")}</ul></section>`).join("")}</div></div></main>`;
+    return this._shellTemplate(content);
+  }
+
   _petFormTemplate(pet, index, isNew = false) {
     const petId = isNew ? "new" : String(pet.id);
     const draft = this._petDrafts.get(petId) || (isNew ? this._newPetDraft() : this._petDraftFromPet(pet));
@@ -2232,13 +2544,6 @@ class FinanzplanerPanel extends HTMLElement {
       ["expense", "Ausgabe"],
       ["saving", "Rücklage"],
     ].map(([optionValue, label]) => `<option value="${optionValue}"${value === optionValue ? " selected" : ""}>${label}</option>`).join("");
-    const areaOptions = (value) => [
-      ["", "Kein Bereich"],
-      ["Haushalt", "Haushalt"],
-      ["Hunde", "Hunde"],
-      ["Urlaub", "Urlaub"],
-      ["PV-Anlage", "PV-Anlage"],
-    ].map(([optionValue, label]) => `<option value="${optionValue}"${value === optionValue ? " selected" : ""}>${label}</option>`).join("");
     const warningBadges = (warnings) => (warnings || []).map((warning) => `<span class="excel-badge" title="${escapeHtml(warningLabels[warning] || warning)}">${escapeHtml(warningLabels[warning] || warning)}</span>`).join("");
     return `<section class="surface excel-review" aria-labelledby="excel-review-heading">
       <div class="excel-review-header"><div><h3 id="excel-review-heading">Excel-Vorschau</h3><p>Prüfe die Zuordnungen. Erst die Übernahme schreibt Planposten in deinen Finanzplan.</p></div><span class="excel-badge">${escapeHtml(preview.preview_id.slice(0, 8))}</span></div>
@@ -2250,9 +2555,9 @@ class FinanzplanerPanel extends HTMLElement {
           <div class="excel-suggestion-meta"><span>${escapeHtml(suggestion.direction)} · alle ${escapeHtml(suggestion.frequency_months)} Monate</span><span>${escapeHtml(suggestion.source_sheet)} · Zeile ${escapeHtml(suggestion.source_row)}</span><span>${escapeHtml((suggestion.source_columns || []).join(", "))}</span>${warningBadges(suggestion.warnings)}</div>
           <div class="excel-fields">
             <label class="excel-field">Richtung<select data-excel-field data-field="direction" data-suggestion-id="${escapeHtml(suggestion.id)}">${directionOptions(this._excelFieldValue(suggestion, "direction"))}</select></label>
-            <label class="excel-field">Kategorie<input data-excel-field data-field="category" data-suggestion-id="${escapeHtml(suggestion.id)}" value="${escapeHtml(this._excelFieldValue(suggestion, "category"))}"></label>
-            <label class="excel-field">Bereich<select data-excel-field data-field="area" data-suggestion-id="${escapeHtml(suggestion.id)}">${areaOptions(this._excelFieldValue(suggestion, "area"))}</select></label>
-            <label class="excel-field">Projekt<input data-excel-field data-field="project" data-suggestion-id="${escapeHtml(suggestion.id)}" value="${escapeHtml(this._excelFieldValue(suggestion, "project"))}"></label>
+            <label class="excel-field">Kategorie<select data-excel-field data-field="category" data-suggestion-id="${escapeHtml(suggestion.id)}">${this._catalogOptions("categories", this._excelFieldValue(suggestion, "category"), "Keine Kategorie")}</select></label>
+            <label class="excel-field">Bereich<select data-excel-field data-field="area" data-suggestion-id="${escapeHtml(suggestion.id)}">${this._catalogOptions("areas", this._excelFieldValue(suggestion, "area"), "Kein Bereich")}</select></label>
+            <label class="excel-field">Projekt<select data-excel-field data-field="project" data-suggestion-id="${escapeHtml(suggestion.id)}">${this._catalogOptions("projects", this._excelFieldValue(suggestion, "project"), "Kein Projekt")}</select></label>
             <label class="excel-field">Personenhinweis<input data-excel-field data-field="person_hint" data-suggestion-id="${escapeHtml(suggestion.id)}" value="${escapeHtml(this._excelFieldValue(suggestion, "person_hint"))}"></label>
           </div>
         </div>
@@ -2291,9 +2596,9 @@ class FinanzplanerPanel extends HTMLElement {
         <label class="allocation-field" for="${targetId}">Ziel<select id="${targetId}" data-allocation-field="target" data-allocation-index="${rowIndex}" required>${this._allocationTargetOptions(row.target)}</select></label>
         <label class="allocation-field" for="${amountId}">Betrag in Euro<input id="${amountId}" data-allocation-field="amount" data-allocation-index="${rowIndex}" type="text" inputmode="decimal" value="${escapeHtml(row.amount_input ?? (Number.isFinite(amount) ? amount.toFixed(2) : ""))}" required></label>
         <label class="allocation-field allocation-pet" for="${petId}">Tier (optional)<select id="${petId}" data-allocation-field="pet_id" data-allocation-index="${rowIndex}">${this._petOptions(row.pet_id)}</select></label>
-        <label class="allocation-field" for="${areaId}">Bereich<input id="${areaId}" data-allocation-field="area" data-allocation-index="${rowIndex}" type="text" maxlength="120" value="${escapeHtml(row.area || "")}" autocomplete="off" placeholder="z. B. Haustiere"></label>
-        <label class="allocation-field" for="${categoryId}">Kategorie (optional)<input id="${categoryId}" data-allocation-field="category" data-allocation-index="${rowIndex}" type="text" value="${escapeHtml(row.category || "")}" autocomplete="off"></label>
-        <label class="allocation-field" for="${projectId}">Projekt (optional)<input id="${projectId}" data-allocation-field="project" data-allocation-index="${rowIndex}" type="text" value="${escapeHtml(row.project || "")}" autocomplete="off"></label>
+        <label class="allocation-field" for="${areaId}">Bereich<select id="${areaId}" data-allocation-field="area" data-allocation-index="${rowIndex}">${this._catalogOptions("areas", row.area_id || row.area, "Kein Bereich")}</select></label>
+        <label class="allocation-field" for="${categoryId}">Kategorie (optional)<select id="${categoryId}" data-allocation-field="category" data-allocation-index="${rowIndex}">${this._catalogOptions("categories", row.category_id || row.category, "Keine Kategorie")}</select></label>
+        <label class="allocation-field" for="${projectId}">Projekt (optional)<select id="${projectId}" data-allocation-field="project" data-allocation-index="${rowIndex}">${this._catalogOptions("projects", row.project_id || row.project, "Kein Projekt")}</select></label>
         <button class="allocation-remove" type="button" data-allocation-remove data-allocation-index="${rowIndex}" aria-label="Zeile ${rowIndex + 1} aus der Aufteilung für ${escapeHtml(purpose)} entfernen">Entfernen</button>
       </li>`;
     }).join("");

@@ -231,6 +231,16 @@ test("exposes feed profiles, forecast status, and purchase confirmation", () => 
   assert.match(panelSource, /data-feed-profile-field="due_soon_days"/);
 });
 
+test("exposes first-class catalog management and catalog-backed selectors", () => {
+  assert.match(panelSource, /const CATALOGS_URL = "\/api\/finanzplaner\/catalogs"/);
+  assert.match(panelSource, /\["catalogs", "tags", "Stammdaten"\]/);
+  assert.match(panelSource, /data-catalog-form/);
+  assert.match(panelSource, /data-catalog-archive/);
+  assert.match(panelSource, /_catalogOptions\("categories"/);
+  assert.match(panelSource, /_catalogOptions\("areas"/);
+  assert.match(panelSource, /_catalogOptions\("projects"/);
+});
+
 test("renders a skip link to focusable main content and reveals it on keyboard focus", () => {
   assert.match(panelSource, /class="skip-link visually-hidden" href="#content" data-skip-link/);
   assert.match(panelSource, /\.skip-link:focus-visible\s*\{[^}]*clip-path:\s*none\s*!important/s);

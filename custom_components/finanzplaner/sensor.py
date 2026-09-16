@@ -61,11 +61,31 @@ class FinanceSensor(CoordinatorEntity[FinanzplanerCoordinator], SensorEntity):
         if self._key != "next_feed_purchase":
             return None
         forecast = self._next_feed_forecast()
+        forecasts = self._feed_forecasts()
         if not forecast:
-            return None
+            return {
+                "active_profile_count": len(forecasts),
+                "due_profile_count": 0,
+                "profiles": [],
+            }
         profile = forecast["profile"]
         values = forecast["values"]
+        profiles = [
+            {
+                "id": item["profile"].get("id"),
+                "pet_name": item["profile"].get("pet_name"),
+                "product": item["profile"].get("product"),
+                "next_purchase_date": item["values"].get("next_purchase_date"),
+                "status": item["values"].get("status"),
+                "days_until_purchase": item["values"].get("days_until_purchase"),
+            }
+            for item in forecasts
+        ]
+        due_profiles = [
+            item for item in forecasts if item["values"].get("status") != "planned"
+        ]
         return {
+            "feed_profile_id": profile.get("id"),
             "status": values["status"],
             "pet_name": profile.get("pet_name"),
             "product": profile.get("product"),
@@ -73,21 +93,29 @@ class FinanceSensor(CoordinatorEntity[FinanzplanerCoordinator], SensorEntity):
             "interval_weeks": values["effective_interval_weeks"],
             "interval_source": values["interval_source"],
             "days_until_purchase": values["days_until_purchase"],
+            "active_profile_count": len(forecasts),
+            "due_profile_count": len(due_profiles),
+            "due_profile_ids": [item["profile"].get("id") for item in due_profiles],
+            "profiles": profiles,
         }
 
-    def _next_feed_forecast(self) -> dict[str, Any] | None:
+    def _feed_forecasts(self) -> list[dict[str, Any]]:
         data = self.coordinator.data or {}
         profiles = data.get("feed_profiles", [])
         if not isinstance(profiles, list):
-            return None
-        forecasts = []
-        for profile in profiles:
-            if not isinstance(profile, dict) or profile.get("active", True) is False:
-                continue
-            values = feed_profile_forecast(profile)
-            next_date = values.get("next_purchase_date")
-            if isinstance(next_date, str):
-                forecasts.append({"profile": profile, "values": values})
+            return []
+        return [
+            {"profile": profile, "values": feed_profile_forecast(profile)}
+            for profile in profiles
+            if isinstance(profile, dict) and profile.get("active", True) is not False
+        ]
+
+    def _next_feed_forecast(self) -> dict[str, Any] | None:
+        forecasts = [
+            item
+            for item in self._feed_forecasts()
+            if isinstance(item["values"].get("next_purchase_date"), str)
+        ]
         return min(
             forecasts,
             key=lambda item: item["values"]["next_purchase_date"],

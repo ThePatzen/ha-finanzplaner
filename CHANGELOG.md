@@ -18,6 +18,9 @@ Das Projekt verwendet Semantic Versioning:
 - Futterprofile mit Verpackungseinheit, Kaufkosten, Verbrauchsintervall und Vorwarnfenster ergänzt
 - bestätigte Futterkäufe, durchschnittliche Kaufabstände und Status für die nächste Kaufprognose ergänzt
 - erwartete Futterkäufe als einmaliges Ereignis in die Monatsprognose sowie als HA-Sensor aufgenommen
+- Futter-Erinnerungsstatus als automationstauglichen Binary-Sensor und Kaufbestätigungs-Service ergänzt
+- Kategorien, Bereiche und Projekte als lokal verwaltete Stammdaten mit stabilen IDs und Namens-Snapshots ergänzt
+- Planposten und Buchungsaufteilungen auf katalogisierte Zuordnungen migriert; archivierte Einträge bleiben historisch lesbar
 
 ## [0.3.0] – 2026-09-15
 

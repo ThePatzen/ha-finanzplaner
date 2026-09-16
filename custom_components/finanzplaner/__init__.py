@@ -29,6 +29,9 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
         AccountsView,
         AccountView,
         BookingAllocationsView,
+        CatalogEntriesView,
+        CatalogEntryView,
+        CatalogsView,
         BookingAssignmentView,
         ExcelConfirmView,
         ExcelPreviewView,
@@ -57,6 +60,9 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
     hass.http.register_view(FeedProfilesView)
     hass.http.register_view(FeedProfileView)
     hass.http.register_view(FeedProfilePurchaseView)
+    hass.http.register_view(CatalogsView)
+    hass.http.register_view(CatalogEntriesView)
+    hass.http.register_view(CatalogEntryView)
     hass.http.register_view(UnresolvedBookingsView)
     hass.http.register_view(BookingAssignmentView)
     hass.http.register_view(BookingAllocationsView)
@@ -74,6 +80,7 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
 
     from .coordinator import FinanzplanerCoordinator
     from .storage import FinanceStore
+    from .services import async_setup_services
 
     household_name = entry.data.get(CONF_HOUSEHOLD_NAME, DEFAULT_HOUSEHOLD_NAME)
     store = FinanceStore(hass, household_name)
@@ -81,6 +88,7 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
     coordinator = FinanzplanerCoordinator(hass, store)
     await coordinator.async_config_entry_first_refresh()
     hass.data[DOMAIN][entry.entry_id] = coordinator
+    await async_setup_services(hass, entry.entry_id)
 
     static_dir = Path(__file__).parent / "frontend"
     static_url = panel_static_path(_integration_version())
@@ -110,5 +118,8 @@ async def async_unload_entry(hass: Any, entry: Any) -> bool:
 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        from .services import async_unload_services
+
+        await async_unload_services(hass)
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unloaded

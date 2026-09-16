@@ -1,0 +1,16 @@
+confirm_feed_purchase:
+  name: Futterkauf bestätigen
+  description: Zeichnet einen bestätigten Futterkauf auf und berechnet den nächsten Termin neu.
+  fields:
+    feed_profile_id:
+      name: Futterprofil
+      description: Die ID des Futterprofils aus dem Sensor „Nächster Futterkauf“.
+      required: true
+      selector:
+        text:
+    purchase_date:
+      name: Kaufdatum
+      description: Optionales Kaufdatum; standardmäßig wird heute verwendet.
+      required: false
+      selector:
+        date:

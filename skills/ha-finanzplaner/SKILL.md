@@ -72,11 +72,15 @@ Bereits geliefert:
   Archivierung und Snapshot-Zuordnung in Planposten sowie Aufteilungen sind
   umgesetzt.
 - Verbrauchsbasierte Futterprognose mit bestätigten Käufen, manuellem
-  Intervall-Override, Kaufstatus und einer HA-Datumsentität ist umgesetzt;
-  automatische Erinnerungen bleiben offen.
+  Intervall-Override, Kaufstatus, HA-Datumsentität, automationstauglichem
+  Fälligkeits-Binary-Sensor und Kaufbestätigungs-Service ist umgesetzt;
+  Empfänger und Benachrichtigungsregeln bleiben nutzerkonfiguriert.
+- Kategorien, Bereiche und Projekte werden lokal mit stabilen IDs, Aktivstatus
+  und historischen Namens-Snapshots verwaltet; Planposten und Aufteilungen sind
+  daran angebunden.
 - HA-Personen und authentifizierte Panel-API-Aufrufe über
   `hass.fetchWithAuth()`.
-- 100 Python- und 26 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
+- 107 Python- und 27 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
   für den aktuellen Stand.
 
 Aktuelle Release-Situation:
@@ -206,14 +210,14 @@ Reihenfolge umsetzen:
 - Gehalt, PV-Erlöse, Haustierkosten, Urlaubsgeld und EMX sauber als fachliche Werte
   darstellen, nicht nur als Importwarnung.
 - Futterplanposten um eine optionale `pet_id`, einen Tier-Typ,
-  Verpackungseinheit,
-  Verbrauchsintervall und erwartete Kaufkosten erweitern; die Zuordnung soll
-  auch bei `target="household"` unabhängig erhalten bleiben.
+  Verpackungseinheit, Verbrauchsintervall und erwartete Kaufkosten ist
+  erweitert; die Zuordnung bleibt auch bei `target="household"` unabhängig
+  erhalten.
 - Eine allgemeine Verwaltungsansicht für Bereiche, Kategorien und Projekte
-  ergänzen; keine feste Whitelist für `Haustiere` oder andere Bezeichnungen
-  verwenden.
+  ist ergänzt; es gibt keine feste Whitelist für `Haustiere` oder andere
+  Bezeichnungen.
 - Planposten-CRUD mit Storage-Migration, API-Validierung und Panel-Draft-State
-  testen.
+  ist getestet.
 
 ### 3. Belastbare Berechnungs- und Prognoseengine
 
@@ -265,12 +269,14 @@ Reihenfolge umsetzen:
 - Sensoren für Plan, Ist, Prognose, offenen Betrag, Anzahl ungeklärter
   Buchungen, nächste größere Zahlung und Haushalts-Saldo vervollständigen.
 - Futterstatus je Tier als nächste Kaufprognose mit Datum, Betrag, Intervall
-  und Status `due_soon` beziehungsweise `overdue` bereitstellen.
+  und Status `due_soon` beziehungsweise `overdue` ist über Sensorattribute und
+  einen automationstauglichen Binary-Sensor bereitgestellt.
 - Monats-/Jahresberichte, Kategorien, Bereiche, Projekte und PV-Auswertung
   als Panel-Sichten ergänzen.
-- Eine vom Nutzer aktivierbare Home-Assistant-Erinnerung für fällige oder bald
-  fällige Futterkäufe ergänzen; Vorwarnfenster und Benachrichtigungsempfänger
-  müssen konfigurierbar bleiben.
+- Eine vom Nutzer aktivierbare Home-Assistant-Benachrichtigungsautomation für
+  fällige oder bald fällige Futterkäufe dokumentieren beziehungsweise als
+  optionales Panel-Hilfsmittel ergänzen; Vorwarnfenster und Empfänger bleiben
+  konfigurierbar.
 
 ### 7. Spätere Ausbaustufen
 

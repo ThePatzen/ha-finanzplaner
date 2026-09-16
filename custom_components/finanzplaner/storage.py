@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timezone
 import hashlib
 from typing import Any
 
 from .const import DEFAULT_HOUSEHOLD_NAME, STORAGE_KEY, STORAGE_VERSION
-from .core import account_id_for_reference, normalize_account_reference
+from .core import (
+    CATALOG_KINDS,
+    CATALOG_VALUE_FIELDS,
+    account_id_for_reference,
+    catalog_id_for_label,
+    normalize_account_reference,
+)
 
 
 def empty_data(household_name: str = DEFAULT_HOUSEHOLD_NAME) -> dict[str, Any]:
@@ -18,6 +24,7 @@ def empty_data(household_name: str = DEFAULT_HOUSEHOLD_NAME) -> dict[str, Any]:
         "accounts": [],
         "pets": [],
         "feed_profiles": [],
+        "catalogs": {kind: [] for kind in CATALOG_KINDS},
         "plan_items": [],
         "bookings": [],
         "imports": [],
@@ -168,8 +175,11 @@ def _normalize_plan_items(
         item.setdefault("remaining_amount", item.get("amount", 0))
         item.setdefault("frequency_months", 1)
         item.setdefault("category", None)
+        item.setdefault("category_id", None)
         item.setdefault("area", None)
+        item.setdefault("area_id", None)
         item.setdefault("project", None)
+        item.setdefault("project_id", None)
         item.setdefault("target", None)
         item.setdefault("due_day", None)
         item.setdefault("due_date", None)
@@ -206,6 +216,9 @@ def _normalize_booking_allocations(
             allocation.setdefault("pet_id", None)
             allocation.setdefault("pet_name", None)
             allocation.setdefault("pet_type", None)
+            allocation.setdefault("category_id", None)
+            allocation.setdefault("area_id", None)
+            allocation.setdefault("project_id", None)
             pet_id = allocation.get("pet_id")
             pet = pets.get(pet_id) if pets and isinstance(pet_id, str) else None
             if pet is not None:
@@ -213,6 +226,232 @@ def _normalize_booking_allocations(
                     allocation["pet_name"] = pet.get("name")
                 if not allocation.get("pet_type"):
                     allocation["pet_type"] = pet.get("pet_type")
+
+
+def _catalog_source_values(data: dict[str, Any], kind: str) -> list[str]:
+    field = CATALOG_VALUE_FIELDS[kind]
+    values: list[str] = []
+    plan_items = data.get("plan_items", [])
+    if isinstance(plan_items, list):
+        values.extend(
+            item.get(field)
+            for item in plan_items
+            if isinstance(item, dict) and isinstance(item.get(field), str)
+        )
+    bookings = data.get("bookings", [])
+    if isinstance(bookings, list):
+        for booking in bookings:
+            if not isinstance(booking, dict):
+                continue
+            allocations = booking.get("allocations", [])
+            if not isinstance(allocations, list):
+                continue
+            values.extend(
+                allocation.get(field)
+                for allocation in allocations
+                if isinstance(allocation, dict) and isinstance(allocation.get(field), str)
+            )
+    return values
+
+
+def _normalize_catalogs(data: dict[str, Any]) -> None:
+    """Normalize first-class catalogs and backfill values from legacy text."""
+
+    raw_catalogs = data.get("catalogs")
+    raw_catalogs = raw_catalogs if isinstance(raw_catalogs, dict) else {}
+    catalogs: dict[str, list[dict[str, Any]]] = {}
+    now_iso = None
+    for kind in CATALOG_KINDS:
+        entries = raw_catalogs.get(kind, [])
+        entries = entries if isinstance(entries, list) else []
+        normalized: dict[str, dict[str, Any]] = {}
+        used_ids: set[str] = set()
+        for entry in entries:
+            if isinstance(entry, str):
+                label = entry.strip()
+                candidate = {"label": label}
+            elif isinstance(entry, dict):
+                label = entry.get("label", entry.get("name", ""))
+                label = label.strip() if isinstance(label, str) else ""
+                candidate = entry
+            else:
+                continue
+            if not label:
+                continue
+            key = label.casefold()
+            if key in normalized:
+                continue
+            item = {
+                "id": candidate.get("id") if isinstance(candidate.get("id"), str) else None,
+                "label": label,
+                "active": candidate.get("active", True) is not False,
+                "created_at": candidate.get("created_at"),
+                "updated_at": candidate.get("updated_at"),
+            }
+            item["id"] = item["id"] or catalog_id_for_label(kind, label)
+            if item["id"] in used_ids:
+                item["id"] = catalog_id_for_label(kind, f"{label}:{len(used_ids)}")
+            used_ids.add(item["id"])
+            normalized[key] = item
+
+        for value in _catalog_source_values(data, kind):
+            label = value.strip()
+            if not label or label.casefold() in normalized:
+                continue
+            normalized[label.casefold()] = {
+                "id": catalog_id_for_label(kind, label),
+                "label": label,
+                "active": True,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }
+        catalogs[kind] = sorted(
+            normalized.values(), key=lambda item: (item["label"].casefold(), item["id"])
+        )
+    data["catalogs"] = catalogs
+
+
+def _link_catalog_references(data: dict[str, Any]) -> None:
+    """Attach stable catalog IDs while retaining old labels as snapshots."""
+
+    catalogs = data.get("catalogs", {})
+    if not isinstance(catalogs, dict):
+        return
+    lookup: dict[str, dict[str, dict[str, Any]]] = {}
+    for kind in CATALOG_KINDS:
+        entries = catalogs.get(kind, [])
+        if not isinstance(entries, list):
+            continue
+        lookup[kind] = {
+            str(entry.get("id")): entry
+            for entry in entries
+            if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+        }
+        lookup[kind].update(
+            {
+                f"label:{str(entry.get('label')).casefold()}": entry
+                for entry in entries
+                if isinstance(entry, dict) and isinstance(entry.get("label"), str)
+            }
+        )
+
+    def link_record(record: dict[str, Any]) -> None:
+        for kind, field in CATALOG_VALUE_FIELDS.items():
+            id_field = f"{field}_id"
+            value_id = record.get(id_field)
+            label = record.get(field)
+            entry = lookup.get(kind, {}).get(str(value_id)) if value_id else None
+            if entry is None and isinstance(label, str) and label.strip():
+                entry = lookup.get(kind, {}).get(f"label:{label.strip().casefold()}")
+            if entry is None:
+                record[id_field] = None
+                continue
+            record[id_field] = entry["id"]
+            if not isinstance(label, str) or not label.strip():
+                record[field] = entry["label"]
+
+    plan_items = data.get("plan_items", [])
+    if isinstance(plan_items, list):
+        for item in plan_items:
+            if isinstance(item, dict):
+                link_record(item)
+    bookings = data.get("bookings", [])
+    if isinstance(bookings, list):
+        for booking in bookings:
+            if not isinstance(booking, dict):
+                continue
+            allocations = booking.get("allocations", [])
+            if isinstance(allocations, list):
+                for allocation in allocations:
+                    if isinstance(allocation, dict):
+                        link_record(allocation)
+
+
+def ensure_catalog_entries(data: dict[str, Any], values: dict[str, object]) -> None:
+    """Add newly entered labels to their local catalogs without changing links."""
+
+    catalogs = data.get("catalogs")
+    if not isinstance(catalogs, dict):
+        catalogs = {kind: [] for kind in CATALOG_KINDS}
+        data["catalogs"] = catalogs
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for kind in CATALOG_KINDS:
+        field = CATALOG_VALUE_FIELDS[kind]
+        reference_id = values.get(f"{field}_id")
+        entries = catalogs.get(kind)
+        if isinstance(reference_id, str) and isinstance(entries, list) and any(
+            isinstance(entry, dict) and entry.get("id") == reference_id
+            for entry in entries
+        ):
+            continue
+        label = values.get(field)
+        if not isinstance(label, str) or not label.strip():
+            continue
+        label = label.strip()
+        if not isinstance(entries, list):
+            entries = []
+            catalogs[kind] = entries
+        if any(
+            isinstance(entry, dict)
+            and isinstance(entry.get("label"), str)
+            and entry["label"].casefold() == label.casefold()
+            for entry in entries
+        ):
+            continue
+        entries.append(
+            {
+                "id": catalog_id_for_label(kind, label),
+                "label": label,
+                "active": True,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }
+        )
+        entries.sort(key=lambda item: (str(item.get("label", "")).casefold(), str(item.get("id", ""))))
+    _link_catalog_references(data)
+
+
+def rename_catalog_references(
+    data: dict[str, Any],
+    kind: str,
+    old_label: str,
+    new_label: str,
+    entry_id: str | None = None,
+) -> None:
+    """Keep historical plan and allocation labels aligned after a rename."""
+
+    field = CATALOG_VALUE_FIELDS[kind]
+    id_field = f"{field}_id"
+    if old_label == new_label:
+        return
+    plan_items = data.get("plan_items", [])
+    if isinstance(plan_items, list):
+        for item in plan_items:
+            if (
+                isinstance(item, dict)
+                and item.get(field) == old_label
+                and not (entry_id and item.get(id_field) == entry_id)
+            ):
+                item[field] = new_label
+                if entry_id:
+                    item[id_field] = entry_id
+    bookings = data.get("bookings", [])
+    if isinstance(bookings, list):
+        for booking in bookings:
+            if not isinstance(booking, dict):
+                continue
+            allocations = booking.get("allocations", [])
+            if not isinstance(allocations, list):
+                continue
+            for allocation in allocations:
+                if (
+                    isinstance(allocation, dict)
+                    and allocation.get(field) == old_label
+                    and not (entry_id and allocation.get(id_field) == entry_id)
+                ):
+                    allocation[field] = new_label
+                    if entry_id:
+                        allocation[id_field] = entry_id
 
 
 def migrate_store_data(
@@ -283,6 +522,8 @@ def migrate_store_data(
     _normalize_feed_profiles(data, pets)
     _normalize_plan_items(data, pets)
     _normalize_booking_allocations(data, pets)
+    _normalize_catalogs(data)
+    _link_catalog_references(data)
     return data
 
 
@@ -344,6 +585,8 @@ def normalize_current_store_data(
     _normalize_feed_profiles(data, pets)
     _normalize_plan_items(data, pets)
     _normalize_booking_allocations(data, pets)
+    _normalize_catalogs(data)
+    _link_catalog_references(data)
     return data
 
 
