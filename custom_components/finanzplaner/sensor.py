@@ -10,12 +10,14 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import FinanzplanerCoordinator
+from .core import feed_profile_forecast
 
 
 SENSORS = (
     ("planned_balance", "Geplanter Restbetrag", "€"),
     ("actual_balance", "Tatsächlicher Restbetrag", "€"),
     ("unresolved_bookings", "Ungeklärte Buchungen", ""),
+    ("next_feed_purchase", "Nächster Futterkauf", ""),
 )
 
 
@@ -47,6 +49,46 @@ class FinanceSensor(CoordinatorEntity[FinanzplanerCoordinator], SensorEntity):
         self._attr_native_unit_of_measurement = CURRENCY_EURO if unit == "€" else None
 
     @property
-    def native_value(self) -> float | int:
+    def native_value(self) -> float | int | str | None:
+        if self._key == "next_feed_purchase":
+            forecast = self._next_feed_forecast()
+            return forecast.get("next_purchase_date") if forecast else None
         overview = self.coordinator.data.get("overview", {}) if self.coordinator.data else {}
         return overview.get(self._key, 0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self._key != "next_feed_purchase":
+            return None
+        forecast = self._next_feed_forecast()
+        if not forecast:
+            return None
+        profile = forecast["profile"]
+        values = forecast["values"]
+        return {
+            "status": values["status"],
+            "pet_name": profile.get("pet_name"),
+            "product": profile.get("product"),
+            "expected_cost": profile.get("expected_cost"),
+            "interval_weeks": values["effective_interval_weeks"],
+            "interval_source": values["interval_source"],
+            "days_until_purchase": values["days_until_purchase"],
+        }
+
+    def _next_feed_forecast(self) -> dict[str, Any] | None:
+        data = self.coordinator.data or {}
+        profiles = data.get("feed_profiles", [])
+        if not isinstance(profiles, list):
+            return None
+        forecasts = []
+        for profile in profiles:
+            if not isinstance(profile, dict) or profile.get("active", True) is False:
+                continue
+            values = feed_profile_forecast(profile)
+            next_date = values.get("next_purchase_date")
+            if isinstance(next_date, str):
+                forecasts.append({"profile": profile, "values": values})
+        return min(
+            forecasts,
+            key=lambda item: item["values"]["next_purchase_date"],
+        ) if forecasts else None

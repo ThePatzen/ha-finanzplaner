@@ -4,6 +4,7 @@ const OVERVIEW_URL = "/api/finanzplaner/overview";
 const PLAN_ITEMS_URL = "/api/finanzplaner/plan-items";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
 const PETS_URL = "/api/finanzplaner/pets";
+const FEED_PROFILES_URL = "/api/finanzplaner/feed-profiles";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
 const BOOKINGS_URL = "/api/finanzplaner/bookings";
@@ -430,6 +431,40 @@ const styles = `
   .pet-save:disabled { cursor: wait; opacity: 0.55; }
   .pet-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
   .pet-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .feed-profiles-view { max-inline-size: 72rem; padding-block: 1.8rem; }
+  .feed-profiles-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .feed-profiles-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
+  .feed-profiles-view-header p { max-inline-size: 56rem; margin: 0.5rem 0 0; color: var(--fp-muted); line-height: 1.45; }
+  .feed-profile-list { display: grid; gap: 1rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+  .feed-profile-card { display: grid; gap: 1rem; padding: 1.1rem; }
+  .feed-profile-card--archived { background: rgb(247 247 244 / 0.7); }
+  .feed-profile-card-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding-block-end: 0.75rem; border-block-end: 1px solid var(--fp-line); }
+  .feed-profile-card-header h3 { min-inline-size: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--fp-display); font-size: 1.3rem; line-height: 1; }
+  .feed-profile-card-header p { flex: 0 0 auto; margin: 0; color: var(--fp-muted); font-size: 0.76rem; }
+  .feed-profile-fields { display: grid; grid-template-columns: minmax(12rem, 1.4fr) minmax(8rem, 0.8fr) repeat(3, minmax(8rem, 1fr)); gap: 0.75rem; }
+  .feed-profile-field { min-inline-size: 0; display: grid; align-content: start; gap: 0.3rem; color: var(--fp-muted); font-size: 0.75rem; font-weight: 700; }
+  .feed-profile-field input, .feed-profile-field select { inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-control-border); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .feed-profile-field input:user-invalid, .feed-profile-field select:user-invalid { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .feed-profile-field small { color: var(--fp-muted); font-size: 0.7rem; font-weight: 400; line-height: 1.35; }
+  .feed-profile-help { margin: 0; color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
+  .feed-profile-forecast { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem; padding: 0.85rem; border: 1px solid var(--fp-line); background: var(--fp-cyan-soft); }
+  .feed-profile-forecast dl { display: contents; }
+  .feed-profile-forecast dt { color: var(--fp-muted); font-size: 0.7rem; font-weight: 700; }
+  .feed-profile-forecast dd { margin: 0.15rem 0 0; font-family: var(--fp-data); font-size: 0.9rem; font-weight: 700; }
+  .feed-profile-forecast dd, .feed-profile-forecast dt { min-inline-size: 0; overflow-wrap: anywhere; }
+  .feed-status { display: inline-flex; align-items: center; min-block-size: 1.8rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem; color: var(--fp-navy); background: var(--fp-cyan-soft); font-size: 0.72rem; font-weight: 800; }
+  .feed-status--due-soon, .feed-status--due { color: #754400; background: var(--fp-amber-soft); }
+  .feed-status--overdue { color: #7c241a; background: var(--fp-coral-soft); }
+  .feed-status--archived { color: var(--fp-ink); background: var(--fp-amber-soft); }
+  .feed-profile-card-actions { display: flex; align-items: center; gap: 0.8rem; padding-block-start: 0.75rem; border-block-start: 1px solid var(--fp-line); }
+  .feed-profile-save-status { flex: 1; min-block-size: 1.2rem; margin: 0; color: var(--fp-muted); font-size: 0.78rem; overflow-wrap: anywhere; }
+  .feed-profile-save-status--error { color: var(--fp-coral); font-weight: 700; }
+  .feed-profile-save, .feed-profile-archive, .feed-profile-purchase { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; font-weight: 800; }
+  .feed-profile-save, .feed-profile-purchase { color: var(--fp-paper); background: var(--fp-navy); }
+  .feed-profile-save:hover, .feed-profile-purchase:hover { background: var(--fp-navy-deep); }
+  .feed-profile-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
+  .feed-profile-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .feed-profile-save:disabled, .feed-profile-purchase:disabled { cursor: wait; opacity: 0.55; }
   .empty-state { margin-block-start: 1rem; padding: 2rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); text-align: center; }
 
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
@@ -461,6 +496,7 @@ const styles = `
     .plan-item-field--wide, .plan-item-target { grid-column: span 2; }
     .plan-item-schedule { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .pet-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .feed-profile-fields, .feed-profile-forecast { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
   @media (max-width: 45rem) {
@@ -491,7 +527,7 @@ const styles = `
     .statusbar { display: block; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
-    .review-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .import-strip, .excel-review-header { display: block; }
+    .review-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .feed-profiles-view-header, .import-strip, .excel-review-header { display: block; }
     .back-button { margin-block-start: 1rem; }
     .accounts-actions { margin-block-start: 1rem; }
     .account-card { grid-template-columns: 1fr; }
@@ -504,6 +540,9 @@ const styles = `
     .pet-card { grid-template-columns: 1fr; }
     .pet-card-actions { align-items: stretch; flex-direction: column; }
     .pet-save, .pet-archive { inline-size: 100%; }
+    .feed-profile-fields, .feed-profile-forecast { grid-template-columns: 1fr; }
+    .feed-profile-card-header, .feed-profile-card-actions { align-items: stretch; flex-direction: column; }
+    .feed-profile-save, .feed-profile-archive, .feed-profile-purchase { inline-size: 100%; }
     .plan-item-new-row { display: block; }
     .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
     .excel-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -516,7 +555,7 @@ const styles = `
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select { border: 1px solid CanvasText; box-shadow: none; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -592,6 +631,23 @@ function formatDate(value) {
   if (!value) return "—";
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+}
+
+function feedStatusLabel(status) {
+  return {
+    planned: "Geplant",
+    due_soon: "Bald fällig",
+    due: "Heute fällig",
+    overdue: "Überfällig",
+  }[status] || "Geplant";
+}
+
+function feedSourceLabel(source) {
+  return {
+    manual: "manuelles Intervall",
+    average: "Durchschnitt bestätigter Käufe",
+    none: "noch keine ausreichende Historie",
+  }[source] || "noch keine ausreichende Historie";
 }
 
 function percentBelowPlan(variance, plan) {
@@ -687,6 +743,12 @@ class FinanzplanerPanel extends HTMLElement {
     this._petDrafts = new Map();
     this._petSubmissions = new Set();
     this._petErrors = new Map();
+    this._feedProfiles = [];
+    this._feedProfilesLoading = false;
+    this._feedProfilesLoadFailed = false;
+    this._feedProfileDrafts = new Map();
+    this._feedProfileSubmissions = new Set();
+    this._feedProfileErrors = new Map();
     this._excelPreview = null;
     this._message = "";
     this._loading = false;
@@ -869,6 +931,84 @@ class FinanzplanerPanel extends HTMLElement {
       this._message = error.message || "Tiere konnten nicht geladen werden.";
     } finally {
       this._petsLoading = false;
+    }
+    this._render();
+  }
+
+  _newFeedProfileDraft() {
+    return {
+      pet_id: "",
+      product: "",
+      package_unit: "",
+      expected_cost: "",
+      expected_cost_input: "",
+      interval_weeks: "",
+      last_purchase_date: "",
+      due_soon_days: 14,
+      active: true,
+    };
+  }
+
+  _feedProfileDraftFromProfile(profile) {
+    const expectedCost = Number(profile.expected_cost);
+    return {
+      pet_id: profile.pet_id || "",
+      product: profile.product || "",
+      package_unit: profile.package_unit || "",
+      expected_cost: Number.isFinite(expectedCost) ? expectedCost : "",
+      expected_cost_input: Number.isFinite(expectedCost) ? expectedCost.toFixed(2) : "",
+      interval_weeks: profile.interval_weeks ?? "",
+      last_purchase_date: profile.last_purchase_date || "",
+      due_soon_days: profile.due_soon_days ?? 14,
+      active: profile.active !== false,
+    };
+  }
+
+  async _loadFeedProfiles() {
+    const [feedResponse, petsResponse] = await Promise.all([
+      fetchWithHomeAssistantAuth(this._hass, FEED_PROFILES_URL),
+      fetchWithHomeAssistantAuth(this._hass, PETS_URL),
+    ]);
+    const [feedResult, petsResult] = await Promise.all([
+      readApiResponse(feedResponse),
+      readApiResponse(petsResponse),
+    ]);
+    if (!feedResponse.ok || !petsResponse.ok) {
+      const failedResult = !feedResponse.ok ? feedResult : petsResult;
+      const failedResponse = !feedResponse.ok ? feedResponse : petsResponse;
+      throw new Error(apiErrorMessage(failedResult, `HTTP ${failedResponse.status}`));
+    }
+    this._feedProfiles = Array.isArray(feedResult.feed_profiles) ? feedResult.feed_profiles : [];
+    this._pets = Array.isArray(petsResult.pets) ? petsResult.pets : [];
+    if (!this._feedProfileDrafts.has("new")) this._feedProfileDrafts.set("new", this._newFeedProfileDraft());
+    const profileIds = new Set(this._feedProfiles.map((profile) => String(profile.id)));
+    for (const profile of this._feedProfiles) {
+      const profileId = String(profile.id);
+      if (!this._feedProfileDrafts.has(profileId)) {
+        this._feedProfileDrafts.set(profileId, this._feedProfileDraftFromProfile(profile));
+      }
+    }
+    for (const profileId of this._feedProfileDrafts.keys()) {
+      if (profileId !== "new" && !profileIds.has(profileId)) this._feedProfileDrafts.delete(profileId);
+    }
+  }
+
+  async _openFeedProfiles() {
+    this._view = "feed_profiles";
+    this._message = "";
+    this._feedProfilesLoading = true;
+    this._feedProfilesLoadFailed = false;
+    this._render();
+    this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
+    try {
+      await this._loadFeedProfiles();
+    } catch (error) {
+      this._feedProfiles = [];
+      this._pets = [];
+      this._feedProfilesLoadFailed = true;
+      this._message = error.message || "Futterprofile konnten nicht geladen werden.";
+    } finally {
+      this._feedProfilesLoading = false;
     }
     this._render();
   }
@@ -1191,6 +1331,160 @@ class FinanzplanerPanel extends HTMLElement {
       button.disabled = false;
     } finally {
       this._petSubmissions.delete(petId);
+    }
+  }
+
+  _captureFeedProfileDraft(form) {
+    const value = (field) => form.querySelector(`[data-feed-profile-field="${field}"]`)?.value ?? "";
+    return {
+      pet_id: value("pet_id"),
+      product: value("product"),
+      package_unit: value("package_unit"),
+      expected_cost: value("expected_cost"),
+      expected_cost_input: value("expected_cost"),
+      interval_weeks: value("interval_weeks"),
+      last_purchase_date: value("last_purchase_date"),
+      due_soon_days: value("due_soon_days") === "" ? 14 : Number(value("due_soon_days")),
+      active: Boolean(form.querySelector("[data-feed-profile-field='active']")?.checked),
+    };
+  }
+
+  _updateFeedProfileDraft(event) {
+    const form = event.currentTarget.closest("[data-feed-profile-form]");
+    if (!form) return;
+    const profileId = String(form.dataset.feedProfileId);
+    this._feedProfileDrafts.set(profileId, this._captureFeedProfileDraft(form));
+    this._feedProfileErrors.delete(profileId);
+    const status = form.querySelector("[data-feed-profile-save-status]");
+    status?.classList.remove("feed-profile-save-status--error");
+    if (status) status.textContent = "";
+  }
+
+  _feedProfilePayload(draft) {
+    const optional = (value) => String(value ?? "").trim() || null;
+    return {
+      pet_id: optional(draft.pet_id),
+      product: draft.product,
+      package_unit: draft.package_unit,
+      expected_cost: String(draft.expected_cost_input ?? draft.expected_cost ?? "").trim(),
+      interval_weeks: optional(draft.interval_weeks),
+      last_purchase_date: optional(draft.last_purchase_date),
+      due_soon_days: Number(draft.due_soon_days),
+      active: draft.active !== false,
+    };
+  }
+
+  async _handleFeedProfileSave(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const profileId = String(form.dataset.feedProfileId);
+    if (this._feedProfileSubmissions.has(profileId)) return;
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+    const draft = this._captureFeedProfileDraft(form);
+    this._feedProfileDrafts.set(profileId, draft);
+    const button = form.querySelector("[type='submit']");
+    const status = form.querySelector("[data-feed-profile-save-status]");
+    this._feedProfileSubmissions.add(profileId);
+    form.setAttribute("aria-busy", "true");
+    if (button) button.disabled = true;
+    if (status) status.textContent = "Futterprofil wird gespeichert …";
+    const url = profileId === "new"
+      ? FEED_PROFILES_URL
+      : `${FEED_PROFILES_URL}/${encodeURIComponent(profileId)}`;
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(this._feedProfilePayload(draft)),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Das Futterprofil konnte nicht gespeichert werden."));
+      this._feedProfileDrafts.delete(profileId);
+      this._feedProfileErrors.delete(profileId);
+      this._message = profileId === "new" ? "Futterprofil angelegt." : "Futterprofil gespeichert.";
+      await this._loadFeedProfiles();
+      this._render();
+    } catch (error) {
+      this._feedProfileErrors.set(profileId, error.message || "Das Futterprofil konnte nicht gespeichert werden.");
+      if (status) {
+        status.textContent = this._feedProfileErrors.get(profileId);
+        status.classList.add("feed-profile-save-status--error");
+      }
+      if (button) button.disabled = false;
+      form.removeAttribute("aria-busy");
+    } finally {
+      this._feedProfileSubmissions.delete(profileId);
+    }
+  }
+
+  async _archiveFeedProfile(event) {
+    const button = event.currentTarget;
+    const profileId = String(button.dataset.feedProfileId);
+    const profile = this._feedProfiles.find((candidate) => String(candidate.id) === profileId);
+    if (!profile || !window.confirm(`„${profile.product || "Futterprofil"}“ archivieren?`)) return;
+    if (this._feedProfileSubmissions.has(profileId)) return;
+    const form = button.closest("[data-feed-profile-form]");
+    const status = form?.querySelector("[data-feed-profile-save-status]");
+    this._feedProfileSubmissions.add(profileId);
+    button.disabled = true;
+    if (status) status.textContent = "Futterprofil wird archiviert …";
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${FEED_PROFILES_URL}/${encodeURIComponent(profileId)}`, { method: "DELETE" });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Das Futterprofil konnte nicht archiviert werden."));
+      this._feedProfileDrafts.delete(profileId);
+      this._message = "Futterprofil archiviert. Die Kaufhistorie bleibt erhalten.";
+      await this._loadFeedProfiles();
+      this._render();
+    } catch (error) {
+      if (status) {
+        status.textContent = error.message || "Das Futterprofil konnte nicht archiviert werden.";
+        status.classList.add("feed-profile-save-status--error");
+      }
+      button.disabled = false;
+    } finally {
+      this._feedProfileSubmissions.delete(profileId);
+    }
+  }
+
+  _todayIsoDate() {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  }
+
+  async _confirmFeedPurchase(event) {
+    const button = event.currentTarget;
+    const profileId = String(button.dataset.feedProfileId);
+    const profile = this._feedProfiles.find((candidate) => String(candidate.id) === profileId);
+    if (!profile || !window.confirm(`„${profile.product || "Futter"}“ für ${profile.pet_name || "das Tier"} als gekauft markieren?`)) return;
+    if (this._feedProfileSubmissions.has(profileId)) return;
+    const form = button.closest("[data-feed-profile-form]");
+    const status = form?.querySelector("[data-feed-profile-save-status]");
+    this._feedProfileSubmissions.add(profileId);
+    button.disabled = true;
+    if (status) status.textContent = "Kauf wird bestätigt …";
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${FEED_PROFILES_URL}/${encodeURIComponent(profileId)}/purchase`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purchase_date: this._todayIsoDate() }),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Der Kauf konnte nicht bestätigt werden."));
+      this._message = "Kauf bestätigt. Die nächste Futterprognose wurde neu berechnet.";
+      await this._loadFeedProfiles();
+      this._render();
+    } catch (error) {
+      if (status) {
+        status.textContent = error.message || "Der Kauf konnte nicht bestätigt werden.";
+        status.classList.add("feed-profile-save-status--error");
+      }
+      button.disabled = false;
+    } finally {
+      this._feedProfileSubmissions.delete(profileId);
     }
   }
 
@@ -1559,11 +1853,13 @@ class FinanzplanerPanel extends HTMLElement {
       ? this._reviewTemplate()
       : this._view === "plan_items"
         ? this._planItemsTemplate()
-        : this._view === "pets"
+      : this._view === "pets"
           ? this._petsTemplate()
-        : this._view === "accounts"
-          ? this._accountsTemplate()
-          : this._overviewTemplate();
+          : this._view === "feed_profiles"
+            ? this._feedProfilesTemplate()
+            : this._view === "accounts"
+              ? this._accountsTemplate()
+              : this._overviewTemplate();
     this.shadowRoot.innerHTML = `<style>${styles}</style>${template}`;
     this._bindEvents();
   }
@@ -1597,6 +1893,13 @@ class FinanzplanerPanel extends HTMLElement {
       input.addEventListener("change", (event) => this._updatePetDraft(event));
     });
     this.shadowRoot.querySelectorAll("[data-pet-archive]").forEach((button) => button.addEventListener("click", (event) => this._archivePet(event)));
+    this.shadowRoot.querySelectorAll("[data-feed-profile-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleFeedProfileSave(event)));
+    this.shadowRoot.querySelectorAll("[data-feed-profile-field]").forEach((input) => {
+      input.addEventListener("input", (event) => this._updateFeedProfileDraft(event));
+      input.addEventListener("change", (event) => this._updateFeedProfileDraft(event));
+    });
+    this.shadowRoot.querySelectorAll("[data-feed-profile-archive]").forEach((button) => button.addEventListener("click", (event) => this._archiveFeedProfile(event)));
+    this.shadowRoot.querySelectorAll("[data-feed-profile-purchase]").forEach((button) => button.addEventListener("click", (event) => this._confirmFeedPurchase(event)));
     this.shadowRoot.querySelectorAll("[data-plan-item-form]").forEach((form) => form.addEventListener("submit", (event) => this._handlePlanItemSave(event)));
     this.shadowRoot.querySelectorAll("[data-plan-item-field]").forEach((input) => {
       input.addEventListener("input", (event) => this._updatePlanItemDraft(event));
@@ -1608,9 +1911,10 @@ class FinanzplanerPanel extends HTMLElement {
       else if (button.dataset.nav === "plan_items") this._openPlanItems();
       else if (button.dataset.nav === "accounts") this._openAccounts();
       else if (button.dataset.nav === "pets") this._openPets();
+      else if (button.dataset.nav === "feed_profiles") this._openFeedProfiles();
       else if (button.dataset.nav === "overview") this._view = "overview";
       else this._message = `${button.textContent.trim()} ist für die nächste Ausbaustufe vorbereitet.`;
-      if (!["review", "accounts", "pets", "plan_items"].includes(button.dataset.nav)) this._render();
+      if (!["review", "accounts", "pets", "feed_profiles", "plan_items"].includes(button.dataset.nav)) this._render();
     }));
   }
 
@@ -1624,6 +1928,7 @@ class FinanzplanerPanel extends HTMLElement {
       ["household", "household", "Haushalt"],
       ["people", "people", "Personen"],
       ["pets", "paw", "Tiere"],
+      ["feed_profiles", "cart", "Futter"],
       ["accounts", "settings", "Konten"],
     ];
     return items.map(([id, iconName, label]) => {
@@ -1789,6 +2094,60 @@ class FinanzplanerPanel extends HTMLElement {
         : `<ul class="pet-list" aria-label="Tiere"><li>${this._petFormTemplate({}, 0, true)}</li>${this._pets.map((pet, index) => `<li>${this._petFormTemplate(pet, index + 1)}</li>`).join("")}</ul>`;
     const activeCount = this._pets.filter((pet) => pet.active !== false).length;
     const content = `<main class="main" id="content" tabindex="-1"><div class="pets-view"><div class="pets-view-header"><div><h2>Tiere verwalten</h2><p>Verwalte eigene Tierprofile für Futter und andere Zuordnungen. Tiere sind keine Home-Assistant-Personen; historische Buchungen behalten ihren damaligen Namen.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Tiere</strong> · Archivierte Profile bleiben für historische Zuordnungen auswählbar, aber nicht für neue Planposten.</p>${list}</div></main>`;
+    return this._shellTemplate(content);
+  }
+
+  _feedProfilePetOptions(selectedPetId) {
+    const options = [`<option value=""${selectedPetId ? "" : " selected"}>Tier auswählen</option>`];
+    options.push(this._petOptions(selectedPetId, { includeEmpty: false }));
+    return options.join("");
+  }
+
+  _feedProfileFormTemplate(profile, index, isNew = false) {
+    const profileId = isNew ? "new" : String(profile.id);
+    const draft = this._feedProfileDrafts.get(profileId)
+      || (isNew ? this._newFeedProfileDraft() : this._feedProfileDraftFromProfile(profile));
+    const active = draft.active !== false;
+    const title = isNew
+      ? "Neues Futterprofil anlegen"
+      : `${draft.product || "Futterprofil"} · ${profile.pet_name || "Tier"}`;
+    const fieldId = (field) => `feed-profile-${field}-${isNew ? "new" : index}`;
+    const error = this._feedProfileErrors.get(profileId) || "";
+    const action = isNew
+      ? FEED_PROFILES_URL
+      : `${FEED_PROFILES_URL}/${encodeURIComponent(profileId)}`;
+    const status = isNew || !profile.status
+      ? "planned"
+      : profile.status;
+    const interval = profile.effective_interval_weeks;
+    const intervalText = interval ? `${Number(interval).toLocaleString("de-DE", { maximumFractionDigits: 2 })} Wochen` : "Noch offen";
+    const forecast = !isNew ? `<section class="feed-profile-forecast" aria-label="Futterprognose">
+      <dl><div><dt>Nächster Kauf</dt><dd>${formatDate(profile.next_purchase_date)}</dd></div><div><dt>Erwarteter Betrag</dt><dd>${formatEuro(profile.expected_cost)}</dd></div><div><dt>Wirksames Intervall</dt><dd>${intervalText}</dd></div><div><dt>Berechnungsgrund</dt><dd>${escapeHtml(feedSourceLabel(profile.interval_source))}</dd></div></dl>
+    </section>` : `<p class="feed-profile-help">Nach dem Speichern erscheint hier der nächste voraussichtliche Kauf. Ein manueller Wert bleibt gegenüber dem Durchschnitt bestätigter Käufe führend.</p>`;
+    return `<form class="surface feed-profile-card${active ? "" : " feed-profile-card--archived"}" action="${escapeHtml(action)}" method="post" data-feed-profile-form data-feed-profile-id="${escapeHtml(profileId)}" aria-labelledby="${fieldId("heading")}"${this._feedProfileSubmissions.has(profileId) ? " aria-busy=\"true\"" : ""}>
+      <div class="feed-profile-card-header"><div><h3 id="${fieldId("heading")}">${escapeHtml(title)}</h3><p>${isNew ? "Manuell angelegt" : `${escapeHtml(profile.pet_name || "Tier")} · ${escapeHtml(profile.package_unit || "Verpackung")}`}</p></div><span class="feed-status feed-status--${escapeHtml(active ? status : "archived")}">${escapeHtml(active ? feedStatusLabel(status) : "Archiviert")}</span></div>
+      <div class="feed-profile-fields">
+        <label class="feed-profile-field" for="${fieldId("pet_id")}">Tier<select id="${fieldId("pet_id")}" name="pet_id" data-feed-profile-field="pet_id" required>${this._feedProfilePetOptions(draft.pet_id)}</select></label>
+        <label class="feed-profile-field" for="${fieldId("product")}">Futter / Produkt<input id="${fieldId("product")}" name="product" data-feed-profile-field="product" type="text" value="${escapeHtml(draft.product || "")}" maxlength="120" autocomplete="off" required></label>
+        <label class="feed-profile-field" for="${fieldId("package_unit")}">Verpackungseinheit<input id="${fieldId("package_unit")}" name="package_unit" data-feed-profile-field="package_unit" type="text" value="${escapeHtml(draft.package_unit || "")}" maxlength="80" autocomplete="off" placeholder="z. B. 1 Sack" required></label>
+        <label class="feed-profile-field" for="${fieldId("expected_cost")}">Kosten pro Kauf<input id="${fieldId("expected_cost")}" name="expected_cost" data-feed-profile-field="expected_cost" type="text" inputmode="decimal" value="${escapeHtml(draft.expected_cost_input ?? draft.expected_cost ?? "")}" placeholder="z. B. 42,50" aria-describedby="${fieldId("cost-help")}" required><small id="${fieldId("cost-help")}">Positive Eurobeträge</small></label>
+        <label class="feed-profile-field" for="${fieldId("interval_weeks")}">Intervall in Wochen<input id="${fieldId("interval_weeks")}" name="interval_weeks" data-feed-profile-field="interval_weeks" type="number" inputmode="decimal" min="0.01" max="520" step="0.01" value="${escapeHtml(draft.interval_weeks ?? "")}" placeholder="optional"><small>Leer = Durchschnitt aus Käufen</small></label>
+        <label class="feed-profile-field" for="${fieldId("last_purchase_date")}">Letzter bestätigter Kauf<input id="${fieldId("last_purchase_date")}" name="last_purchase_date" data-feed-profile-field="last_purchase_date" type="date" value="${escapeHtml(draft.last_purchase_date || "")}"><small>Startpunkt der nächsten Schätzung</small></label>
+        <label class="feed-profile-field" for="${fieldId("due_soon_days")}">Vorwarnung in Tagen<input id="${fieldId("due_soon_days")}" name="due_soon_days" data-feed-profile-field="due_soon_days" type="number" inputmode="numeric" min="0" max="90" step="1" value="${escapeHtml(draft.due_soon_days ?? 14)}"><small>0 = nur am Fälligkeitstag</small></label>
+      </div>
+      ${forecast}
+      <div class="feed-profile-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-feed-profile-field="active" type="checkbox"${active ? " checked" : ""}>Futterprofil aktiv</label><p class="feed-profile-save-status${error ? " feed-profile-save-status--error" : ""}" data-feed-profile-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="feed-profile-purchase" type="button" data-feed-profile-purchase data-feed-profile-id="${escapeHtml(profileId)}">Kauf heute bestätigen</button><button class="feed-profile-archive" type="button" data-feed-profile-archive data-feed-profile-id="${escapeHtml(profileId)}">Archivieren</button>` : ""}<button class="feed-profile-save" type="submit"${this._feedProfileSubmissions.has(profileId) ? " disabled" : ""}>${isNew ? "Futterprofil anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
+    </form>`;
+  }
+
+  _feedProfilesTemplate() {
+    const list = this._feedProfilesLoading
+      ? `<div class="empty-state">Futterprofile werden geladen …</div>`
+      : this._feedProfilesLoadFailed
+        ? `<div class="empty-state">Futterprofile stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
+        : `<ul class="feed-profile-list" aria-label="Futterprofile"><li>${this._feedProfileFormTemplate({}, 0, true)}</li>${this._feedProfiles.map((profile, index) => `<li>${this._feedProfileFormTemplate(profile, index + 1)}</li>`).join("")}</ul>`;
+    const activeCount = this._feedProfiles.filter((profile) => profile.active !== false).length;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="feed-profiles-view"><div class="feed-profiles-view-header"><div><h2>Futter planen</h2><p>Hinterlege Verpackung, Kosten und Verbrauch pro Tier. Bestätigte Käufe verschieben die nächste Schätzung; es wird keine Buchung automatisch angelegt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Futterprofile</strong> · Ein manuelles Intervall überschreibt den Durchschnitt aus bestätigten Käufen. Das voraussichtliche Kaufdatum wird als einzelnes Ereignis in der Prognose berücksichtigt.</p>${list}</div></main>`;
     return this._shellTemplate(content);
   }
 

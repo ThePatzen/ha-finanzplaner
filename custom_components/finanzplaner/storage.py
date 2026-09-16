@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date
 import hashlib
 from typing import Any
 
@@ -16,6 +17,7 @@ def empty_data(household_name: str = DEFAULT_HOUSEHOLD_NAME) -> dict[str, Any]:
         "settings": {"household_name": household_name, "currency": "EUR"},
         "accounts": [],
         "pets": [],
+        "feed_profiles": [],
         "plan_items": [],
         "bookings": [],
         "imports": [],
@@ -56,6 +58,88 @@ def _pet_by_id(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
         for pet in pets
         if isinstance(pet, dict) and isinstance(pet.get("id"), str)
     }
+
+
+def _normalize_feed_profiles(
+    data: dict[str, Any], pets: dict[str, dict[str, Any]] | None = None
+) -> None:
+    """Normalize feed profiles while keeping their purchase history local."""
+
+    profiles = data.get("feed_profiles")
+    if not isinstance(profiles, list):
+        data["feed_profiles"] = []
+        return
+    used_ids: set[str] = set()
+    for index, profile in enumerate(profiles):
+        if not isinstance(profile, dict):
+            continue
+        pet_id = profile.get("pet_id")
+        profile["pet_id"] = pet_id.strip() if isinstance(pet_id, str) and pet_id.strip() else None
+        profile["product"] = str(profile.get("product", "")).strip()
+        profile["package_unit"] = str(profile.get("package_unit", "")).strip()
+        profile_id = profile.get("id")
+        if not isinstance(profile_id, str) or not profile_id.strip() or profile_id in used_ids:
+            material = "|".join(
+                (
+                    str(index),
+                    str(profile.get("pet_id") or ""),
+                    profile["product"],
+                    profile["package_unit"],
+                )
+            )
+            profile_id = f"feed-profile-{hashlib.sha256(material.encode('utf-8')).hexdigest()[:16]}"
+        profile["id"] = profile_id.strip()
+        used_ids.add(profile["id"])
+
+        interval = profile.get("interval_weeks")
+        if isinstance(interval, bool):
+            interval = None
+        elif isinstance(interval, (int, float)) and 0 < interval <= 520:
+            interval = round(float(interval), 2)
+        else:
+            interval = None
+        profile["interval_weeks"] = interval
+
+        last_purchase = profile.get("last_purchase_date")
+        if not isinstance(last_purchase, str):
+            last_purchase = None
+        else:
+            try:
+                last_purchase = date.fromisoformat(last_purchase).isoformat()
+            except ValueError:
+                last_purchase = None
+        history = profile.get("purchase_dates", [])
+        clean_history: set[str] = set()
+        if isinstance(history, list):
+            for value in history:
+                if not isinstance(value, str):
+                    continue
+                try:
+                    clean_history.add(date.fromisoformat(value).isoformat())
+                except ValueError:
+                    continue
+        if last_purchase:
+            clean_history.add(last_purchase)
+        profile["purchase_dates"] = sorted(clean_history)
+        profile["last_purchase_date"] = profile["purchase_dates"][-1] if clean_history else None
+
+        due_soon_days = profile.get("due_soon_days", 14)
+        if isinstance(due_soon_days, bool) or not isinstance(due_soon_days, int) or not 0 <= due_soon_days <= 90:
+            due_soon_days = 14
+        profile["due_soon_days"] = due_soon_days
+        profile["active"] = profile.get("active", True) is not False
+        profile.setdefault("expected_cost", 0.0)
+        profile.setdefault("created_at", None)
+        profile.setdefault("updated_at", None)
+
+        pet = pets.get(profile["pet_id"]) if pets and profile.get("pet_id") else None
+        if pet is not None:
+            if not profile.get("pet_name"):
+                profile["pet_name"] = pet.get("name")
+            if not profile.get("pet_type"):
+                profile["pet_type"] = pet.get("pet_type")
+        profile.setdefault("pet_name", None)
+        profile.setdefault("pet_type", None)
 
 
 def _normalize_plan_items(
@@ -196,6 +280,7 @@ def migrate_store_data(
     data["version"] = STORAGE_VERSION
     _normalize_pets(data)
     pets = _pet_by_id(data)
+    _normalize_feed_profiles(data, pets)
     _normalize_plan_items(data, pets)
     _normalize_booking_allocations(data, pets)
     return data
@@ -256,6 +341,7 @@ def normalize_current_store_data(
     data["version"] = STORAGE_VERSION
     _normalize_pets(data)
     pets = _pet_by_id(data)
+    _normalize_feed_profiles(data, pets)
     _normalize_plan_items(data, pets)
     _normalize_booking_allocations(data, pets)
     return data

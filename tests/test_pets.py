@@ -4,16 +4,97 @@ import sys
 import types
 import unittest
 from copy import deepcopy
+from datetime import date
 from unittest.mock import patch
 
 from custom_components import finanzplaner
 from custom_components.finanzplaner.const import DOMAIN
 from custom_components.finanzplaner.core import (
+    feed_profile_forecast,
+    feed_profile_month_values,
     parse_allocation_payload,
     validate_pet_payload,
+    validate_feed_profile_payload,
     validate_plan_item_payload,
 )
 from custom_components.finanzplaner.storage import migrate_store_data
+
+
+class FeedProfileDomainTests(unittest.TestCase):
+    def test_manual_interval_wins_over_average_and_exposes_next_purchase(self):
+        profile = {
+            "pet_id": "pet-fio",
+            "product": "Trockenfutter",
+            "package_unit": "1 Sack",
+            "expected_cost": 42.0,
+            "interval_weeks": 5,
+            "purchase_dates": ["2026-07-01", "2026-08-01"],
+            "last_purchase_date": "2026-08-01",
+            "due_soon_days": 14,
+            "active": True,
+        }
+
+        result = feed_profile_forecast(profile, today=date(2026, 9, 1))
+
+        self.assertEqual(result["interval_source"], "manual")
+        self.assertEqual(result["average_interval_weeks"], 4.43)
+        self.assertEqual(result["effective_interval_weeks"], 5.0)
+        self.assertEqual(result["next_purchase_date"], "2026-09-05")
+        self.assertEqual(result["status"], "due_soon")
+
+    def test_average_interval_is_used_when_no_manual_override_exists(self):
+        result = feed_profile_forecast(
+            {
+                "purchase_dates": ["2026-07-01", "2026-08-01"],
+                "last_purchase_date": "2026-08-01",
+                "due_soon_days": 14,
+            },
+            today=date(2026, 8, 20),
+        )
+
+        self.assertEqual(result["interval_source"], "average")
+        self.assertEqual(result["effective_interval_weeks"], 4.43)
+        self.assertEqual(result["next_purchase_date"], "2026-09-01")
+        self.assertEqual(result["status"], "due_soon")
+
+    def test_feed_forecast_is_a_concrete_event_without_monthly_double_count(self):
+        profile = {
+            "active": True,
+            "expected_cost": 19.90,
+            "interval_weeks": 4,
+            "last_purchase_date": "2026-08-20",
+        }
+
+        self.assertEqual(
+            feed_profile_month_values(profile, "2026-09", today=date(2026, 9, 1)),
+            (0.0, -19.90),
+        )
+
+    def test_validates_feed_profile_fields_and_pet_snapshot(self):
+        result = validate_feed_profile_payload(
+            {
+                "pet_id": "pet-fio",
+                "product": " Trockenfutter ",
+                "package_unit": " 1 Sack ",
+                "expected_cost": "42,50",
+                "interval_weeks": "5",
+                "last_purchase_date": "2026-08-01",
+                "due_soon_days": 14,
+                "active": True,
+            },
+            {"pet-fio": {"name": "Fio", "pet_type": "Hund"}},
+        )
+
+        self.assertEqual(result["product"], "Trockenfutter")
+        self.assertEqual(result["package_unit"], "1 Sack")
+        self.assertEqual(result["expected_cost"], 42.50)
+        self.assertEqual(result["pet_name"], "Fio")
+        self.assertEqual(result["pet_type"], "Hund")
+        with self.assertRaisesRegex(ValueError, "Futter"):
+            validate_feed_profile_payload(
+                {"pet_id": "pet-fio", "product": "", "package_unit": "Sack", "expected_cost": 1},
+                {"pet-fio": {"name": "Fio"}},
+            )
 
 
 class PetDomainTests(unittest.TestCase):
@@ -22,6 +103,15 @@ class PetDomainTests(unittest.TestCase):
             {
                 "version": 2,
                 "pets": [{"name": "  Fio  ", "pet_type": "Hund"}],
+                "feed_profiles": [
+                    {
+                        "pet_id": "",
+                        "product": " Trockenfutter ",
+                        "package_unit": "1 Sack",
+                        "expected_cost": 42,
+                        "last_purchase_date": "2026-08-01",
+                    }
+                ],
                 "plan_items": [{"name": "Futter", "pet_id": None}],
                 "bookings": [
                     {
@@ -42,6 +132,10 @@ class PetDomainTests(unittest.TestCase):
         self.assertTrue(pet["active"])
         self.assertIsNone(migrated["plan_items"][0]["pet_name"])
         self.assertIsNone(migrated["bookings"][0]["allocations"][0]["pet_id"])
+        feed_profile = migrated["feed_profiles"][0]
+        self.assertTrue(feed_profile["id"].startswith("feed-profile-"))
+        self.assertEqual(feed_profile["product"], "Trockenfutter")
+        self.assertEqual(feed_profile["purchase_dates"], ["2026-08-01"])
 
     def test_validates_pet_reference_without_turning_it_into_a_person_target(self):
         pet = {"id": "pet-fio", "name": "Fio", "pet_type": "Hund", "active": True}
@@ -315,6 +409,39 @@ class PetApiTests(unittest.TestCase):
         self.assertEqual(self.coordinator.store.data, before)
         self.assertEqual(self.coordinator.store.save_count, 0)
 
+    def test_feed_profile_can_be_created_and_confirmed_purchase_moves_forecast(self):
+        result = asyncio.run(
+            self.http.FeedProfilesView().post(
+                self._request(
+                    {
+                        "pet_id": "pet-fio",
+                        "product": "Trockenfutter",
+                        "package_unit": "1 Sack",
+                        "expected_cost": 42.50,
+                        "interval_weeks": 5,
+                        "last_purchase_date": "2026-08-01",
+                        "due_soon_days": 14,
+                        "active": True,
+                    }
+                )
+            )
+        )
+        profile = self.coordinator.store.data["feed_profiles"][-1]
+        self.assertEqual(result["feed_profile"]["pet_name"], "Fio")
+        self.assertEqual(profile["purchase_dates"], ["2026-08-01"])
+
+        purchased = asyncio.run(
+            self.http.FeedProfilePurchaseView().post(
+                self._request({"purchase_date": "2026-09-10"}),
+                profile["id"],
+            )
+        )
+
+        self.assertEqual(profile["last_purchase_date"], "2026-09-10")
+        self.assertEqual(profile["purchase_dates"], ["2026-08-01", "2026-09-10"])
+        self.assertEqual(purchased["purchase_date"], "2026-09-10")
+        self.assertEqual(self.coordinator.store.save_count, 2)
+
 
 class PetRegistrationTests(unittest.TestCase):
     def test_async_setup_registers_pet_views(self):
@@ -330,6 +457,9 @@ class PetRegistrationTests(unittest.TestCase):
 
         self.assertIn(http.PetsView, registered)
         self.assertIn(http.PetView, registered)
+        self.assertIn(http.FeedProfilesView, registered)
+        self.assertIn(http.FeedProfileView, registered)
+        self.assertIn(http.FeedProfilePurchaseView, registered)
         self.assertTrue(http.PetView.requires_auth)
 
 

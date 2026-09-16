@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import re
@@ -33,6 +33,18 @@ PLAN_ITEM_FIELDS = frozenset(
 )
 
 PET_FIELDS = frozenset({"name", "pet_type", "active"})
+FEED_PROFILE_FIELDS = frozenset(
+    {
+        "pet_id",
+        "product",
+        "package_unit",
+        "expected_cost",
+        "interval_weeks",
+        "last_purchase_date",
+        "due_soon_days",
+        "active",
+    }
+)
 
 
 def normalize_account_reference(value: str) -> str:
@@ -72,6 +84,101 @@ def validate_pet_payload(payload: object, *, partial: bool = False) -> dict[str,
         normalized["pet_type"] = _optional_plan_text(
             payload.get("pet_type"), "Der Tier-Typ", max_length=60
         )
+
+    if not partial or "active" in payload:
+        active = payload.get("active", True)
+        if not isinstance(active, bool):
+            raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
+        normalized["active"] = active
+    return normalized
+
+
+def _positive_interval(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal, str)):
+        raise ValueError(f"{label} muss positiv angegeben werden.")
+    try:
+        raw = str(value).strip().replace(" ", "").replace(",", ".")
+        interval = Decimal(raw)
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"{label} muss positiv angegeben werden.") from exc
+    if (
+        not interval.is_finite()
+        or interval <= 0
+        or interval > 520
+        or interval.as_tuple().exponent < -2
+    ):
+        raise ValueError(f"{label} muss zwischen 0,01 und 520 Wochen liegen.")
+    return float(interval.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def validate_feed_profile_payload(
+    payload: object,
+    valid_pets: dict[str, dict[str, object]] | set[str],
+    *,
+    partial: bool = False,
+) -> dict[str, object]:
+    """Validate one local feed-consumption profile and attach a pet snapshot."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("Die Futterprofildaten müssen ein Objekt sein.")
+    unknown = set(payload) - FEED_PROFILE_FIELDS
+    if unknown:
+        raise ValueError("Das Futterprofil enthält ein unbekanntes Feld.")
+
+    normalized: dict[str, object] = {}
+    if not partial or "pet_id" in payload:
+        pet_id = payload.get("pet_id")
+        if not isinstance(pet_id, str) or not pet_id.strip():
+            raise ValueError("Bitte ein Tier für das Futterprofil auswählen.")
+        pet_id = pet_id.strip()
+        if pet_id not in valid_pets:
+            raise ValueError("Die Tierzuordnung verweist nicht auf ein bekanntes Tier.")
+        normalized["pet_id"] = pet_id
+        pet = valid_pets.get(pet_id) if isinstance(valid_pets, dict) else None
+        normalized["pet_name"] = (
+            _optional_plan_text(pet.get("name"), "Der Tiername", max_length=80)
+            if pet is not None
+            else None
+        )
+        normalized["pet_type"] = (
+            _optional_plan_text(pet.get("pet_type"), "Der Tier-Typ", max_length=60)
+            if pet is not None
+            else None
+        )
+
+    for field, label, max_length in (
+        ("product", "Das Futter", 120),
+        ("package_unit", "Die Verpackungseinheit", 80),
+    ):
+        if not partial or field in payload:
+            value = _optional_plan_text(payload.get(field), label, max_length=max_length)
+            if value is None:
+                raise ValueError(f"Bitte {label[0].lower() + label[1:]} angeben.")
+            normalized[field] = value
+
+    if not partial or "expected_cost" in payload:
+        normalized["expected_cost"] = _plan_amount(payload.get("expected_cost"))
+
+    if not partial or "interval_weeks" in payload:
+        value = payload.get("interval_weeks")
+        normalized["interval_weeks"] = (
+            None if value in (None, "") else _positive_interval(value, "Das Verbrauchsintervall")
+        )
+
+    if not partial or "last_purchase_date" in payload:
+        normalized["last_purchase_date"] = _plan_date(
+            payload.get("last_purchase_date"), "Das Datum des letzten Kaufs"
+        )
+
+    if not partial or "due_soon_days" in payload:
+        due_soon_days = payload.get("due_soon_days", 14)
+        if (
+            isinstance(due_soon_days, bool)
+            or not isinstance(due_soon_days, int)
+            or not 0 <= due_soon_days <= 90
+        ):
+            raise ValueError("Das Vorwarnfenster muss zwischen 0 und 90 Tagen liegen.")
+        normalized["due_soon_days"] = due_soon_days
 
     if not partial or "active" in payload:
         active = payload.get("active", True)
@@ -576,6 +683,101 @@ def _stored_plan_date(value: object) -> date | None:
         return None
 
 
+def _feed_purchase_dates(profile: dict[str, object]) -> list[date]:
+    """Return valid, unique purchase dates from current and legacy fields."""
+
+    values: list[object] = []
+    history = profile.get("purchase_dates", [])
+    if isinstance(history, list):
+        values.extend(history)
+    values.append(profile.get("last_purchase_date"))
+    dates = {
+        parsed
+        for value in values
+        if (parsed := _stored_plan_date(value)) is not None
+    }
+    return sorted(dates)
+
+
+def feed_profile_forecast(
+    profile: dict[str, object], *, today: date | None = None
+) -> dict[str, object]:
+    """Calculate a transparent next-purchase estimate for one feed profile."""
+
+    reference_date = today or date.today()
+    purchases = _feed_purchase_dates(profile)
+    last_purchase = purchases[-1] if purchases else None
+    average_interval_weeks: float | None = None
+    if len(purchases) >= 2:
+        average_days = (purchases[-1] - purchases[0]).days / (len(purchases) - 1)
+        average_interval_weeks = round(average_days / 7, 2)
+
+    manual_interval = profile.get("interval_weeks")
+    if isinstance(manual_interval, (int, float, Decimal)) and not isinstance(manual_interval, bool):
+        effective_interval = float(manual_interval)
+        interval_source = "manual"
+    elif average_interval_weeks is not None:
+        effective_interval = average_interval_weeks
+        interval_source = "average"
+    else:
+        effective_interval = None
+        interval_source = "none"
+
+    next_purchase: date | None = None
+    if last_purchase is not None and effective_interval is not None:
+        interval_days = max(1, int(Decimal(str(effective_interval)) * 7 + Decimal("0.5")))
+        next_purchase = last_purchase + timedelta(days=interval_days)
+
+    due_soon_days = profile.get("due_soon_days", 14)
+    if isinstance(due_soon_days, bool) or not isinstance(due_soon_days, int):
+        due_soon_days = 14
+    if next_purchase is None:
+        status = "planned"
+        days_until = None
+    else:
+        days_until = (next_purchase - reference_date).days
+        if days_until < 0:
+            status = "overdue"
+        elif days_until == 0:
+            status = "due"
+        elif days_until <= due_soon_days:
+            status = "due_soon"
+        else:
+            status = "planned"
+
+    return {
+        "last_purchase_date": last_purchase.isoformat() if last_purchase else None,
+        "purchase_count": len(purchases),
+        "average_interval_weeks": average_interval_weeks,
+        "effective_interval_weeks": effective_interval,
+        "interval_source": interval_source,
+        "next_purchase_date": next_purchase.isoformat() if next_purchase else None,
+        "status": status,
+        "days_until_purchase": days_until,
+    }
+
+
+def feed_profile_month_values(
+    profile: dict[str, object], month: str, *, today: date | None = None
+) -> tuple[float, float]:
+    """Return ``(monthly_budget, scheduled_cashflow)`` for a feed estimate.
+
+    Feed profiles are concrete forecast events, not normalized monthly plan
+    items. Their budget contribution is therefore zero, avoiding double count.
+    """
+
+    if not profile.get("active", True):
+        return 0.0, 0.0
+    forecast = feed_profile_forecast(profile, today=today)
+    next_purchase = _stored_plan_date(forecast["next_purchase_date"])
+    if next_purchase is None:
+        return 0.0, 0.0
+    month_start, month_end = _month_window(month)
+    if not month_start <= next_purchase <= month_end:
+        return 0.0, 0.0
+    return 0.0, -float(_money(profile.get("expected_cost", 0)))
+
+
 def _plan_item_occurs_in_month(
     item: dict[str, object],
     month_start: date,
@@ -680,6 +882,16 @@ def overview_values(data: dict[str, object], month: str) -> dict[str, float | in
     planned_remaining = sum(
         scheduled_cashflow for _, scheduled_cashflow in plan_values
     )
+    feed_profiles = data.get("feed_profiles", [])
+    if not isinstance(feed_profiles, list):
+        feed_profiles = []
+    feed_forecast_total = sum(
+        scheduled_cashflow
+        for profile in feed_profiles
+        if isinstance(profile, dict)
+        for _, scheduled_cashflow in [feed_profile_month_values(profile, month)]
+    )
+    planned_remaining += feed_forecast_total
     unresolved = [item for item in bookings if item.get("status") != "resolved"]
     snapshot = month_snapshot(
         planned_total=plan,
@@ -697,6 +909,7 @@ def overview_values(data: dict[str, object], month: str) -> dict[str, float | in
         "planned_balance": snapshot.plan,
         "actual_balance": snapshot.actual,
         "unresolved_bookings": len(unresolved),
+        "feed_forecast_total": float(feed_forecast_total),
     }
 
 

@@ -71,11 +71,12 @@ Bereits geliefert:
 - Lokale Tierprofile mit stabiler `pet_id`, optionalem Tier-Typ, reversibler
   Archivierung und Snapshot-Zuordnung in Planposten sowie Aufteilungen sind
   umgesetzt.
-- Verbrauchsbasierte Futterprognose und automatische Erinnerungen sind noch
-  nicht umgesetzt; die fachlichen Anforderungen dafür stehen unten fest.
+- Verbrauchsbasierte Futterprognose mit bestätigten Käufen, manuellem
+  Intervall-Override, Kaufstatus und einer HA-Datumsentität ist umgesetzt;
+  automatische Erinnerungen bleiben offen.
 - HA-Personen und authentifizierte Panel-API-Aufrufe über
   `hass.fetchWithAuth()`.
-- 95 Python- und 25 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
+- 100 Python- und 26 Node-Tests sowie Syntax-, Compile-, JSON- und Diff-Checks
   für den aktuellen Stand.
 
 Aktuelle Release-Situation:

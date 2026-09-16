@@ -221,6 +221,16 @@ test("exposes authenticated pet profile management and pet-aware assignment fiel
   assert.match(panelSource, /pet_id: row\.pet_id \|\| null/);
 });
 
+test("exposes feed profiles, forecast status, and purchase confirmation", () => {
+  assert.match(panelSource, /const FEED_PROFILES_URL = "\/api\/finanzplaner\/feed-profiles"/);
+  assert.match(panelSource, /\["feed_profiles", "cart", "Futter"\]/);
+  assert.match(panelSource, /data-feed-profile-form/);
+  assert.match(panelSource, /data-feed-profile-purchase/);
+  assert.match(panelSource, /purchase_date: this\._todayIsoDate\(\)/);
+  assert.match(panelSource, /data-feed-profile-field="interval_weeks"/);
+  assert.match(panelSource, /data-feed-profile-field="due_soon_days"/);
+});
+
 test("renders a skip link to focusable main content and reveals it on keyboard focus", () => {
   assert.match(panelSource, /class="skip-link visually-hidden" href="#content" data-skip-link/);
   assert.match(panelSource, /\.skip-link:focus-visible\s*\{[^}]*clip-path:\s*none\s*!important/s);

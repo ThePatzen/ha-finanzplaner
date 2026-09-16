@@ -48,6 +48,9 @@ veröffentlicht:
 - authentifizierte Planposten-API mit reversibler Archivierung
 - lokale Tierprofile mit stabilem Schlüssel, optionalem Tier-Typ und reversibler Archivierung
 - optionale Tier-Snapshots in Planposten und Buchungsaufteilungen, unabhängig von `target`
+- lokale Futterprofile mit Verpackungseinheit, erwarteten Kaufkosten, Verbrauchsintervall und Vorwarnfenster
+- nächste Kaufprognose aus manuellem Intervall oder durchschnittlichem Abstand bestätigter Käufe
+- bestätigte Futterkäufe verschieben das letzte Kaufdatum; erwartete Käufe werden einmalig in der Monatsprognose berücksichtigt
 
 Weitere Produktfähigkeiten und Leitplanken:
 

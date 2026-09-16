@@ -32,6 +32,9 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
         BookingAssignmentView,
         ExcelConfirmView,
         ExcelPreviewView,
+        FeedProfilePurchaseView,
+        FeedProfileView,
+        FeedProfilesView,
         ImportView,
         OverviewView,
         PetView,
@@ -51,6 +54,9 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
     hass.http.register_view(AccountView)
     hass.http.register_view(PetsView)
     hass.http.register_view(PetView)
+    hass.http.register_view(FeedProfilesView)
+    hass.http.register_view(FeedProfileView)
+    hass.http.register_view(FeedProfilePurchaseView)
     hass.http.register_view(UnresolvedBookingsView)
     hass.http.register_view(BookingAssignmentView)
     hass.http.register_view(BookingAllocationsView)

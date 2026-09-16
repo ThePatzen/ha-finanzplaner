@@ -16,6 +16,7 @@ from .core import (
     Booking,
     booking_fingerprint,
     ensure_account,
+    feed_profile_forecast,
     normalize_account_reference,
     overview_values,
     parse_allocation_payload,
@@ -23,6 +24,7 @@ from .core import (
     parse_mt940,
     plan_item_totals,
     validate_pet_payload,
+    validate_feed_profile_payload,
     validate_plan_item_payload,
     split_amount,
 )
@@ -356,6 +358,14 @@ def pet_payload(pet: dict[str, object]) -> dict[str, object]:
     return _response_payload(dict(pet))  # type: ignore[return-value]
 
 
+def feed_profile_payload(profile: dict[str, object]) -> dict[str, object]:
+    """Return a profile together with its explainable forecast fields."""
+
+    return _response_payload(
+        {**dict(profile), **feed_profile_forecast(profile)}
+    )  # type: ignore[return-value]
+
+
 def _pet_records(
     coordinator: FinanzplanerCoordinator,
     *,
@@ -389,6 +399,20 @@ def _allocation_pet_records(
             pet_id = allocation.get("pet_id")
             if isinstance(pet_id, str) and pet_id in all_pets:
                 pets[pet_id] = all_pets[pet_id]
+    return pets
+
+
+def _feed_pet_records(
+    coordinator: FinanzplanerCoordinator,
+    pet_id: object = None,
+) -> dict[str, dict[str, object]]:
+    """Allow active pets plus the archived pet already used by a profile."""
+
+    pets = _pet_records(coordinator, active_only=True)
+    if isinstance(pet_id, str):
+        archived = _pet_records(coordinator).get(pet_id)
+        if archived is not None:
+            pets[pet_id] = archived
     return pets
 
 
@@ -497,7 +521,7 @@ def _demo_overview() -> dict[str, Any]:
 
 
 def _overview(data: dict[str, Any], month: str | None) -> dict[str, Any]:
-    if not data.get("plan_items") and not data.get("bookings"):
+    if not data.get("plan_items") and not data.get("bookings") and not data.get("feed_profiles"):
         result = _demo_overview()
         if month:
             result["month"] = month
@@ -759,6 +783,235 @@ class PetView(HomeAssistantView):
         await coordinator.async_refresh_data()
         return self.json(
             _response_payload({"pet": pet_payload(pet), "archived": True})
+        )
+
+
+def _feed_profile_draft(profile: dict[str, object]) -> dict[str, object]:
+    """Keep only editable feed-profile fields for update validation."""
+
+    return {
+        "pet_id": profile.get("pet_id"),
+        "product": profile.get("product", ""),
+        "package_unit": profile.get("package_unit", ""),
+        "expected_cost": profile.get("expected_cost", 0),
+        "interval_weeks": profile.get("interval_weeks"),
+        "last_purchase_date": profile.get("last_purchase_date"),
+        "due_soon_days": profile.get("due_soon_days", 14),
+        "active": profile.get("active", True),
+    }
+
+
+def _materialize_feed_profile(
+    values: dict[str, object],
+    *,
+    profile_id: str,
+    created_at: str,
+    updated_at: str,
+) -> dict[str, object]:
+    last_purchase = values.get("last_purchase_date")
+    return {
+        "id": profile_id,
+        **values,
+        "purchase_dates": [last_purchase] if last_purchase else [],
+        "created_at": created_at,
+        "updated_at": updated_at,
+    }
+
+
+class FeedProfilesView(HomeAssistantView):
+    """List and create local feed-consumption profiles."""
+
+    url = "/api/finanzplaner/feed-profiles"
+    name = "api:finanzplaner:feed-profiles"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        profiles = [] if coordinator is None else coordinator.store.data.get("feed_profiles", [])
+        if not isinstance(profiles, list):
+            profiles = []
+        return self.json(
+            _response_payload(
+                {
+                    "feed_profiles": [
+                        feed_profile_payload(profile)
+                        for profile in profiles
+                        if isinstance(profile, dict)
+                    ]
+                }
+            )
+        )
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Futterprofildaten sind kein gültiges JSON.") from exc
+        try:
+            values = validate_feed_profile_payload(
+                payload,
+                _pet_records(coordinator, active_only=True),
+            )
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        profile = _materialize_feed_profile(
+            values,
+            profile_id=f"feed-profile-{uuid4().hex}",
+            created_at=now_iso,
+            updated_at=now_iso,
+        )
+        profiles = coordinator.store.data.get("feed_profiles")
+        if not isinstance(profiles, list):
+            profiles = []
+            coordinator.store.data["feed_profiles"] = profiles
+        profiles.append(profile)
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"feed_profile": feed_profile_payload(profile)}))
+
+
+class FeedProfileView(HomeAssistantView):
+    """Update or reversibly archive one feed profile."""
+
+    url = "/api/finanzplaner/feed-profiles/{feed_profile_id}"
+    name = "api:finanzplaner:feed-profile"
+    requires_auth = True
+
+    def _find_profile(
+        self,
+        coordinator: FinanzplanerCoordinator,
+        feed_profile_id: str,
+    ) -> dict[str, object] | None:
+        profiles = coordinator.store.data.get("feed_profiles", [])
+        return next(
+            (
+                profile
+                for profile in profiles
+                if isinstance(profile, dict) and profile.get("id") == feed_profile_id
+            ),
+            None,
+        ) if isinstance(profiles, list) else None
+
+    async def post(self, request: web.Request, feed_profile_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        profile = self._find_profile(coordinator, feed_profile_id)
+        if profile is None:
+            raise web.HTTPNotFound(text="Futterprofil nicht gefunden.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Futterprofildaten sind kein gültiges JSON.") from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Futterprofildaten müssen ein Objekt sein.")
+        try:
+            values = validate_feed_profile_payload(
+                {**_feed_profile_draft(profile), **payload},
+                _feed_pet_records(coordinator, profile.get("pet_id")),
+            )
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        profile.update(values)
+        history = profile.get("purchase_dates", [])
+        purchase_dates = set(history) if isinstance(history, list) else set()
+        last_purchase = values.get("last_purchase_date")
+        if isinstance(last_purchase, str):
+            purchase_dates.add(last_purchase)
+        profile["purchase_dates"] = sorted(
+            value for value in purchase_dates if isinstance(value, str)
+        )
+        profile["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"feed_profile": feed_profile_payload(profile)}))
+
+    async def delete(self, request: web.Request, feed_profile_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        profile = self._find_profile(coordinator, feed_profile_id)
+        if profile is None:
+            raise web.HTTPNotFound(text="Futterprofil nicht gefunden.")
+        profile["active"] = False
+        profile["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(
+            _response_payload(
+                {"feed_profile": feed_profile_payload(profile), "archived": True}
+            )
+        )
+
+
+class FeedProfilePurchaseView(HomeAssistantView):
+    """Record a confirmed purchase and move the next forecast forward."""
+
+    url = "/api/finanzplaner/feed-profiles/{feed_profile_id}/purchase"
+    name = "api:finanzplaner:feed-profile:purchase"
+    requires_auth = True
+
+    async def post(self, request: web.Request, feed_profile_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        profile = FeedProfileView()._find_profile(coordinator, feed_profile_id)
+        if profile is None:
+            raise web.HTTPNotFound(text="Futterprofil nicht gefunden.")
+        if profile.get("active", True) is False:
+            raise web.HTTPBadRequest(
+                text="Ein archiviertes Futterprofil muss vor dem Kauf reaktiviert werden."
+            )
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Der Kauf ist kein gültiges JSON.") from exc
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Der Kauf muss als Objekt übermittelt werden.")
+        if set(payload) - {"purchase_date"}:
+            raise web.HTTPBadRequest(text="Der Kauf enthält ein unbekanntes Feld.")
+        purchase_date = payload.get("purchase_date", date.today().isoformat())
+        if not isinstance(purchase_date, str) or not purchase_date.strip():
+            raise web.HTTPBadRequest(text="Bitte ein Kaufdatum im Format JJJJ-MM-TT angeben.")
+        normalized_date = purchase_date.strip()
+        try:
+            parsed_purchase_date = date.fromisoformat(normalized_date)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(
+                text="Das Kaufdatum muss im Format JJJJ-MM-TT angegeben werden."
+            ) from exc
+        if parsed_purchase_date.isoformat() != normalized_date:
+            raise web.HTTPBadRequest(
+                text="Das Kaufdatum muss im Format JJJJ-MM-TT angegeben werden."
+            )
+        if parsed_purchase_date > date.today():
+            raise web.HTTPBadRequest(text="Das Kaufdatum darf nicht in der Zukunft liegen.")
+
+        history = profile.get("purchase_dates", [])
+        purchase_dates = set(history) if isinstance(history, list) else set()
+        purchase_dates.add(normalized_date)
+        profile["purchase_dates"] = sorted(
+            value for value in purchase_dates if isinstance(value, str)
+        )
+        profile["last_purchase_date"] = profile["purchase_dates"][-1]
+        profile["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(
+            _response_payload(
+                {
+                    "feed_profile": feed_profile_payload(profile),
+                    "purchase_date": normalized_date,
+                }
+            )
         )
 
 

@@ -15,6 +15,9 @@ Das Projekt verwendet Semantic Versioning:
 - lokale Tierprofile mit stabilem Schlüssel, Tier-Typ und reversibler Archivierung ergänzt
 - optionale Tierreferenzen in Planposten und Buchungsaufteilungen ergänzt; historische Namen bleiben als Snapshot erhalten
 - Bereiche in Aufteilungen sind frei benennbar und nicht mehr auf eine feste Whitelist begrenzt
+- Futterprofile mit Verpackungseinheit, Kaufkosten, Verbrauchsintervall und Vorwarnfenster ergänzt
+- bestätigte Futterkäufe, durchschnittliche Kaufabstände und Status für die nächste Kaufprognose ergänzt
+- erwartete Futterkäufe als einmaliges Ereignis in die Monatsprognose sowie als HA-Sensor aufgenommen
 
 ## [0.3.0] – 2026-09-15
 

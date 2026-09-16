@@ -18,6 +18,7 @@ Version 0.3.0 liefert die erste durchgängige Konten- und Aufteilungsstrecke:
 - Excel-Vorlage als prüfbare Vorschau mit Auswahl und Zuordnungsänderungen
 - eigene Planposten-Ansicht zum Anlegen, Bearbeiten und Archivieren von Einnahmen, Ausgaben und Rücklagen
 - eigene Tierprofile mit optionalem Tier-Typ und historischer Snapshot-Zuordnung
+- Futterprofile je Tier mit Kaufkosten, Verbrauchsintervall und nächster Kaufprognose
 - wiederkehrende und einmalige Planungen mit Betrag, Rhythmus, Fälligkeit und Gültigkeitszeitraum
 - centgenaue, bestätigungspflichtige Aufteilungen auf Personen oder `Haushalt`
 - gemeinsame Zuordnungen wie `Haushalt` mit dem Bereich `Hunde`
@@ -50,7 +51,14 @@ Planposten und Buchungsaufteilungen können die stabile `pet_id` zusätzlich zum
 unabhängigen Ziel `Haushalt` oder einer Person speichern. Der damalige Tiername
 und Tier-Typ bleiben als Snapshot erhalten, auch wenn das Profil später
 archiviert wird. Verbrauchsintervalle und automatische Futterprognosen folgen
-in einem nächsten Ausbauschritt.
+in der Ansicht `Futter`. Ein manuelles Intervall bleibt gegenüber dem
+Durchschnitt bestätigter Käufe führend. Mit `Kauf heute bestätigen` wird die
+Historie fortgeschrieben und der nächste voraussichtliche Kauf neu berechnet;
+der erwartete Betrag zählt als konkretes Prognoseereignis und nicht noch einmal
+als Monatsbudget. Der Home-Assistant-Sensor `Nächster Futterkauf` liefert das
+nächste Datum sowie Status, Tier, Produkt und Berechnungsgrund als Attribute.
+Es werden weder Bankbuchungen automatisch erzeugt noch ungefragt
+Benachrichtigungen verschickt.
 
 ## Konten und Bankimport
 
@@ -60,7 +68,7 @@ Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`per
 
 ## Buchungen aufteilen
 
-Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Tier, Bereich, Kategorie und Projekt tragen; eine gemeinsame Futterausgabe wird beispielsweise als Ziel `Haushalt` mit Tier `Fio` und Bereich `Haustiere` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Automatische Regelvorschläge und Verbrauchsprognosen sind nicht Bestandteil dieser Version.
+Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Tier, Bereich, Kategorie und Projekt tragen; eine gemeinsame Futterausgabe wird beispielsweise als Ziel `Haushalt` mit Tier `Fio` und Bereich `Haustiere` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Automatische Regelvorschläge und automatische Benachrichtigungen sind nicht Bestandteil dieser Version.
 
 ## Excel-Plan übernehmen
 
