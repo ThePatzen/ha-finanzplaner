@@ -81,6 +81,7 @@ const styles = `
   *, *::before, *::after { box-sizing: border-box; }
   button, input, select { font: inherit; }
   button { cursor: pointer; }
+  button:has(> svg) { display: inline-flex; align-items: center; flex-direction: row; gap: 0.45rem; }
   a { color: inherit; }
   svg { display: block; }
 
@@ -290,7 +291,7 @@ const styles = `
   .statusbar span:last-child { text-align: end; }
   .statusbar strong { color: var(--fp-ink); font-weight: 700; }
 
-  .review-view { max-inline-size: 62rem; padding-block: 1.8rem; }
+  .review-view, .accounts-view, .plan-items-view, .pets-view, .feed-profiles-view, .catalogs-view { inline-size: 100%; padding-block: 1.8rem; }
   .review-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .review-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .review-view-header p { margin: 0.5rem 0 0; color: var(--fp-muted); }
@@ -353,7 +354,6 @@ const styles = `
   .assign-button { min-block-size: 2.35rem; padding: 0.45rem 0.7rem; border: 1px solid var(--fp-navy); border-radius: 0.4rem; color: var(--fp-paper); background: var(--fp-navy); font-size: 0.78rem; font-weight: 800; }
   .assign-button:hover { background: var(--fp-navy-deep); }
   .assign-button:disabled { cursor: not-allowed; opacity: 0.55; }
-  .accounts-view { max-inline-size: 68rem; padding-block: 1.8rem; }
   .accounts-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .accounts-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .accounts-view-header p { max-inline-size: 50rem; margin: 0.5rem 0 0; color: var(--fp-muted); }
@@ -380,7 +380,6 @@ const styles = `
   .account-save { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-paper); background: var(--fp-navy); font-weight: 800; }
   .account-save:hover { background: var(--fp-navy-deep); }
   .account-save:disabled { cursor: wait; opacity: 0.55; }
-  .plan-items-view { max-inline-size: 76rem; padding-block: 1.8rem; }
   .plan-items-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .plan-items-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .plan-items-view-header p { max-inline-size: 58rem; margin: 0.5rem 0 0; color: var(--fp-muted); }
@@ -412,7 +411,6 @@ const styles = `
   .plan-item-save:disabled { cursor: wait; opacity: 0.55; }
   .plan-item-new-row { display: flex; justify-content: flex-end; margin-block-start: 1rem; }
   .plan-item-help { max-inline-size: 70ch; margin: 0.8rem 0 0; color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
-  .pets-view { max-inline-size: 62rem; padding-block: 1.8rem; }
   .pets-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .pets-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .pets-view-header p { max-inline-size: 48rem; margin: 0.5rem 0 0; color: var(--fp-muted); line-height: 1.45; }
@@ -433,7 +431,6 @@ const styles = `
   .pet-save:disabled { cursor: wait; opacity: 0.55; }
   .pet-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
   .pet-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
-  .feed-profiles-view { max-inline-size: 72rem; padding-block: 1.8rem; }
   .feed-profiles-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .feed-profiles-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .feed-profiles-view-header p { max-inline-size: 56rem; margin: 0.5rem 0 0; color: var(--fp-muted); line-height: 1.45; }
@@ -467,7 +464,6 @@ const styles = `
   .feed-profile-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
   .feed-profile-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
   .feed-profile-save:disabled, .feed-profile-purchase:disabled { cursor: wait; opacity: 0.55; }
-  .catalogs-view { max-inline-size: 72rem; padding-block: 1.8rem; }
   .catalogs-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .catalogs-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .catalogs-view-header p { max-inline-size: 56rem; margin: 0.5rem 0 0; color: var(--fp-muted); line-height: 1.45; }
@@ -1546,6 +1542,7 @@ class FinanzplanerPanel extends HTMLElement {
       this._petDrafts.delete(petId);
       this._petErrors.delete(petId);
       this._message = petId === "new" ? "Tier angelegt." : "Tier gespeichert.";
+      this._petSubmissions.delete(petId);
       await this._loadPets();
       this._render();
     } catch (error) {

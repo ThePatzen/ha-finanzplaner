@@ -10,6 +10,12 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+## [0.3.2] – 2026-09-16
+
+- Tier-Neuanlage bleibt nach erfolgreichem Speichern wieder aktiv
+- SVG-Icons stehen in Buttons aller Ansichten neben dem jeweiligen Text
+- Verwaltungsansichten nutzen die verfügbare Inhaltsbreite; Header-Aktionen werden am rechten Rand ausgerichtet
+
 ## [0.3.1] – 2026-09-16
 
 - Planposten-Ansicht mit authentifiziertem CRUD-API, Rhythmus, Fälligkeit und Gültigkeitszeitraum ergänzt
@@ -76,3 +82,5 @@ Erste vorbereitete vertikale Version:
 [0.2.2]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.2
 [0.2.3]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.2.3
 [0.3.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.0
+[0.3.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.1
+[0.3.2]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.2

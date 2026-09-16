@@ -221,6 +221,17 @@ test("exposes authenticated pet profile management and pet-aware assignment fiel
   assert.match(panelSource, /pet_id: row\.pet_id \|\| null/);
 });
 
+test("resets pet submission state before rerendering and keeps action icons inline", () => {
+  assert.match(panelSource, /this\._petSubmissions\.delete\(petId\);\s*await this\._loadPets\(\);\s*this\._render\(\);/s);
+  assert.match(panelSource, /button:has\(> svg\)\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*flex-direction:\s*row[^}]*gap:\s*0\.45rem/s);
+});
+
+test("lets management views and their headers use the available content width", () => {
+  assert.match(panelSource, /\.review-view, \.accounts-view, \.plan-items-view, \.pets-view, \.feed-profiles-view, \.catalogs-view\s*\{[^}]*inline-size:\s*100%/s);
+  assert.match(panelSource, /\.catalogs-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)/s);
+  assert.match(panelSource, /\.catalogs-view-header\s*\{[^}]*justify-content:\s*space-between/s);
+});
+
 test("exposes feed profiles, forecast status, and purchase confirmation", () => {
   assert.match(panelSource, /const FEED_PROFILES_URL = "\/api\/finanzplaner\/feed-profiles"/);
   assert.match(panelSource, /\["feed_profiles", "cart", "Futter"\]/);

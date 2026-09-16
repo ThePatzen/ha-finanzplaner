@@ -40,6 +40,11 @@ Mit Version 0.3.1 geliefert:
 - eine oder mehrere bestätigungspflichtige, centgenaue Aufteilungen pro Buchung
 - gemeinsame Aufteilungen mit `target="household"` und optional `area="Hunde"`
 
+Mit Version 0.3.2 verbessert:
+
+- Verwaltungsansichten nutzen die verfügbare Inhaltsbreite und richten Header-Aktionen am rechten Rand aus.
+- Buttons mit SVG-Icons halten Icon und Beschriftung in allen Ansichten horizontal zusammen.
+
 Zusätzlich enthalten:
 
 - eigene Planposten-Verwaltung mit Einnahmen, Ausgaben und Rücklagen
