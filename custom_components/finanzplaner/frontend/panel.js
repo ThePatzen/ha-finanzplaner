@@ -380,7 +380,7 @@ const styles = `
   .account-save-status { flex: 1; margin: 0; color: var(--fp-muted); font-size: 0.78rem; }
   .account-save { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-paper); background: var(--fp-navy); font-weight: 800; }
   .account-save:hover { background: var(--fp-navy-deep); }
-  .account-save:disabled { cursor: wait; opacity: 0.55; }
+  .account-save:disabled { cursor: not-allowed; opacity: 0.55; }
   .plan-items-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .plan-items-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .plan-items-view-header p { max-inline-size: 58rem; margin: 0.5rem 0 0; color: var(--fp-muted); }
@@ -409,7 +409,7 @@ const styles = `
   .plan-item-save:hover, .plan-item-new:hover { background: var(--fp-navy-deep); }
   .plan-item-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
   .plan-item-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
-  .plan-item-save:disabled { cursor: wait; opacity: 0.55; }
+  .plan-item-save:disabled { cursor: not-allowed; opacity: 0.55; }
   .plan-item-new-row { display: flex; justify-content: flex-end; margin-block-start: 1rem; }
   .plan-item-help { max-inline-size: 70ch; margin: 0.8rem 0 0; color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
   .pets-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
@@ -429,7 +429,7 @@ const styles = `
   .pet-save, .pet-archive { min-block-size: 2.75rem; padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; font-weight: 800; }
   .pet-save { color: var(--fp-paper); background: var(--fp-navy); }
   .pet-save:hover { background: var(--fp-navy-deep); }
-  .pet-save:disabled { cursor: wait; opacity: 0.55; }
+  .pet-save:disabled { cursor: not-allowed; opacity: 0.55; }
   .pet-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
   .pet-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
   .feed-profiles-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
@@ -464,7 +464,7 @@ const styles = `
   .feed-profile-save:hover, .feed-profile-purchase:hover { background: var(--fp-navy-deep); }
   .feed-profile-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
   .feed-profile-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
-  .feed-profile-save:disabled, .feed-profile-purchase:disabled { cursor: wait; opacity: 0.55; }
+  .feed-profile-save:disabled, .feed-profile-purchase:disabled { cursor: not-allowed; opacity: 0.55; }
   .catalogs-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .catalogs-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .catalogs-view-header p { max-inline-size: 56rem; margin: 0.5rem 0 0; color: var(--fp-muted); line-height: 1.45; }
@@ -484,9 +484,15 @@ const styles = `
   .catalog-entry-actions button:hover { background: var(--fp-navy-deep); }
   .catalog-entry-actions .catalog-archive { color: var(--fp-coral); background: var(--fp-paper-strong); }
   .catalog-entry-actions .catalog-archive:hover { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .catalog-entry-actions .catalog-save:disabled { cursor: not-allowed; opacity: 0.55; }
   .catalog-entry-status { grid-column: 1 / -1; min-block-size: 1.1rem; margin: 0; color: var(--fp-muted); font-size: 0.7rem; overflow-wrap: anywhere; }
   .catalog-entry-status--error { color: var(--fp-coral); font-weight: 700; }
   .catalog-help { margin: 0; color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
+  .catalog-overview { display: grid; gap: 0.9rem; margin-block-start: 1rem; }
+  .catalog-kind-nav { display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.3rem; border: 1px solid var(--fp-line); border-radius: 0.55rem; background: rgb(23 40 62 / 0.06); }
+  .catalog-kind-nav button { min-block-size: 2.5rem; padding: 0.45rem 0.85rem; border: 1px solid transparent; border-radius: 0.4rem; color: var(--fp-muted); background: transparent; font-size: 0.8rem; font-weight: 800; }
+  .catalog-kind-nav button:hover { color: var(--fp-ink); background: rgb(255 254 249 / 0.8); }
+  .catalog-kind-nav button.catalog-kind-nav--active { border-color: var(--fp-navy); color: var(--fp-paper); background: var(--fp-navy); }
   .empty-state { margin-block-start: 1rem; padding: 2rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); text-align: center; }
   .management-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-block-start: 1rem; }
   .management-list-toolbar p { margin: 0; color: var(--fp-muted); font-size: 0.8rem; }
@@ -596,6 +602,8 @@ const styles = `
     .catalog-entry-actions { flex-direction: column; align-items: stretch; }
     .catalog-entry-actions button { inline-size: 100%; }
     .management-list-toolbar { align-items: stretch; flex-direction: column; }
+    .catalog-kind-nav { overflow-x: auto; flex-wrap: nowrap; }
+    .catalog-kind-nav button { flex: 0 0 auto; }
     .management-toolbar-actions { align-items: stretch; flex-direction: column; }
     .table-new-button, .management-editor-back { inline-size: 100%; }
     .management-table { min-inline-size: 50rem; }
@@ -715,6 +723,14 @@ function catalogKindLabel(kind) {
   }[kind] || kind;
 }
 
+function catalogKindSingularLabel(kind) {
+  return {
+    categories: "Kategorie",
+    areas: "Bereich",
+    projects: "Projekt",
+  }[kind] || kind;
+}
+
 function percentBelowPlan(variance, plan) {
   if (!plan) return "0,0 %";
   return `${Math.abs((variance / plan) * 100).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
@@ -800,9 +816,11 @@ class FinanzplanerPanel extends HTMLElement {
     this._bookings = [];
     this._persons = [];
     this._allocationDrafts = new Map();
+    this._allocationOriginalDrafts = new Map();
     this._allocationSubmissions = new Set();
     this._allocationErrors = new Map();
     this._accountDrafts = new Map();
+    this._accountSubmissions = new Set();
     this._accountEditorId = null;
     this._pets = [];
     this._petsLoading = false;
@@ -824,6 +842,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._catalogDrafts = new Map();
     this._catalogSubmissions = new Set();
     this._catalogErrors = new Map();
+    this._catalogOverviewKind = "categories";
     this._catalogEditor = null;
     this._excelPreview = null;
     this._message = "";
@@ -871,6 +890,16 @@ class FinanzplanerPanel extends HTMLElement {
     this._render();
   }
 
+  _accountDraftFromAccount(account) {
+    return {
+      label: account.label || "",
+      bank: account.bank || "",
+      iban: "",
+      owner_targets: Array.isArray(account.owner_targets) ? [...account.owner_targets] : [],
+      active: account.active !== false,
+    };
+  }
+
   async _loadReviewData() {
     const [bookingResponse, personsResponse, petsResponse, catalogsResponse] = await Promise.all([
       fetchWithHomeAssistantAuth(this._hass, REVIEW_URL),
@@ -911,11 +940,15 @@ class FinanzplanerPanel extends HTMLElement {
           }))
           : equalAllocationDraft(booking.amount, ["household"]);
         this._allocationDrafts.set(bookingId, storedAllocations);
+        this._allocationOriginalDrafts.set(bookingId, storedAllocations.map((allocation) => ({ ...allocation })));
+      } else if (!this._allocationOriginalDrafts.has(bookingId)) {
+        this._allocationOriginalDrafts.set(bookingId, this._allocationDrafts.get(bookingId).map((allocation) => ({ ...allocation })));
       }
     }
     for (const bookingId of this._allocationDrafts.keys()) {
       if (!bookingIds.has(bookingId)) {
         this._allocationDrafts.delete(bookingId);
+        this._allocationOriginalDrafts.delete(bookingId);
         this._allocationErrors.delete(bookingId);
       }
     }
@@ -948,13 +981,7 @@ class FinanzplanerPanel extends HTMLElement {
       for (const account of this._accounts) {
         const accountId = String(account.id);
         if (!this._accountDrafts.has(accountId)) {
-          this._accountDrafts.set(accountId, {
-            label: account.label || "",
-            bank: account.bank || "",
-            iban: "",
-            owner_targets: Array.isArray(account.owner_targets) ? [...account.owner_targets] : [],
-            active: account.active !== false,
-          });
+          this._accountDrafts.set(accountId, this._accountDraftFromAccount(account));
         }
       }
       for (const accountId of this._accountDrafts.keys()) {
@@ -1144,6 +1171,7 @@ class FinanzplanerPanel extends HTMLElement {
   async _openCatalogs() {
     this._view = "catalogs";
     this._message = "";
+    this._catalogOverviewKind = "categories";
     this._catalogEditor = null;
     this._catalogsLoading = true;
     this._catalogsLoadFailed = false;
@@ -1161,6 +1189,16 @@ class FinanzplanerPanel extends HTMLElement {
     this._render();
   }
 
+  _selectCatalogKind(kind) {
+    const allowedKinds = ["categories", "areas", "projects"];
+    if (!allowedKinds.includes(String(kind))) return;
+    this._catalogOverviewKind = String(kind);
+    this._catalogEditor = null;
+    this._message = "";
+    this._render();
+    this._focusContent();
+  }
+
   _captureCatalogDraft(form) {
     return {
       label: form.querySelector("[data-catalog-field='label']")?.value || "",
@@ -1171,8 +1209,14 @@ class FinanzplanerPanel extends HTMLElement {
   _updateCatalogDraft(event) {
     const form = event.currentTarget.closest("[data-catalog-form]");
     if (!form) return;
-    const key = this._catalogKey(form.dataset.catalogKind, form.dataset.catalogId);
-    this._catalogDrafts.set(key, this._captureCatalogDraft(form));
+    const kind = String(form.dataset.catalogKind);
+    const entryId = String(form.dataset.catalogId);
+    const key = this._catalogKey(kind, entryId);
+    const draft = this._captureCatalogDraft(form);
+    const entry = this._catalogEntries(kind).find((candidate) => String(candidate.id) === entryId);
+    const baseline = entryId === "new" ? { label: "", active: true } : this._catalogDraftFromEntry(entry || {});
+    this._catalogDrafts.set(key, draft);
+    this._setSaveButtonState(form, !this._draftsEqual(draft, baseline), this._catalogSubmissions.has(key));
     this._catalogErrors.delete(key);
     const status = form.querySelector("[data-catalog-save-status]");
     status?.classList.remove("catalog-entry-status--error");
@@ -1195,6 +1239,9 @@ class FinanzplanerPanel extends HTMLElement {
       return;
     }
     const draft = this._captureCatalogDraft(form);
+    const entry = this._catalogEntries(kind).find((candidate) => String(candidate.id) === entryId);
+    const baseline = entryId === "new" ? { label: "", active: true } : this._catalogDraftFromEntry(entry || {});
+    if (this._draftsEqual(draft, baseline)) return;
     this._catalogDrafts.set(key, draft);
     const button = form.querySelector("[type='submit']");
     const status = form.querySelector("[data-catalog-save-status]");
@@ -1426,7 +1473,10 @@ class FinanzplanerPanel extends HTMLElement {
     if (!form) return;
     const itemId = String(form.dataset.planItemId);
     const draft = this._capturePlanItemDraft(form);
+    const item = this._planItems.find((candidate) => String(candidate.id) === itemId);
+    const baseline = itemId === "new" ? this._newPlanItemDraft() : this._planItemDraftFromItem(item || {});
     this._planItemDrafts.set(itemId, draft);
+    this._setSaveButtonState(form, !this._draftsEqual(draft, baseline), this._planItemSubmissions.has(itemId));
     this._planItemErrors.delete(itemId);
     const status = form.querySelector("[data-plan-item-save-status]");
     status?.classList.remove("plan-item-save-status--error");
@@ -1470,6 +1520,9 @@ class FinanzplanerPanel extends HTMLElement {
       return;
     }
     const draft = this._capturePlanItemDraft(form);
+    const item = this._planItems.find((candidate) => String(candidate.id) === itemId);
+    const baseline = itemId === "new" ? this._newPlanItemDraft() : this._planItemDraftFromItem(item || {});
+    if (this._draftsEqual(draft, baseline)) return;
     this._planItemDrafts.set(itemId, draft);
     const button = form.querySelector("[type='submit']");
     const status = form.querySelector("[data-plan-item-save-status]");
@@ -1552,7 +1605,11 @@ class FinanzplanerPanel extends HTMLElement {
     const form = event.currentTarget.closest("[data-pet-form]");
     if (!form) return;
     const petId = String(form.dataset.petId);
-    this._petDrafts.set(petId, this._capturePetDraft(form));
+    const draft = this._capturePetDraft(form);
+    const pet = this._pets.find((candidate) => String(candidate.id) === petId);
+    const baseline = petId === "new" ? this._newPetDraft() : this._petDraftFromPet(pet || {});
+    this._petDrafts.set(petId, draft);
+    this._setSaveButtonState(form, !this._draftsEqual(draft, baseline), this._petSubmissions.has(petId));
     this._petErrors.delete(petId);
     const status = form.querySelector("[data-pet-save-status]");
     status?.classList.remove("pet-save-status--error");
@@ -1569,6 +1626,9 @@ class FinanzplanerPanel extends HTMLElement {
       return;
     }
     const draft = this._capturePetDraft(form);
+    const pet = this._pets.find((candidate) => String(candidate.id) === petId);
+    const baseline = petId === "new" ? this._newPetDraft() : this._petDraftFromPet(pet || {});
+    if (this._draftsEqual(draft, baseline)) return;
     this._petDrafts.set(petId, draft);
     const button = form.querySelector("[type='submit']");
     const status = form.querySelector("[data-pet-save-status]");
@@ -1655,7 +1715,11 @@ class FinanzplanerPanel extends HTMLElement {
     const form = event.currentTarget.closest("[data-feed-profile-form]");
     if (!form) return;
     const profileId = String(form.dataset.feedProfileId);
-    this._feedProfileDrafts.set(profileId, this._captureFeedProfileDraft(form));
+    const draft = this._captureFeedProfileDraft(form);
+    const profile = this._feedProfiles.find((candidate) => String(candidate.id) === profileId);
+    const baseline = profileId === "new" ? this._newFeedProfileDraft() : this._feedProfileDraftFromProfile(profile || {});
+    this._feedProfileDrafts.set(profileId, draft);
+    this._setSaveButtonState(form, !this._draftsEqual(draft, baseline), this._feedProfileSubmissions.has(profileId));
     this._feedProfileErrors.delete(profileId);
     const status = form.querySelector("[data-feed-profile-save-status]");
     status?.classList.remove("feed-profile-save-status--error");
@@ -1686,6 +1750,9 @@ class FinanzplanerPanel extends HTMLElement {
       return;
     }
     const draft = this._captureFeedProfileDraft(form);
+    const profile = this._feedProfiles.find((candidate) => String(candidate.id) === profileId);
+    const baseline = profileId === "new" ? this._newFeedProfileDraft() : this._feedProfileDraftFromProfile(profile || {});
+    if (this._draftsEqual(draft, baseline)) return;
     this._feedProfileDrafts.set(profileId, draft);
     const button = form.querySelector("[type='submit']");
     const status = form.querySelector("[data-feed-profile-save-status]");
@@ -1796,10 +1863,15 @@ class FinanzplanerPanel extends HTMLElement {
     event.preventDefault();
     const form = event.currentTarget;
     const accountId = String(form.dataset.accountId);
+    if (this._accountSubmissions.has(accountId)) return;
     const button = form.querySelector("[type='submit']");
     const status = form.querySelector("[data-account-save-status]");
     const draft = this._captureAccountDraft(form);
+    const account = this._accounts.find((candidate) => String(candidate.id) === accountId);
+    const baseline = this._accountDraftFromAccount(account || {});
+    if (this._draftsEqual(draft, baseline)) return;
     const payload = this._accountUpdatePayload(draft);
+    this._accountSubmissions.add(accountId);
     this._accountDrafts.set(accountId, draft);
     this._message = "";
     const globalStatus = this.shadowRoot.querySelector(".status-message");
@@ -1824,20 +1896,16 @@ class FinanzplanerPanel extends HTMLElement {
       const savedAccount = this._accounts.find((account) => String(account.id) === accountId);
       this._accountDrafts.delete(accountId);
       if (savedAccount) {
-        this._accountDrafts.set(accountId, {
-          label: savedAccount.label || "",
-          bank: savedAccount.bank || "",
-          iban: "",
-          owner_targets: Array.isArray(savedAccount.owner_targets) ? [...savedAccount.owner_targets] : [],
-          active: savedAccount.active !== false,
-        });
+        this._accountDrafts.set(accountId, this._accountDraftFromAccount(savedAccount));
       }
       this._message = `${payload.label.trim() || "Konto"} wurde gespeichert.`;
       this._accountEditorId = null;
       this._render();
     } catch (error) {
       if (status) status.textContent = error.message || "Das Konto konnte nicht gespeichert werden.";
-      if (button) button.disabled = false;
+      this._setSaveButtonState(form, true);
+    } finally {
+      this._accountSubmissions.delete(accountId);
     }
   }
 
@@ -1864,7 +1932,12 @@ class FinanzplanerPanel extends HTMLElement {
 
   _updateAccountDraft(event) {
     const form = event.currentTarget.closest("[data-account-form]");
-    if (form) this._accountDrafts.set(String(form.dataset.accountId), this._captureAccountDraft(form));
+    if (!form) return;
+    const accountId = String(form.dataset.accountId);
+    const draft = this._captureAccountDraft(form);
+    const account = this._accounts.find((candidate) => String(candidate.id) === accountId);
+    this._accountDrafts.set(accountId, draft);
+    this._setSaveButtonState(form, !this._draftsEqual(draft, this._accountDraftFromAccount(account || {})), this._accountSubmissions.has(accountId));
   }
 
   _updateAccountOwnerStatus(event) {
@@ -1882,6 +1955,33 @@ class FinanzplanerPanel extends HTMLElement {
     if (!status) return;
     status.textContent = accountActiveStatus(input.checked);
     status.classList.toggle("account-active-status--archived", !input.checked);
+  }
+
+  _normalizedDraftValue(value, key = "") {
+    if (Array.isArray(value)) {
+      const normalized = value.map((item) => this._normalizedDraftValue(item, key));
+      return key === "owner_targets" ? normalized.sort() : normalized;
+    }
+    if (value && typeof value === "object") {
+      return Object.keys(value).sort().reduce((result, childKey) => {
+        result[childKey] = this._normalizedDraftValue(value[childKey], childKey);
+        return result;
+      }, {});
+    }
+    if (["amount", "amount_input", "expected_cost", "expected_cost_input", "interval_weeks", "due_soon_days", "frequency_months", "due_day"].includes(key)) {
+      const numericValue = Number(String(value ?? "").trim().replace(",", "."));
+      return String(value ?? "").trim() === "" ? "" : Number.isFinite(numericValue) ? numericValue : String(value ?? "").trim();
+    }
+    return value == null ? "" : value;
+  }
+
+  _draftsEqual(left, right) {
+    return JSON.stringify(this._normalizedDraftValue(left)) === JSON.stringify(this._normalizedDraftValue(right));
+  }
+
+  _setSaveButtonState(form, hasChanges, isSubmitting = false) {
+    const button = form?.querySelector("[type='submit']");
+    if (button) button.disabled = isSubmitting || !hasChanges;
   }
 
   _focusContent() {
@@ -1968,13 +2068,15 @@ class FinanzplanerPanel extends HTMLElement {
     const remainingNode = form.querySelector("[data-allocation-remaining]");
     const allocatedNode = form.querySelector("[data-allocation-allocated]");
     const submit = form.querySelector("[type='submit']");
+    const originalRows = this._allocationOriginalDrafts.get(form.dataset.bookingId);
+    const hasChanges = Boolean(originalRows) && !this._draftsEqual(rows, originalRows);
     if (allocatedNode) allocatedNode.textContent = allocated === null ? "—" : formatEuro(allocated);
     if (remainingNode) {
       remainingNode.textContent = submitState.invalidAmount ? "—" : formatEuro(remaining);
       remainingNode.classList.toggle("allocation-summary--open", submitState.invalidAmount || remaining !== 0);
     }
     if (submit) {
-      submit.disabled = submitState.disabled;
+      submit.disabled = submitState.disabled || !hasChanges;
     }
   }
 
@@ -2045,11 +2147,12 @@ class FinanzplanerPanel extends HTMLElement {
     const bookingId = String(form.dataset.bookingId);
     if (this._allocationSubmissions.has(bookingId)) return;
     const rows = this._allocationDrafts.get(bookingId) || [];
+    const originalRows = this._allocationOriginalDrafts.get(bookingId);
     const total = Number(form.dataset.bookingTotal) || 0;
     const submitState = allocationSubmitState(total, rows);
     const { remaining } = submitState;
     const status = form.querySelector("[data-allocation-status]");
-    if (submitState.disabled) {
+    if (submitState.disabled || !originalRows || this._draftsEqual(rows, originalRows)) {
       if (status) status.textContent = submitState.invalidAmount
         ? "Bitte verwende Beträge mit höchstens zwei Nachkommastellen."
         : "Bitte wähle für jede Zeile ein Ziel und gleiche den verbleibenden Betrag centgenau aus.";
@@ -2090,6 +2193,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._allocationSubmissions.delete(bookingId);
     this._allocationErrors.delete(bookingId);
     this._allocationDrafts.delete(bookingId);
+    this._allocationOriginalDrafts.delete(bookingId);
     this._bookings = this._bookings.filter((booking) => String(booking.id) !== bookingId);
     this._message = "Buchung zugeordnet und aus der Prüfliste entfernt.";
     this._render();
@@ -2305,6 +2409,7 @@ class FinanzplanerPanel extends HTMLElement {
     });
     this.shadowRoot.querySelectorAll("[data-catalog-archive]").forEach((button) => button.addEventListener("click", (event) => this._archiveCatalog(event)));
     this.shadowRoot.querySelectorAll("[data-open-catalog-editor]").forEach((button) => button.addEventListener("click", () => this._openCatalogEditor(button.dataset.catalogKind, button.dataset.catalogId)));
+    this.shadowRoot.querySelectorAll("[data-catalog-kind-nav]").forEach((button) => button.addEventListener("click", () => this._selectCatalogKind(button.dataset.catalogKindNav)));
     this.shadowRoot.querySelector("[data-close-catalog-editor]")?.addEventListener("click", () => this._closeCatalogEditor());
     this.shadowRoot.querySelectorAll("[data-plan-item-form]").forEach((form) => form.addEventListener("submit", (event) => this._handlePlanItemSave(event)));
     this.shadowRoot.querySelectorAll("[data-plan-item-field]").forEach((input) => {
@@ -2449,8 +2554,9 @@ class FinanzplanerPanel extends HTMLElement {
 
   _planItemFormTemplate(item, index, isNew = false) {
     const itemId = isNew ? "new" : String(item.id);
-    const draft = this._planItemDrafts.get(itemId)
-      || (isNew ? this._newPlanItemDraft() : this._planItemDraftFromItem(item));
+    const baseline = isNew ? this._newPlanItemDraft() : this._planItemDraftFromItem(item);
+    const draft = this._planItemDrafts.get(itemId) || baseline;
+    const hasChanges = !this._draftsEqual(draft, baseline);
     const active = draft.active !== false;
     const title = isNew ? "Neuen Planposten anlegen" : (draft.name || "Planposten");
     const source = !isNew && item.source_sheet
@@ -2481,7 +2587,7 @@ class FinanzplanerPanel extends HTMLElement {
         <label class="plan-item-field" for="${fieldId("start_date")}">Gültig ab<input id="${fieldId("start_date")}" name="start_date" data-plan-item-field="start_date" type="date" value="${escapeHtml(draft.start_date || "")}"></label>
         <label class="plan-item-field" for="${fieldId("end_date")}">Gültig bis<input id="${fieldId("end_date")}" name="end_date" data-plan-item-field="end_date" type="date" value="${escapeHtml(draft.end_date || "")}"></label>
       </fieldset>
-      <div class="plan-item-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-plan-item-field="active" type="checkbox"${active ? " checked" : ""}>Planposten aktiv</label><p class="plan-item-save-status${error ? " plan-item-save-status--error" : ""}" data-plan-item-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="plan-item-archive" type="button" data-plan-item-archive data-plan-item-id="${escapeHtml(itemId)}">Archivieren</button>` : ""}<button class="plan-item-save" type="submit"${this._planItemSubmissions.has(itemId) ? " disabled" : ""}>${isNew ? "Planposten anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
+      <div class="plan-item-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-plan-item-field="active" type="checkbox"${active ? " checked" : ""}>Planposten aktiv</label><p class="plan-item-save-status${error ? " plan-item-save-status--error" : ""}" data-plan-item-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="plan-item-archive" type="button" data-plan-item-archive data-plan-item-id="${escapeHtml(itemId)}">Archivieren</button>` : ""}<button class="plan-item-save" type="submit"${this._planItemSubmissions.has(itemId) || !hasChanges ? " disabled" : ""}>${isNew ? "Planposten anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
     </form>`;
   }
 
@@ -2572,8 +2678,9 @@ class FinanzplanerPanel extends HTMLElement {
 
   _feedProfileFormTemplate(profile, index, isNew = false) {
     const profileId = isNew ? "new" : String(profile.id);
-    const draft = this._feedProfileDrafts.get(profileId)
-      || (isNew ? this._newFeedProfileDraft() : this._feedProfileDraftFromProfile(profile));
+    const baseline = isNew ? this._newFeedProfileDraft() : this._feedProfileDraftFromProfile(profile);
+    const draft = this._feedProfileDrafts.get(profileId) || baseline;
+    const hasChanges = !this._draftsEqual(draft, baseline);
     const active = draft.active !== false;
     const title = isNew
       ? "Neues Futterprofil anlegen"
@@ -2603,7 +2710,7 @@ class FinanzplanerPanel extends HTMLElement {
         <label class="feed-profile-field" for="${fieldId("due_soon_days")}">Vorwarnung in Tagen<input id="${fieldId("due_soon_days")}" name="due_soon_days" data-feed-profile-field="due_soon_days" type="number" inputmode="numeric" min="0" max="90" step="1" value="${escapeHtml(draft.due_soon_days ?? 14)}"><small>0 = nur am Fälligkeitstag</small></label>
       </div>
       ${forecast}
-      <div class="feed-profile-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-feed-profile-field="active" type="checkbox"${active ? " checked" : ""}>Futterprofil aktiv</label><p class="feed-profile-save-status${error ? " feed-profile-save-status--error" : ""}" data-feed-profile-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="feed-profile-purchase" type="button" data-feed-profile-purchase data-feed-profile-id="${escapeHtml(profileId)}">Kauf heute bestätigen</button><button class="feed-profile-archive" type="button" data-feed-profile-archive data-feed-profile-id="${escapeHtml(profileId)}">Archivieren</button>` : ""}<button class="feed-profile-save" type="submit"${this._feedProfileSubmissions.has(profileId) ? " disabled" : ""}>${isNew ? "Futterprofil anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
+      <div class="feed-profile-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-feed-profile-field="active" type="checkbox"${active ? " checked" : ""}>Futterprofil aktiv</label><p class="feed-profile-save-status${error ? " feed-profile-save-status--error" : ""}" data-feed-profile-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="feed-profile-purchase" type="button" data-feed-profile-purchase data-feed-profile-id="${escapeHtml(profileId)}">Kauf heute bestätigen</button><button class="feed-profile-archive" type="button" data-feed-profile-archive data-feed-profile-id="${escapeHtml(profileId)}">Archivieren</button>` : ""}<button class="feed-profile-save" type="submit"${this._feedProfileSubmissions.has(profileId) || !hasChanges ? " disabled" : ""}>${isNew ? "Futterprofil anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
     </form>`;
   }
 
@@ -2640,8 +2747,9 @@ class FinanzplanerPanel extends HTMLElement {
   _catalogEntryFormTemplate(kind, entry, index, isNew = false) {
     const entryId = isNew ? "new" : String(entry.id);
     const key = this._catalogKey(kind, entryId);
-    const draft = this._catalogDrafts.get(key)
-      || (isNew ? { label: "", active: true } : this._catalogDraftFromEntry(entry));
+    const baseline = isNew ? { label: "", active: true } : this._catalogDraftFromEntry(entry);
+    const draft = this._catalogDrafts.get(key) || baseline;
+    const hasChanges = !this._draftsEqual(draft, baseline);
     const active = draft.active !== false;
     const fieldId = `catalog-${kind}-label-${isNew ? "new" : index}`;
     const statusId = `catalog-${kind}-status-${isNew ? "new" : index}`;
@@ -2651,22 +2759,23 @@ class FinanzplanerPanel extends HTMLElement {
       : `${CATALOGS_URL}/${kind}/${encodeURIComponent(entryId)}`;
     return `<form class="catalog-entry-form${active ? "" : " catalog-entry-form--archived"}" action="${escapeHtml(action)}" method="post" data-catalog-form data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-labelledby="${fieldId}-heading"${this._catalogSubmissions.has(key) ? " aria-busy=\"true\"" : ""}>
       <label class="catalog-field" for="${fieldId}"><span id="${fieldId}-heading">Bezeichnung</span><input id="${fieldId}" name="label" data-catalog-field="label" type="text" value="${escapeHtml(draft.label || "")}" maxlength="120" autocomplete="off" required></label>
-      <div class="catalog-entry-actions"><label class="account-toggle" for="${fieldId}-active"><input id="${fieldId}-active" name="active" data-catalog-field="active" type="checkbox"${active ? " checked" : ""}>Aktiv</label>${!isNew && active ? `<button class="catalog-archive" type="button" data-catalog-archive data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}">Archivieren</button>` : ""}<button type="submit">${isNew ? "Anlegen" : "Speichern"}</button></div>
+      <div class="catalog-entry-actions"><label class="account-toggle" for="${fieldId}-active"><input id="${fieldId}-active" name="active" data-catalog-field="active" type="checkbox"${active ? " checked" : ""}>Aktiv</label>${!isNew && active ? `<button class="catalog-archive" type="button" data-catalog-archive data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}">Archivieren</button>` : ""}<button class="catalog-save" type="submit"${this._catalogSubmissions.has(key) || !hasChanges ? " disabled" : ""}>${isNew ? "Anlegen" : "Speichern"}</button></div>
       <p class="catalog-entry-status${error ? " catalog-entry-status--error" : ""}" id="${statusId}" data-catalog-save-status aria-live="polite">${escapeHtml(error)}</p>
     </form>`;
   }
 
   _catalogOverviewTemplate() {
     const kinds = ["categories", "areas", "projects"];
-    const entries = kinds.flatMap((kind) => this._catalogEntries(kind).map((entry) => ({ kind, entry })));
-    const rows = entries.map(({ kind, entry }) => {
+    const kind = kinds.includes(this._catalogOverviewKind) ? this._catalogOverviewKind : kinds[0];
+    const entries = this._catalogEntries(kind);
+    const rows = entries.map((entry) => {
       const entryId = String(entry.id);
       const label = entry.label || "Stammdateneintrag";
-      return `<tr><th scope="row">${escapeHtml(label)}</th><td data-table-secondary>${catalogKindLabel(kind)}</td><td><span class="plan-item-status${entry.active !== false ? "" : " plan-item-status--archived"}">${planItemStatus(entry.active !== false)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-label="${escapeHtml(label)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
+      return `<tr><th scope="row">${escapeHtml(label)}</th><td><span class="plan-item-status${entry.active !== false ? "" : " plan-item-status--archived"}">${planItemStatus(entry.active !== false)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-label="${escapeHtml(label)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
     }).join("");
-    const activeCount = entries.filter(({ entry }) => entry.active !== false).length;
-    const newButtons = kinds.map((kind) => `<button class="table-new-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="new">${catalogKindLabel(kind)} anlegen ${icon("plus", 17)}</button>`).join("");
-    return `<div class="management-list-toolbar"><p><strong>${activeCount}</strong> aktive Stammdateneinträge</p><div class="management-toolbar-actions">${newButtons}</div></div><div class="management-table-wrap"><table class="management-table"><caption class="visually-hidden">Stammdatenübersicht</caption><thead><tr><th scope="col">Bezeichnung</th><th scope="col">Typ</th><th scope="col">Status</th><th scope="col" class="table-actions">Aktion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Noch keine Stammdaten angelegt.</td></tr>`}</tbody></table></div>`;
+    const activeCount = entries.filter((entry) => entry.active !== false).length;
+    const navigation = kinds.map((candidate) => `<button id="catalog-kind-nav-${candidate}" class="catalog-kind-nav${candidate === kind ? " catalog-kind-nav--active" : ""}" type="button" role="tab" aria-selected="${candidate === kind ? "true" : "false"}" aria-controls="catalog-overview-panel" data-catalog-kind-nav="${candidate}">${catalogKindLabel(candidate)}</button>`).join("");
+    return `<section class="catalog-overview" id="catalog-overview-panel" aria-labelledby="catalog-kind-nav-${kind}"><div class="catalog-kind-nav" role="tablist" aria-label="Stammdatentyp auswählen">${navigation}</div><div class="management-list-toolbar"><p><strong>${activeCount}</strong> aktive ${catalogKindLabel(kind).toLowerCase()}</p><button class="table-new-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="new">${catalogKindSingularLabel(kind)} anlegen ${icon("plus", 17)}</button></div><div class="management-table-wrap"><table class="management-table"><caption class="visually-hidden">${catalogKindLabel(kind)}übersicht</caption><thead><tr><th scope="col">Bezeichnung</th><th scope="col">Status</th><th scope="col" class="table-actions">Aktion</th></tr></thead><tbody>${rows || `<tr><td colspan="3">Noch keine ${catalogKindLabel(kind).toLowerCase()} angelegt.</td></tr>`}</tbody></table></div></section>`;
   }
 
   _catalogsTemplate() {
@@ -2689,7 +2798,9 @@ class FinanzplanerPanel extends HTMLElement {
 
   _petFormTemplate(pet, index, isNew = false) {
     const petId = isNew ? "new" : String(pet.id);
-    const draft = this._petDrafts.get(petId) || (isNew ? this._newPetDraft() : this._petDraftFromPet(pet));
+    const baseline = isNew ? this._newPetDraft() : this._petDraftFromPet(pet);
+    const draft = this._petDrafts.get(petId) || baseline;
+    const hasChanges = !this._draftsEqual(draft, baseline);
     const active = draft.active !== false;
     const title = isNew ? "Neues Tier anlegen" : (draft.name || "Tier");
     const fieldId = (field) => `pet-${field}-${isNew ? "new" : index}`;
@@ -2699,19 +2810,15 @@ class FinanzplanerPanel extends HTMLElement {
       <div class="pet-card-header"><h3 id="${fieldId("heading")}">${escapeHtml(title)}</h3><span class="plan-item-status${active ? "" : " plan-item-status--archived"}">${planItemStatus(active)}</span><p>${isNew ? "Manuell angelegt" : "Tierprofil"}</p></div>
       <label class="pet-field" for="${fieldId("name")}">Name<input id="${fieldId("name")}" name="name" data-pet-field="name" type="text" value="${escapeHtml(draft.name || "")}" maxlength="80" autocomplete="off" required></label>
       <label class="pet-field" for="${fieldId("pet_type")}">Tier-Typ (optional)<input id="${fieldId("pet_type")}" name="pet_type" data-pet-field="pet_type" type="text" value="${escapeHtml(draft.pet_type || "")}" maxlength="60" autocomplete="off" placeholder="z. B. Hund, Katze"></label>
-      <div class="pet-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-pet-field="active" type="checkbox"${active ? " checked" : ""}>Tierprofil aktiv</label><p class="pet-save-status${error ? " pet-save-status--error" : ""}" data-pet-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="pet-archive" type="button" data-pet-archive data-pet-id="${escapeHtml(petId)}">Archivieren</button>` : ""}<button class="pet-save" type="submit"${this._petSubmissions.has(petId) ? " disabled" : ""}>${isNew ? "Tier anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
+      <div class="pet-card-actions"><label class="account-toggle" for="${fieldId("active")}"><input id="${fieldId("active")}" name="active" data-pet-field="active" type="checkbox"${active ? " checked" : ""}>Tierprofil aktiv</label><p class="pet-save-status${error ? " pet-save-status--error" : ""}" data-pet-save-status aria-live="polite">${escapeHtml(error)}</p>${!isNew && active ? `<button class="pet-archive" type="button" data-pet-archive data-pet-id="${escapeHtml(petId)}">Archivieren</button>` : ""}<button class="pet-save" type="submit"${this._petSubmissions.has(petId) || !hasChanges ? " disabled" : ""}>${isNew ? "Tier anlegen" : "Änderungen speichern"} ${icon("check", 17)}</button></div>
     </form>`;
   }
 
   _accountFormTemplate(account, index) {
     const accountId = String(account.id);
-    const draft = this._accountDrafts.get(accountId) || {
-      label: account.label || "",
-      bank: account.bank || "",
-      iban: "",
-      owner_targets: Array.isArray(account.owner_targets) ? account.owner_targets : [],
-      active: account.active !== false,
-    };
+    const baseline = this._accountDraftFromAccount(account);
+    const draft = this._accountDrafts.get(accountId) || baseline;
+    const hasChanges = !this._draftsEqual(draft, baseline);
     const ownerTargets = Array.isArray(draft.owner_targets) ? draft.owner_targets : [];
     const ownerStatus = accountOwnerStatus(ownerTargets);
     const labelId = `account-label-${index}`;
@@ -2732,7 +2839,7 @@ class FinanzplanerPanel extends HTMLElement {
       <label class="account-field" for="${ibanId}">IBAN<input id="${ibanId}" name="iban" data-account-iban type="text" value="${escapeHtml(draft.iban || "")}" autocomplete="off" inputmode="text" aria-describedby="${ibanHintId}" placeholder="Nur zum Ändern eingeben"><small id="${ibanHintId}">${account.iban_masked ? `Gespeichert: ${escapeHtml(account.iban_masked)} · leer lassen, wenn sie unverändert bleiben soll.` : "Leer lassen, wenn noch keine IBAN hinterlegt werden soll."}</small></label>
       <fieldset class="account-owners"><legend>Kontoinhaber</legend><label class="visually-hidden" for="${ownersId}">Kontoinhaber für ${escapeHtml(accountLabel)} auswählen</label><select id="${ownersId}" name="owner_targets" data-account-owners multiple size="4" aria-describedby="${ownerStatusId}">${this._personOptions(ownerTargets)}</select><p class="account-owner-status${ownerTargets.length ? "" : " account-owner-status--missing"}" id="${ownerStatusId}" data-account-owner-status>${escapeHtml(ownerStatus)}</p></fieldset>
       <div class="account-toggle"><label for="${activeId}"><input id="${activeId}" name="active" data-account-active type="checkbox"${active ? " checked" : ""}>Konto aktiv <span class="visually-hidden">(deaktivieren archiviert das Konto)</span></label><span class="account-active-status${active ? "" : " account-active-status--archived"}" data-account-active-status aria-hidden="true">${accountActiveStatus(active)}</span></div>
-      <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit" aria-label="Änderungen für ${escapeHtml(accountLabel)} (${escapeHtml(maskedReference)}) speichern" aria-describedby="${saveStatusId}">Änderungen speichern ${icon("check", 17)}</button></div>
+      <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit"${this._accountSubmissions.has(accountId) || !hasChanges ? " disabled" : ""} aria-label="Änderungen für ${escapeHtml(accountLabel)} (${escapeHtml(maskedReference)}) speichern" aria-describedby="${saveStatusId}">Änderungen speichern ${icon("check", 17)}</button></div>
     </form>`;
   }
 

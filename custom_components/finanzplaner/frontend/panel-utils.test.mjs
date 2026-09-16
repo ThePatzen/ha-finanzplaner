@@ -257,7 +257,10 @@ test("starts every management area with a semantic overview table", () => {
   assert.match(panelSource, /<caption class="visually-hidden">Planpostenübersicht<\/caption>/);
   assert.match(panelSource, /<caption class="visually-hidden">Tierübersicht<\/caption>/);
   assert.match(panelSource, /<caption class="visually-hidden">Futterprofilübersicht<\/caption>/);
-  assert.match(panelSource, /<caption class="visually-hidden">Stammdatenübersicht<\/caption>/);
+  assert.match(panelSource, /\$\{catalogKindLabel\(kind\)\}übersicht/);
+  assert.match(panelSource, /data-catalog-kind-nav/);
+  assert.match(panelSource, /role="tablist"/);
+  assert.match(panelSource, /_selectCatalogKind\(kind\)/);
   assert.match(panelSource, /<caption class="visually-hidden">Kontenübersicht<\/caption>/);
   for (const editor of [
     "plan-item",
@@ -274,6 +277,14 @@ test("starts every management area with a semantic overview table", () => {
   assert.match(panelSource, /this\._feedProfileEditorId = null/);
   assert.match(panelSource, /this\._catalogEditor = null/);
   assert.match(panelSource, /this\._accountEditorId = null/);
+});
+
+test("disables save actions until a draft differs from its loaded baseline", () => {
+  assert.match(panelSource, /_draftsEqual\(draft, baseline\)/);
+  assert.match(panelSource, /this\._setSaveButtonState\(form, !this\._draftsEqual\(draft, baseline\)/);
+  assert.match(panelSource, /this\._accountSubmissions = new Set\(\)/);
+  assert.match(panelSource, /submit\.disabled = submitState\.disabled \|\| !hasChanges/);
+  assert.match(panelSource, /this\._allocationOriginalDrafts = new Map\(\)/);
 });
 
 test("renders a skip link to focusable main content and reveals it on keyboard focus", () => {

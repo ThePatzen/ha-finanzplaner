@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finanzplaner Design"
+  short_description: "Verbindliche Impeccable-Prüfung für UI"
+  default_prompt: "Verwende $impeccable für die nächste Designentscheidung im Finanzplaner."
