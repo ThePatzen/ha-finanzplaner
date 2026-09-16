@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.3.2 umfasst die erste durchgängige Konten- und Aufteilungsstrecke
+Version 0.3.3 umfasst die erste durchgängige Konten- und Aufteilungsstrecke
 mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -22,6 +22,7 @@ mit den folgenden Erweiterungen und UI-Verbesserungen:
 - Futterprofile je Tier mit Kaufkosten, Verbrauchsintervall und nächster Kaufprognose
 - Stammdatenverwaltung für Kategorien, Bereiche und Projekte mit stabilen IDs und Namens-Snapshots
 - breite Verwaltungsansichten mit ausgenutzter Inhaltsbreite und konsistenter Button-Ausrichtung
+- tabellarische Übersichten für alle Verwaltungsbereiche mit nachgelagerter Editieransicht
 - automationstauglicher HA-Status `Futterkauf fällig` und Service zum Bestätigen eines Kaufs
 - wiederkehrende und einmalige Planungen mit Betrag, Rhythmus, Fälligkeit und Gültigkeitszeitraum
 - centgenaue, bestätigungspflichtige Aufteilungen auf Personen oder `Haushalt`

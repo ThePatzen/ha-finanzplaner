@@ -42,6 +42,7 @@ const iconPaths = {
   car: "m5 16 1-5 2-4h8l2 4 1 5m-14 0h14M7 16v2m10-2v2M7 11h10M4 13h2m12 0h2",
   file: "M6 3h8l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm8 0v5h4M8 12h6m-6 4h6",
   check: "m5 12 4 4L19 6",
+  plus: "M12 5v14M5 12h14",
   income: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-14v10m-4-4 4-4 4 4",
   expense: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 14V7m-4 4 4 4 4-4",
   savings: "M5 9h14v10H5zM8 9V6h8v3m-8 5h8",
@@ -487,6 +488,32 @@ const styles = `
   .catalog-entry-status--error { color: var(--fp-coral); font-weight: 700; }
   .catalog-help { margin: 0; color: var(--fp-muted); font-size: 0.78rem; line-height: 1.45; }
   .empty-state { margin-block-start: 1rem; padding: 2rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); text-align: center; }
+  .management-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-block-start: 1rem; }
+  .management-list-toolbar p { margin: 0; color: var(--fp-muted); font-size: 0.8rem; }
+  .management-toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+  .table-new-button, .table-edit-button, .management-editor-back { min-block-size: 2.75rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; border-radius: 0.45rem; font-size: 0.78rem; font-weight: 800; }
+  .table-new-button { padding: 0.5rem 0.85rem; border: 1px solid var(--fp-navy); color: var(--fp-paper); background: var(--fp-navy); }
+  .table-new-button:hover { background: var(--fp-navy-deep); }
+  .table-edit-button { padding: 0.45rem 0.7rem; border: 1px solid var(--fp-navy); color: var(--fp-paper); background: var(--fp-navy); }
+  .table-edit-button:hover { background: var(--fp-navy-deep); }
+  .management-table-wrap { overflow-x: auto; margin-block-start: 1rem; border: 1px solid var(--fp-line); border-radius: var(--fp-radius); background: rgb(255 254 249 / 0.82); box-shadow: var(--fp-shadow); scrollbar-gutter: stable; }
+  .management-table { inline-size: 100%; min-inline-size: 54rem; border-collapse: collapse; }
+  .management-table caption { padding: 0; }
+  .management-table th, .management-table td { padding: 0.85rem 1rem; border-block-end: 1px solid var(--fp-line); text-align: start; vertical-align: middle; }
+  .management-table th { color: var(--fp-muted); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+  .management-table tbody th { color: var(--fp-ink); font-size: 0.92rem; letter-spacing: 0; text-transform: none; }
+  .management-table tbody tr:last-child th, .management-table tbody tr:last-child td { border-block-end: 0; }
+  .management-table tbody tr:hover { background: rgb(223 244 247 / 0.35); }
+  .management-table .table-number { font-family: var(--fp-data); white-space: nowrap; }
+  .management-table .table-actions { text-align: end; white-space: nowrap; }
+  .management-table tbody td[data-table-secondary] { color: var(--fp-muted); }
+  .management-editor { display: grid; gap: 0.8rem; margin-block-start: 1rem; }
+  .management-editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .management-editor-header h3 { margin: 0; font-family: var(--fp-display); font-size: 1.35rem; line-height: 1; }
+  .management-editor-header p { margin: 0.45rem 0 0; color: var(--fp-muted); font-size: 0.8rem; line-height: 1.4; }
+  .management-editor-back { flex: 0 0 auto; padding: 0.5rem 0.75rem; border: 1px solid var(--fp-control-border); color: var(--fp-ink); background: var(--fp-paper-strong); }
+  .management-editor-back:hover { border-color: var(--fp-navy); background: var(--fp-cyan-soft); }
+  .management-editor > .catalog-entry-form { padding: 1.1rem; border: 1px solid var(--fp-line); border-radius: var(--fp-radius); background: rgb(255 254 249 / 0.82); box-shadow: var(--fp-shadow); }
 
   .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
   .skip-link { inset: 0.75rem auto auto 0.75rem; z-index: 10; padding: 0.6rem 0.8rem; color: var(--fp-paper); background: var(--fp-navy); }
@@ -568,6 +595,11 @@ const styles = `
     .catalog-entry-form { grid-template-columns: 1fr; }
     .catalog-entry-actions { flex-direction: column; align-items: stretch; }
     .catalog-entry-actions button { inline-size: 100%; }
+    .management-list-toolbar { align-items: stretch; flex-direction: column; }
+    .management-toolbar-actions { align-items: stretch; flex-direction: column; }
+    .table-new-button, .management-editor-back { inline-size: 100%; }
+    .management-table { min-inline-size: 50rem; }
+    .management-editor-header { flex-direction: column; }
     .plan-item-new-row { display: block; }
     .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
     .excel-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -764,30 +796,35 @@ class FinanzplanerPanel extends HTMLElement {
     this._planItemDrafts = new Map();
     this._planItemSubmissions = new Set();
     this._planItemErrors = new Map();
+    this._planItemEditorId = null;
     this._bookings = [];
     this._persons = [];
     this._allocationDrafts = new Map();
     this._allocationSubmissions = new Set();
     this._allocationErrors = new Map();
     this._accountDrafts = new Map();
+    this._accountEditorId = null;
     this._pets = [];
     this._petsLoading = false;
     this._petsLoadFailed = false;
     this._petDrafts = new Map();
     this._petSubmissions = new Set();
     this._petErrors = new Map();
+    this._petEditorId = null;
     this._feedProfiles = [];
     this._feedProfilesLoading = false;
     this._feedProfilesLoadFailed = false;
     this._feedProfileDrafts = new Map();
     this._feedProfileSubmissions = new Set();
     this._feedProfileErrors = new Map();
+    this._feedProfileEditorId = null;
     this._catalogs = { categories: [], areas: [], projects: [] };
     this._catalogsLoading = false;
     this._catalogsLoadFailed = false;
     this._catalogDrafts = new Map();
     this._catalogSubmissions = new Set();
     this._catalogErrors = new Map();
+    this._catalogEditor = null;
     this._excelPreview = null;
     this._message = "";
     this._loading = false;
@@ -887,6 +924,7 @@ class FinanzplanerPanel extends HTMLElement {
   async _openAccounts() {
     this._view = "accounts";
     this._message = "";
+    this._accountEditorId = null;
     this._accountsLoading = true;
     this._accountsLoadFailed = false;
     this._render();
@@ -964,6 +1002,7 @@ class FinanzplanerPanel extends HTMLElement {
   async _openPets() {
     this._view = "pets";
     this._message = "";
+    this._petEditorId = null;
     this._petsLoading = true;
     this._petsLoadFailed = false;
     this._render();
@@ -1041,6 +1080,7 @@ class FinanzplanerPanel extends HTMLElement {
   async _openFeedProfiles() {
     this._view = "feed_profiles";
     this._message = "";
+    this._feedProfileEditorId = null;
     this._feedProfilesLoading = true;
     this._feedProfilesLoadFailed = false;
     this._render();
@@ -1104,6 +1144,7 @@ class FinanzplanerPanel extends HTMLElement {
   async _openCatalogs() {
     this._view = "catalogs";
     this._message = "";
+    this._catalogEditor = null;
     this._catalogsLoading = true;
     this._catalogsLoadFailed = false;
     this._render();
@@ -1174,6 +1215,7 @@ class FinanzplanerPanel extends HTMLElement {
       if (!response.ok) throw new Error(apiErrorMessage(result, "Der Stammdateneintrag konnte nicht gespeichert werden."));
       this._catalogDrafts.delete(key);
       this._catalogErrors.delete(key);
+      this._catalogEditor = null;
       this._message = entryId === "new" ? `${draft.label.trim()} angelegt.` : `${draft.label.trim()} gespeichert.`;
       await this._loadCatalogs();
       this._render();
@@ -1208,6 +1250,7 @@ class FinanzplanerPanel extends HTMLElement {
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Der Stammdateneintrag konnte nicht archiviert werden."));
       this._catalogDrafts.delete(key);
+      this._catalogEditor = null;
       this._message = `${entry.label} archiviert. Bestehende Zuordnungen bleiben erhalten.`;
       await this._loadCatalogs();
       this._render();
@@ -1324,6 +1367,7 @@ class FinanzplanerPanel extends HTMLElement {
   async _openPlanItems() {
     this._view = "plan_items";
     this._message = "";
+    this._planItemEditorId = null;
     this._planItemsLoading = true;
     this._planItemsLoadFailed = false;
     this._render();
@@ -1447,6 +1491,7 @@ class FinanzplanerPanel extends HTMLElement {
       if (!response.ok) throw new Error(apiErrorMessage(result, "Der Planposten konnte nicht gespeichert werden."));
       this._planItemDrafts.delete(itemId);
       this._planItemErrors.delete(itemId);
+      this._planItemEditorId = null;
       this._message = itemId === "new" ? "Planposten angelegt." : "Planposten gespeichert.";
       await this._loadPlanItems();
       this._render();
@@ -1479,6 +1524,7 @@ class FinanzplanerPanel extends HTMLElement {
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Der Planposten konnte nicht archiviert werden."));
       this._planItemDrafts.delete(itemId);
+      this._planItemEditorId = null;
       this._message = "Planposten archiviert. Du kannst ihn über den Aktiv-Schalter wieder einschalten.";
       await this._loadPlanItems();
       this._render();
@@ -1541,6 +1587,7 @@ class FinanzplanerPanel extends HTMLElement {
       if (!response.ok) throw new Error(apiErrorMessage(result, "Das Tier konnte nicht gespeichert werden."));
       this._petDrafts.delete(petId);
       this._petErrors.delete(petId);
+      this._petEditorId = null;
       this._message = petId === "new" ? "Tier angelegt." : "Tier gespeichert.";
       this._petSubmissions.delete(petId);
       await this._loadPets();
@@ -1574,6 +1621,7 @@ class FinanzplanerPanel extends HTMLElement {
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Das Tier konnte nicht archiviert werden."));
       this._petDrafts.delete(petId);
+      this._petEditorId = null;
       this._message = "Tier archiviert. Historische Zuordnungen bleiben erhalten.";
       await this._loadPets();
       this._render();
@@ -1658,6 +1706,7 @@ class FinanzplanerPanel extends HTMLElement {
       if (!response.ok) throw new Error(apiErrorMessage(result, "Das Futterprofil konnte nicht gespeichert werden."));
       this._feedProfileDrafts.delete(profileId);
       this._feedProfileErrors.delete(profileId);
+      this._feedProfileEditorId = null;
       this._message = profileId === "new" ? "Futterprofil angelegt." : "Futterprofil gespeichert.";
       await this._loadFeedProfiles();
       this._render();
@@ -1690,6 +1739,7 @@ class FinanzplanerPanel extends HTMLElement {
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Das Futterprofil konnte nicht archiviert werden."));
       this._feedProfileDrafts.delete(profileId);
+      this._feedProfileEditorId = null;
       this._message = "Futterprofil archiviert. Die Kaufhistorie bleibt erhalten.";
       await this._loadFeedProfiles();
       this._render();
@@ -1783,6 +1833,7 @@ class FinanzplanerPanel extends HTMLElement {
         });
       }
       this._message = `${payload.label.trim() || "Konto"} wurde gespeichert.`;
+      this._accountEditorId = null;
       this._render();
     } catch (error) {
       if (status) status.textContent = error.message || "Das Konto konnte nicht gespeichert werden.";
@@ -1831,6 +1882,75 @@ class FinanzplanerPanel extends HTMLElement {
     if (!status) return;
     status.textContent = accountActiveStatus(input.checked);
     status.classList.toggle("account-active-status--archived", !input.checked);
+  }
+
+  _focusContent() {
+    this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
+  }
+
+  _openAccountEditor(accountId) {
+    this._accountEditorId = String(accountId);
+    this._message = "";
+    this._render();
+    this._focusContent();
+  }
+
+  _closeAccountEditor() {
+    this._accountEditorId = null;
+    this._render();
+    this._focusContent();
+  }
+
+  _openPlanItemEditor(itemId) {
+    this._planItemEditorId = String(itemId);
+    this._message = "";
+    this._render();
+    this._focusContent();
+  }
+
+  _closePlanItemEditor() {
+    this._planItemEditorId = null;
+    this._render();
+    this._focusContent();
+  }
+
+  _openPetEditor(petId) {
+    this._petEditorId = String(petId);
+    this._message = "";
+    this._render();
+    this._focusContent();
+  }
+
+  _closePetEditor() {
+    this._petEditorId = null;
+    this._render();
+    this._focusContent();
+  }
+
+  _openFeedProfileEditor(profileId) {
+    this._feedProfileEditorId = String(profileId);
+    this._message = "";
+    this._render();
+    this._focusContent();
+  }
+
+  _closeFeedProfileEditor() {
+    this._feedProfileEditorId = null;
+    this._render();
+    this._focusContent();
+  }
+
+  _openCatalogEditor(kind, entryId) {
+    this._catalogEditor = { kind: String(kind), entryId: String(entryId) };
+    this._message = "";
+    this._render();
+    this._focusContent();
+  }
+
+  _closeCatalogEditor() {
+    this._catalogEditor = null;
+    this._render();
+    this._focusContent();
   }
 
   _allocationForm(bookingId) {
@@ -2155,6 +2275,8 @@ class FinanzplanerPanel extends HTMLElement {
     });
     this.shadowRoot.querySelectorAll("[data-allocation-add]").forEach((button) => button.addEventListener("click", (event) => this._addAllocationRow(event)));
     this.shadowRoot.querySelectorAll("[data-allocation-remove]").forEach((button) => button.addEventListener("click", (event) => this._removeAllocationRow(event)));
+    this.shadowRoot.querySelectorAll("[data-open-account-editor]").forEach((button) => button.addEventListener("click", () => this._openAccountEditor(button.dataset.accountId)));
+    this.shadowRoot.querySelector("[data-close-account-editor]")?.addEventListener("click", () => this._closeAccountEditor());
     this.shadowRoot.querySelectorAll("[data-account-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleAccountSave(event)));
     this.shadowRoot.querySelectorAll("[data-account-label], [data-account-bank], [data-account-iban]").forEach((input) => input.addEventListener("input", (event) => this._updateAccountDraft(event)));
     this.shadowRoot.querySelectorAll("[data-account-owners]").forEach((select) => select.addEventListener("change", (event) => { this._updateAccountDraft(event); this._updateAccountOwnerStatus(event); }));
@@ -2165,6 +2287,8 @@ class FinanzplanerPanel extends HTMLElement {
       input.addEventListener("change", (event) => this._updatePetDraft(event));
     });
     this.shadowRoot.querySelectorAll("[data-pet-archive]").forEach((button) => button.addEventListener("click", (event) => this._archivePet(event)));
+    this.shadowRoot.querySelectorAll("[data-open-pet-editor]").forEach((button) => button.addEventListener("click", () => this._openPetEditor(button.dataset.petId)));
+    this.shadowRoot.querySelector("[data-close-pet-editor]")?.addEventListener("click", () => this._closePetEditor());
     this.shadowRoot.querySelectorAll("[data-feed-profile-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleFeedProfileSave(event)));
     this.shadowRoot.querySelectorAll("[data-feed-profile-field]").forEach((input) => {
       input.addEventListener("input", (event) => this._updateFeedProfileDraft(event));
@@ -2172,18 +2296,24 @@ class FinanzplanerPanel extends HTMLElement {
     });
     this.shadowRoot.querySelectorAll("[data-feed-profile-archive]").forEach((button) => button.addEventListener("click", (event) => this._archiveFeedProfile(event)));
     this.shadowRoot.querySelectorAll("[data-feed-profile-purchase]").forEach((button) => button.addEventListener("click", (event) => this._confirmFeedPurchase(event)));
+    this.shadowRoot.querySelectorAll("[data-open-feed-profile-editor]").forEach((button) => button.addEventListener("click", () => this._openFeedProfileEditor(button.dataset.feedProfileId)));
+    this.shadowRoot.querySelector("[data-close-feed-profile-editor]")?.addEventListener("click", () => this._closeFeedProfileEditor());
     this.shadowRoot.querySelectorAll("[data-catalog-form]").forEach((form) => form.addEventListener("submit", (event) => this._handleCatalogSave(event)));
     this.shadowRoot.querySelectorAll("[data-catalog-field]").forEach((input) => {
       input.addEventListener("input", (event) => this._updateCatalogDraft(event));
       input.addEventListener("change", (event) => this._updateCatalogDraft(event));
     });
     this.shadowRoot.querySelectorAll("[data-catalog-archive]").forEach((button) => button.addEventListener("click", (event) => this._archiveCatalog(event)));
+    this.shadowRoot.querySelectorAll("[data-open-catalog-editor]").forEach((button) => button.addEventListener("click", () => this._openCatalogEditor(button.dataset.catalogKind, button.dataset.catalogId)));
+    this.shadowRoot.querySelector("[data-close-catalog-editor]")?.addEventListener("click", () => this._closeCatalogEditor());
     this.shadowRoot.querySelectorAll("[data-plan-item-form]").forEach((form) => form.addEventListener("submit", (event) => this._handlePlanItemSave(event)));
     this.shadowRoot.querySelectorAll("[data-plan-item-field]").forEach((input) => {
       input.addEventListener("input", (event) => this._updatePlanItemDraft(event));
       input.addEventListener("change", (event) => this._updatePlanItemDraft(event));
     });
     this.shadowRoot.querySelectorAll("[data-plan-item-archive]").forEach((button) => button.addEventListener("click", (event) => this._archivePlanItem(event)));
+    this.shadowRoot.querySelectorAll("[data-open-plan-item-editor]").forEach((button) => button.addEventListener("click", () => this._openPlanItemEditor(button.dataset.planItemId)));
+    this.shadowRoot.querySelector("[data-close-plan-item-editor]")?.addEventListener("click", () => this._closePlanItemEditor());
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.nav === "review") this._openReview();
       else if (button.dataset.nav === "plan_items") this._openPlanItems();
@@ -2355,25 +2485,82 @@ class FinanzplanerPanel extends HTMLElement {
     </form>`;
   }
 
+  _planItemDirectionLabel(direction) {
+    return {
+      income: "Einnahme",
+      expense: "Ausgabe",
+      saving: "Rücklage",
+    }[direction] || "Ausgabe";
+  }
+
+  _planItemTargetLabel(target) {
+    if (!target) return "Kein festes Ziel";
+    if (target === "household") return "Haushalt";
+    return this._persons.find((person) => person.entity_id === target)?.name || target;
+  }
+
+  _planItemOverviewTemplate() {
+    const activeCount = this._planItems.filter((item) => item.active !== false).length;
+    const rows = this._planItems.map((item) => {
+      const itemId = String(item.id);
+      const name = item.name || "Planposten";
+      return `<tr>
+        <th scope="row">${escapeHtml(name)}</th>
+        <td>${escapeHtml(this._planItemDirectionLabel(item.direction))}</td>
+        <td class="table-number">${formatEuro(item.amount)}</td>
+        <td>${escapeHtml(planItemFrequencyLabel(item.frequency_months))}</td>
+        <td data-table-secondary>${escapeHtml(this._planItemTargetLabel(item.target))}</td>
+        <td><span class="plan-item-status${item.active !== false ? "" : " plan-item-status--archived"}">${planItemStatus(item.active !== false)}</span></td>
+        <td class="table-actions"><button class="table-edit-button" type="button" data-open-plan-item-editor data-plan-item-id="${escapeHtml(itemId)}" aria-label="${escapeHtml(name)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td>
+      </tr>`;
+    }).join("");
+    return `<div class="management-list-toolbar"><p><strong>${activeCount}</strong> aktive Planposten</p><button class="table-new-button" type="button" data-open-plan-item-editor data-plan-item-id="new">Planposten anlegen ${icon("plus", 17)}</button></div>
+      <div class="management-table-wrap"><table class="management-table"><caption class="visually-hidden">Planpostenübersicht</caption><thead><tr><th scope="col">Bezeichnung</th><th scope="col">Richtung</th><th scope="col">Betrag</th><th scope="col">Rhythmus</th><th scope="col">Ziel</th><th scope="col">Status</th><th scope="col" class="table-actions">Aktion</th></tr></thead><tbody>${rows || `<tr><td colspan="7">Noch keine Planposten angelegt.</td></tr>`}</tbody></table></div>`;
+  }
+
   _planItemsTemplate() {
-    const list = this._planItemsLoading
+    const overview = this._planItemsLoading
       ? `<div class="empty-state">Planposten werden geladen …</div>`
       : this._planItemsLoadFailed
         ? `<div class="empty-state">Planposten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
-        : `<ul class="plan-item-list" aria-label="Planposten"><li>${this._planItemFormTemplate({}, 0, true)}</li>${this._planItems.map((item, index) => `<li>${this._planItemFormTemplate(item, index + 1)}</li>`).join("")}</ul>`;
+        : this._planItemEditorId
+          ? (() => {
+            const isNew = this._planItemEditorId === "new";
+            const itemIndex = this._planItems.findIndex((item) => String(item.id) === this._planItemEditorId);
+            const item = isNew ? {} : (this._planItems[itemIndex] || {});
+            return `<section class="management-editor" aria-labelledby="plan-item-editor-heading"><div class="management-editor-header"><div><h3 id="plan-item-editor-heading">${isNew ? "Neuen Planposten anlegen" : "Planposten bearbeiten"}</h3><p>${isNew ? "Lege einen wiederkehrenden oder einmaligen Planposten an." : "Passe die Werte an und speichere die Änderungen."}</p></div><button class="management-editor-back" type="button" data-close-plan-item-editor>${icon("chevronLeft", 16)} Zur Übersicht</button></div>${this._planItemFormTemplate(item, isNew ? 0 : itemIndex + 1, isNew)}</section>`;
+          })()
+          : this._planItemOverviewTemplate();
     const activeCount = this._planItems.filter((item) => item.active !== false).length;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="plan-items-view"><div class="plan-items-view-header"><div><h2>Planposten verwalten</h2><p>Ersetze deine Excel-Planung Schritt für Schritt: Betrag, Richtung, Rhythmus, Fälligkeit und fachliche Zuordnung bleiben direkt bearbeitbar.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Planposten</strong> · Einnahmen werden positiv, Ausgaben und Rücklagen negativ in der Übersicht berücksichtigt. Archivierte Einträge bleiben erhalten und können wieder aktiviert werden.</p>${list}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="plan-items-view"><div class="plan-items-view-header"><div><h2>Planposten verwalten</h2><p>Ersetze deine Excel-Planung Schritt für Schritt: Betrag, Richtung, Rhythmus, Fälligkeit und fachliche Zuordnung bleiben direkt bearbeitbar.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Planposten</strong> · Einnahmen werden positiv, Ausgaben und Rücklagen negativ in der Übersicht berücksichtigt. Archivierte Einträge bleiben erhalten und können wieder aktiviert werden.</p>${overview}</div></main>`;
     return this._shellTemplate(content);
   }
 
+  _petOverviewTemplate() {
+    const activeCount = this._pets.filter((pet) => pet.active !== false).length;
+    const rows = this._pets.map((pet) => {
+      const petId = String(pet.id);
+      const name = pet.name || "Tier";
+      return `<tr><th scope="row">${escapeHtml(name)}</th><td data-table-secondary>${escapeHtml(pet.pet_type || "Nicht angegeben")}</td><td><span class="plan-item-status${pet.active !== false ? "" : " plan-item-status--archived"}">${planItemStatus(pet.active !== false)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-pet-editor data-pet-id="${escapeHtml(petId)}" aria-label="${escapeHtml(name)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
+    }).join("");
+    return `<div class="management-list-toolbar"><p><strong>${activeCount}</strong> aktive Tiere</p><button class="table-new-button" type="button" data-open-pet-editor data-pet-id="new">Tier anlegen ${icon("plus", 17)}</button></div><div class="management-table-wrap"><table class="management-table"><caption class="visually-hidden">Tierübersicht</caption><thead><tr><th scope="col">Name</th><th scope="col">Tier-Typ</th><th scope="col">Status</th><th scope="col" class="table-actions">Aktion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Noch keine Tiere angelegt.</td></tr>`}</tbody></table></div>`;
+  }
+
   _petsTemplate() {
-    const list = this._petsLoading
+    const overview = this._petsLoading
       ? `<div class="empty-state">Tiere werden geladen …</div>`
       : this._petsLoadFailed
         ? `<div class="empty-state">Tiere stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
-        : `<ul class="pet-list" aria-label="Tiere"><li>${this._petFormTemplate({}, 0, true)}</li>${this._pets.map((pet, index) => `<li>${this._petFormTemplate(pet, index + 1)}</li>`).join("")}</ul>`;
+        : this._petEditorId
+          ? (() => {
+            const isNew = this._petEditorId === "new";
+            const petIndex = this._pets.findIndex((pet) => String(pet.id) === this._petEditorId);
+            const pet = isNew ? {} : (this._pets[petIndex] || {});
+            return `<section class="management-editor" aria-labelledby="pet-editor-heading"><div class="management-editor-header"><div><h3 id="pet-editor-heading">${isNew ? "Neues Tier anlegen" : "Tier bearbeiten"}</h3><p>${isNew ? "Lege ein Tierprofil für Futter und Zuordnungen an." : "Passe das Tierprofil an und speichere die Änderungen."}</p></div><button class="management-editor-back" type="button" data-close-pet-editor>${icon("chevronLeft", 16)} Zur Übersicht</button></div>${this._petFormTemplate(pet, isNew ? 0 : petIndex + 1, isNew)}</section>`;
+          })()
+          : this._petOverviewTemplate();
     const activeCount = this._pets.filter((pet) => pet.active !== false).length;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="pets-view"><div class="pets-view-header"><div><h2>Tiere verwalten</h2><p>Verwalte eigene Tierprofile für Futter und andere Zuordnungen. Tiere sind keine Home-Assistant-Personen; historische Buchungen behalten ihren damaligen Namen.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Tiere</strong> · Archivierte Profile bleiben für historische Zuordnungen auswählbar, aber nicht für neue Planposten.</p>${list}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="pets-view"><div class="pets-view-header"><div><h2>Tiere verwalten</h2><p>Verwalte eigene Tierprofile für Futter und andere Zuordnungen. Tiere sind keine Home-Assistant-Personen; historische Buchungen behalten ihren damaligen Namen.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Tiere</strong> · Archivierte Profile bleiben für historische Zuordnungen auswählbar, aber nicht für neue Planposten.</p>${overview}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -2420,14 +2607,33 @@ class FinanzplanerPanel extends HTMLElement {
     </form>`;
   }
 
+  _feedProfileOverviewTemplate() {
+    const activeCount = this._feedProfiles.filter((profile) => profile.active !== false).length;
+    const rows = this._feedProfiles.map((profile) => {
+      const profileId = String(profile.id);
+      const product = profile.product || "Futterprofil";
+      const status = profile.active === false ? "archived" : (profile.status || "planned");
+      const statusClass = status === "due_soon" ? " feed-status--due-soon" : status === "due" ? " feed-status--due" : status === "overdue" ? " feed-status--overdue" : status === "archived" ? " feed-status--archived" : "";
+      return `<tr><th scope="row">${escapeHtml(profile.pet_name || "Tier nicht zugeordnet")}</th><td>${escapeHtml(product)}</td><td data-table-secondary>${escapeHtml(profile.package_unit || "Nicht angegeben")}</td><td class="table-number">${formatEuro(profile.expected_cost)}</td><td>${formatDate(profile.next_purchase_date)}</td><td><span class="feed-status${statusClass}">${status === "archived" ? "Archiviert" : escapeHtml(feedStatusLabel(status))}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-feed-profile-editor data-feed-profile-id="${escapeHtml(profileId)}" aria-label="${escapeHtml(product)} für ${escapeHtml(profile.pet_name || "Tier")} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
+    }).join("");
+    return `<div class="management-list-toolbar"><p><strong>${activeCount}</strong> aktive Futterprofile</p><button class="table-new-button" type="button" data-open-feed-profile-editor data-feed-profile-id="new">Futterprofil anlegen ${icon("plus", 17)}</button></div><div class="management-table-wrap"><table class="management-table"><caption class="visually-hidden">Futterprofilübersicht</caption><thead><tr><th scope="col">Tier</th><th scope="col">Produkt</th><th scope="col">Verpackung</th><th scope="col">Kosten</th><th scope="col">Nächster Kauf</th><th scope="col">Status</th><th scope="col" class="table-actions">Aktion</th></tr></thead><tbody>${rows || `<tr><td colspan="7">Noch keine Futterprofile angelegt.</td></tr>`}</tbody></table></div>`;
+  }
+
   _feedProfilesTemplate() {
-    const list = this._feedProfilesLoading
+    const overview = this._feedProfilesLoading
       ? `<div class="empty-state">Futterprofile werden geladen …</div>`
       : this._feedProfilesLoadFailed
         ? `<div class="empty-state">Futterprofile stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
-        : `<ul class="feed-profile-list" aria-label="Futterprofile"><li>${this._feedProfileFormTemplate({}, 0, true)}</li>${this._feedProfiles.map((profile, index) => `<li>${this._feedProfileFormTemplate(profile, index + 1)}</li>`).join("")}</ul>`;
+        : this._feedProfileEditorId
+          ? (() => {
+            const isNew = this._feedProfileEditorId === "new";
+            const profileIndex = this._feedProfiles.findIndex((profile) => String(profile.id) === this._feedProfileEditorId);
+            const profile = isNew ? {} : (this._feedProfiles[profileIndex] || {});
+            return `<section class="management-editor" aria-labelledby="feed-profile-editor-heading"><div class="management-editor-header"><div><h3 id="feed-profile-editor-heading">${isNew ? "Neues Futterprofil anlegen" : "Futterprofil bearbeiten"}</h3><p>${isNew ? "Lege Verpackung, Kosten und Verbrauch für ein Tier an." : "Passe die Futterdaten an und speichere die Änderungen."}</p></div><button class="management-editor-back" type="button" data-close-feed-profile-editor>${icon("chevronLeft", 16)} Zur Übersicht</button></div>${this._feedProfileFormTemplate(profile, isNew ? 0 : profileIndex + 1, isNew)}</section>`;
+          })()
+          : this._feedProfileOverviewTemplate();
     const activeCount = this._feedProfiles.filter((profile) => profile.active !== false).length;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="feed-profiles-view"><div class="feed-profiles-view-header"><div><h2>Futter planen</h2><p>Hinterlege Verpackung, Kosten und Verbrauch pro Tier. Bestätigte Käufe verschieben die nächste Schätzung; es wird keine Buchung automatisch angelegt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Futterprofile</strong> · Ein manuelles Intervall überschreibt den Durchschnitt aus bestätigten Käufen. Das voraussichtliche Kaufdatum wird als einzelnes Ereignis in der Prognose berücksichtigt.</p>${list}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="feed-profiles-view"><div class="feed-profiles-view-header"><div><h2>Futter planen</h2><p>Hinterlege Verpackung, Kosten und Verbrauch pro Tier. Bestätigte Käufe verschieben die nächste Schätzung; es wird keine Buchung automatisch angelegt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Futterprofile</strong> · Ein manuelles Intervall überschreibt den Durchschnitt aus bestätigten Käufen. Das voraussichtliche Kaufdatum wird als einzelnes Ereignis in der Prognose berücksichtigt.</p>${overview}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -2450,13 +2656,34 @@ class FinanzplanerPanel extends HTMLElement {
     </form>`;
   }
 
-  _catalogsTemplate() {
+  _catalogOverviewTemplate() {
     const kinds = ["categories", "areas", "projects"];
+    const entries = kinds.flatMap((kind) => this._catalogEntries(kind).map((entry) => ({ kind, entry })));
+    const rows = entries.map(({ kind, entry }) => {
+      const entryId = String(entry.id);
+      const label = entry.label || "Stammdateneintrag";
+      return `<tr><th scope="row">${escapeHtml(label)}</th><td data-table-secondary>${catalogKindLabel(kind)}</td><td><span class="plan-item-status${entry.active !== false ? "" : " plan-item-status--archived"}">${planItemStatus(entry.active !== false)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-label="${escapeHtml(label)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
+    }).join("");
+    const activeCount = entries.filter(({ entry }) => entry.active !== false).length;
+    const newButtons = kinds.map((kind) => `<button class="table-new-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="new">${catalogKindLabel(kind)} anlegen ${icon("plus", 17)}</button>`).join("");
+    return `<div class="management-list-toolbar"><p><strong>${activeCount}</strong> aktive Stammdateneinträge</p><div class="management-toolbar-actions">${newButtons}</div></div><div class="management-table-wrap"><table class="management-table"><caption class="visually-hidden">Stammdatenübersicht</caption><thead><tr><th scope="col">Bezeichnung</th><th scope="col">Typ</th><th scope="col">Status</th><th scope="col" class="table-actions">Aktion</th></tr></thead><tbody>${rows || `<tr><td colspan="4">Noch keine Stammdaten angelegt.</td></tr>`}</tbody></table></div>`;
+  }
+
+  _catalogsTemplate() {
+    const editor = this._catalogEditor
+      ? (() => {
+        const { kind, entryId } = this._catalogEditor;
+        const isNew = entryId === "new";
+        const entryIndex = this._catalogEntries(kind).findIndex((entry) => String(entry.id) === entryId);
+        const entry = isNew ? {} : (this._catalogEntries(kind)[entryIndex] || {});
+        return `<section class="management-editor" aria-labelledby="catalog-editor-heading"><div class="management-editor-header"><div><h3 id="catalog-editor-heading">${isNew ? `${catalogKindLabel(kind)} anlegen` : `${catalogKindLabel(kind)} bearbeiten`}</h3><p>${isNew ? "Lege einen neuen Stammdateneintrag an." : "Passe die Bezeichnung oder den Status an."}</p></div><button class="management-editor-back" type="button" data-close-catalog-editor>${icon("chevronLeft", 16)} Zur Übersicht</button></div>${this._catalogEntryFormTemplate(kind, entry, isNew ? 0 : entryIndex + 1, isNew)}</section>`;
+      })()
+      : this._catalogOverviewTemplate();
     const content = this._catalogsLoading
       ? `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="empty-state">Stammdaten werden geladen …</div></div></main>`
       : this._catalogsLoadFailed
         ? `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><div class="empty-state">Stammdaten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div></div></main>`
-        : `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="catalogs-view-header"><div><h2>Stammdaten</h2><p>Verwalte die Begriffe, mit denen du Planposten und Buchungen einheitlich ordnest. Beim Umbenennen werden bestehende Zuordnungen automatisch mitgeführt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="catalog-help">Archivierte Einträge bleiben in historischen Buchungen sichtbar und können wieder aktiviert werden. Neue Freitextwerte aus Importen werden als Stammdaten ergänzt.</p><div class="catalogs-grid">${kinds.map((kind) => `<section class="surface catalog-section" aria-labelledby="catalog-${kind}-heading"><div class="catalog-section-header"><h3 id="catalog-${kind}-heading">${catalogKindLabel(kind)}</h3><span>${this._catalogEntries(kind).filter((entry) => entry.active !== false).length} aktiv</span></div><ul class="catalog-entry-list" aria-label="${catalogKindLabel(kind)}"><li>${this._catalogEntryFormTemplate(kind, {}, 0, true)}</li>${this._catalogEntries(kind).map((entry, index) => `<li>${this._catalogEntryFormTemplate(kind, entry, index + 1)}</li>`).join("")}</ul></section>`).join("")}</div></div></main>`;
+        : `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="catalogs-view-header"><div><h2>Stammdaten</h2><p>Verwalte die Begriffe, mit denen du Planposten und Buchungen einheitlich ordnest. Beim Umbenennen werden bestehende Zuordnungen automatisch mitgeführt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="catalog-help">Archivierte Einträge bleiben in historischen Buchungen sichtbar und können wieder aktiviert werden. Neue Freitextwerte aus Importen werden als Stammdaten ergänzt.</p>${editor}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -2476,45 +2703,67 @@ class FinanzplanerPanel extends HTMLElement {
     </form>`;
   }
 
+  _accountFormTemplate(account, index) {
+    const accountId = String(account.id);
+    const draft = this._accountDrafts.get(accountId) || {
+      label: account.label || "",
+      bank: account.bank || "",
+      iban: "",
+      owner_targets: Array.isArray(account.owner_targets) ? account.owner_targets : [],
+      active: account.active !== false,
+    };
+    const ownerTargets = Array.isArray(draft.owner_targets) ? draft.owner_targets : [];
+    const ownerStatus = accountOwnerStatus(ownerTargets);
+    const labelId = `account-label-${index}`;
+    const bankId = `account-bank-${index}`;
+    const ibanId = `account-iban-${index}`;
+    const ibanHintId = `account-iban-hint-${index}`;
+    const ownersId = `account-owners-${index}`;
+    const ownerStatusId = `account-owner-status-${index}`;
+    const activeId = `account-active-${index}`;
+    const saveStatusId = `account-save-status-${index}`;
+    const accountLabel = draft.label || "Konto";
+    const active = draft.active !== false;
+    const maskedReference = account.iban_masked || account.account_reference || "Keine maskierte Kontoreferenz verfügbar";
+    return `<form class="surface account-card" method="post" data-account-form data-account-id="${escapeHtml(account.id)}" aria-labelledby="account-heading-${index}">
+      <div class="account-card-header"><h3 id="account-heading-${index}">${escapeHtml(accountLabel)}</h3><p class="account-reference">${escapeHtml(maskedReference)}</p></div>
+      <label class="account-field" for="${labelId}">Kontoname<input id="${labelId}" name="label" data-account-label type="text" value="${escapeHtml(draft.label || "")}" autocomplete="off" required></label>
+      <label class="account-field" for="${bankId}">Bank<input id="${bankId}" name="bank" data-account-bank type="text" value="${escapeHtml(draft.bank || "")}" autocomplete="organization" placeholder="z. B. Erste Bank"></label>
+      <label class="account-field" for="${ibanId}">IBAN<input id="${ibanId}" name="iban" data-account-iban type="text" value="${escapeHtml(draft.iban || "")}" autocomplete="off" inputmode="text" aria-describedby="${ibanHintId}" placeholder="Nur zum Ändern eingeben"><small id="${ibanHintId}">${account.iban_masked ? `Gespeichert: ${escapeHtml(account.iban_masked)} · leer lassen, wenn sie unverändert bleiben soll.` : "Leer lassen, wenn noch keine IBAN hinterlegt werden soll."}</small></label>
+      <fieldset class="account-owners"><legend>Kontoinhaber</legend><label class="visually-hidden" for="${ownersId}">Kontoinhaber für ${escapeHtml(accountLabel)} auswählen</label><select id="${ownersId}" name="owner_targets" data-account-owners multiple size="4" aria-describedby="${ownerStatusId}">${this._personOptions(ownerTargets)}</select><p class="account-owner-status${ownerTargets.length ? "" : " account-owner-status--missing"}" id="${ownerStatusId}" data-account-owner-status>${escapeHtml(ownerStatus)}</p></fieldset>
+      <div class="account-toggle"><label for="${activeId}"><input id="${activeId}" name="active" data-account-active type="checkbox"${active ? " checked" : ""}>Konto aktiv <span class="visually-hidden">(deaktivieren archiviert das Konto)</span></label><span class="account-active-status${active ? "" : " account-active-status--archived"}" data-account-active-status aria-hidden="true">${accountActiveStatus(active)}</span></div>
+      <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit" aria-label="Änderungen für ${escapeHtml(accountLabel)} (${escapeHtml(maskedReference)}) speichern" aria-describedby="${saveStatusId}">Änderungen speichern ${icon("check", 17)}</button></div>
+    </form>`;
+  }
+
+  _accountOverviewTemplate() {
+    const rows = this._accounts.map((account) => {
+      const accountId = String(account.id);
+      const draft = this._accountDrafts.get(accountId) || {};
+      const label = draft.label || account.label || "Konto";
+      const bank = draft.bank || account.bank || "Nicht angegeben";
+      const ownerTargets = Array.isArray(draft.owner_targets) ? draft.owner_targets : (Array.isArray(account.owner_targets) ? account.owner_targets : []);
+      const owners = ownerTargets.map((target) => this._persons.find((person) => person.entity_id === target)?.name || target).join(", ") || "Nicht zugeordnet";
+      const maskedReference = account.iban_masked || account.account_reference || "Nicht verfügbar";
+      const active = draft.active !== false && account.active !== false;
+      return `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(bank)}</td><td class="table-number">${escapeHtml(maskedReference)}</td><td data-table-secondary>${escapeHtml(owners)}</td><td><span class="plan-item-status${active ? "" : " plan-item-status--archived"}">${accountActiveStatus(active)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-account-editor data-account-id="${escapeHtml(accountId)}" aria-label="${escapeHtml(label)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
+    }).join("");
+    return `<div class="management-table-wrap"><table class="management-table"><caption class="visually-hidden">Kontenübersicht</caption><thead><tr><th scope="col">Kontoname</th><th scope="col">Bank</th><th scope="col">Kontoreferenz</th><th scope="col">Kontoinhaber</th><th scope="col">Status</th><th scope="col" class="table-actions">Aktion</th></tr></thead><tbody>${rows || `<tr><td colspan="6">Keine Konten verfügbar. Importiere zuerst eine Bankdatei über „Buchungen prüfen“.</td></tr>`}</tbody></table></div>`;
+  }
+
   _accountsTemplate() {
     const accountList = this._accountsLoading
       ? `<div class="empty-state">Konten werden geladen …</div>`
       : this._accountsLoadFailed
         ? `<div class="empty-state">Konten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div>`
-        : this._accounts.length
-      ? `<ul class="account-list" aria-label="Konten">${this._accounts.map((account, index) => {
-        const accountId = String(account.id);
-        const draft = this._accountDrafts.get(accountId) || {
-          label: account.label || "",
-          bank: account.bank || "",
-          iban: "",
-          owner_targets: Array.isArray(account.owner_targets) ? account.owner_targets : [],
-          active: account.active !== false,
-        };
-        const ownerTargets = Array.isArray(draft.owner_targets) ? draft.owner_targets : [];
-        const ownerStatus = accountOwnerStatus(ownerTargets);
-        const labelId = `account-label-${index}`;
-        const bankId = `account-bank-${index}`;
-        const ibanId = `account-iban-${index}`;
-        const ibanHintId = `account-iban-hint-${index}`;
-        const ownersId = `account-owners-${index}`;
-        const ownerStatusId = `account-owner-status-${index}`;
-        const activeId = `account-active-${index}`;
-        const saveStatusId = `account-save-status-${index}`;
-        const accountLabel = draft.label || "Konto";
-        const active = draft.active !== false;
-        const maskedReference = account.iban_masked || account.account_reference || "Keine maskierte Kontoreferenz verfügbar";
-        return `<li><form class="surface account-card" method="post" data-account-form data-account-id="${escapeHtml(account.id)}" aria-labelledby="account-heading-${index}">
-          <div class="account-card-header"><h3 id="account-heading-${index}">${escapeHtml(accountLabel)}</h3><p class="account-reference">${escapeHtml(maskedReference)}</p></div>
-          <label class="account-field" for="${labelId}">Kontoname<input id="${labelId}" name="label" data-account-label type="text" value="${escapeHtml(draft.label || "")}" autocomplete="off" required></label>
-          <label class="account-field" for="${bankId}">Bank<input id="${bankId}" name="bank" data-account-bank type="text" value="${escapeHtml(draft.bank || "")}" autocomplete="organization" placeholder="z. B. Erste Bank"></label>
-          <label class="account-field" for="${ibanId}">IBAN<input id="${ibanId}" name="iban" data-account-iban type="text" value="${escapeHtml(draft.iban || "")}" autocomplete="off" inputmode="text" aria-describedby="${ibanHintId}" placeholder="Nur zum Ändern eingeben"><small id="${ibanHintId}">${account.iban_masked ? `Gespeichert: ${escapeHtml(account.iban_masked)} · leer lassen, wenn sie unverändert bleiben soll.` : "Leer lassen, wenn noch keine IBAN hinterlegt werden soll."}</small></label>
-          <fieldset class="account-owners"><legend>Kontoinhaber</legend><label class="visually-hidden" for="${ownersId}">Kontoinhaber für ${escapeHtml(accountLabel)} auswählen</label><select id="${ownersId}" name="owner_targets" data-account-owners multiple size="4" aria-describedby="${ownerStatusId}">${this._personOptions(ownerTargets)}</select><p class="account-owner-status${ownerTargets.length ? "" : " account-owner-status--missing"}" id="${ownerStatusId}" data-account-owner-status>${escapeHtml(ownerStatus)}</p></fieldset>
-          <div class="account-toggle"><label for="${activeId}"><input id="${activeId}" name="active" data-account-active type="checkbox"${active ? " checked" : ""}>Konto aktiv <span class="visually-hidden">(deaktivieren archiviert das Konto)</span></label><span class="account-active-status${active ? "" : " account-active-status--archived"}" data-account-active-status aria-hidden="true">${accountActiveStatus(active)}</span></div>
-          <div class="account-card-actions"><p class="account-save-status" id="${saveStatusId}" data-account-save-status aria-live="polite"></p><button class="account-save" type="submit" aria-label="Änderungen für ${escapeHtml(accountLabel)} (${escapeHtml(maskedReference)}) speichern" aria-describedby="${saveStatusId}">Änderungen speichern</button></div>
-        </form></li>`;
-      }).join("")}</ul>`
-        : `<div class="empty-state">Keine Konten verfügbar. Importiere zuerst eine Bankdatei über „Buchungen prüfen“.</div>`;
+        : this._accountEditorId
+          ? (() => {
+            const accountIndex = this._accounts.findIndex((account) => String(account.id) === this._accountEditorId);
+            const account = this._accounts[accountIndex];
+            if (!account) return this._accountOverviewTemplate();
+            return `<section class="management-editor" aria-labelledby="account-editor-heading"><div class="management-editor-header"><div><h3 id="account-editor-heading">Konto bearbeiten</h3><p>Ändere Name, Bank, Kontoinhaber oder den aktiven Status.</p></div><button class="management-editor-back" type="button" data-close-account-editor>${icon("chevronLeft", 16)} Zur Übersicht</button></div>${this._accountFormTemplate(account, accountIndex + 1)}</section>`;
+          })()
+          : this._accountOverviewTemplate();
     const content = `<main class="main" id="content" tabindex="-1"><div class="accounts-view"><div class="accounts-view-header"><div><h2>Konten verwalten</h2><p>Vergib verständliche Namen, ordne Kontoinhaber zu und archiviere nicht mehr verwendete Konten. Kontodaten werden ausschließlich maskiert angezeigt.</p></div><div class="accounts-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 18)}</button></div></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>${accountList}</div></main>`;
     return this._shellTemplate(content);
   }
