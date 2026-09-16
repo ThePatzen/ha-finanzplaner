@@ -1,5 +1,6 @@
 import importlib
 from copy import deepcopy
+from decimal import Decimal
 import unittest
 
 
@@ -161,7 +162,10 @@ class RuleMatchingTests(unittest.TestCase):
 
         amounts = [row["amount"] for row in result["suggestion"]["allocations"]]
         self.assertEqual(amounts, [33.34, 33.33, 33.34])
-        self.assertEqual(sum(amounts), 100.01)
+        self.assertEqual(
+            sum((Decimal(str(amount)) for amount in amounts), Decimal("0.00")),
+            Decimal("100.01"),
+        )
 
     def test_rule_rejects_share_sum_other_than_one_hundred(self):
         core = load_core()
@@ -244,3 +248,110 @@ class RuleMatchingTests(unittest.TestCase):
         )
 
         self.assertEqual(result["status"], "unresolved")
+
+    def test_too_small_booking_for_rule_rows_is_unresolved_without_invalid_amounts(self):
+        allocations = [
+            {
+                "target": f"person.{name}",
+                "share_percent": 25.0,
+                "area_id": None,
+                "category_id": None,
+                "project_id": None,
+                "pet_id": None,
+            }
+            for name in ("alex", "sam", "jules", "kim")
+        ]
+        result = load_core().rule_suggestion(
+            {
+                "account_id": "account-giro",
+                "counterparty": "Supermarkt AG",
+                "purpose": "Einkauf",
+                "amount": -0.02,
+            },
+            [self._rule("rule-tiny", allocations=allocations)],
+            accounts={"account-giro": {"label": "Giro"}},
+            valid_targets={"person.alex", "person.sam", "person.jules", "person.kim"},
+            catalogs={"categories": [], "areas": [], "projects": []},
+            pets={},
+        )
+
+        self.assertEqual(result["status"], "unresolved")
+        self.assertIsNone(result["suggestion"])
+        self.assertIn("positiv", result["reason"])
+
+    def test_tiny_percentage_receives_one_positive_cent_when_possible(self):
+        allocations = [
+            {"target": "household", "share_percent": 99.99,
+             "area_id": None, "category_id": None, "project_id": None,
+             "pet_id": None},
+            {"target": "person.alex", "share_percent": 0.01,
+             "area_id": None, "category_id": None, "project_id": None,
+             "pet_id": None},
+        ]
+        result = load_core().rule_suggestion(
+            {
+                "account_id": "account-giro",
+                "counterparty": "Supermarkt AG",
+                "purpose": "Einkauf",
+                "amount": -1.00,
+            },
+            [self._rule("rule-tiny-share", allocations=allocations)],
+            accounts={"account-giro": {"label": "Giro"}},
+            valid_targets={"household", "person.alex"},
+            catalogs={"categories": [], "areas": [], "projects": []},
+            pets={},
+        )
+
+        amounts = [row["amount"] for row in result["suggestion"]["allocations"]]
+        self.assertEqual(result["status"], "suggested")
+        self.assertEqual(amounts, [0.99, 0.01])
+        self.assertTrue(all(amount > 0 for amount in amounts))
+        self.assertEqual(
+            sum((Decimal(str(amount)) for amount in amounts), Decimal("0.00")),
+            Decimal("1.00"),
+        )
+
+    def test_normalized_booking_account_matches_normalized_rule_account(self):
+        result = self._suggestion(
+            [self._rule("rule-account")], account_id="  account-giro  "
+        )
+
+        self.assertEqual(result["status"], "suggested")
+
+    def test_malformed_booking_counterparty_returns_unresolved_projection(self):
+        result = load_core().rule_suggestion(
+            {
+                "account_id": "account-giro",
+                "counterparty": 42,
+                "purpose": "Einkauf",
+                "amount": -42.37,
+            },
+            [self._rule("rule-malformed-counterparty")],
+            accounts={"account-giro": {"label": "Giro"}},
+            valid_targets={"household"},
+            catalogs={"categories": [], "areas": [], "projects": []},
+            pets={},
+        )
+
+        self.assertEqual(result["status"], "unresolved")
+        self.assertIsNone(result["suggestion"])
+        self.assertEqual(result["conflicts"], [])
+
+    def test_malformed_booking_purpose_returns_unresolved_projection(self):
+        result = load_core().rule_suggestion(
+            {
+                "account_id": "account-giro",
+                "counterparty": "Supermarkt AG",
+                "purpose": 42,
+                "amount": -42.37,
+            },
+            [self._rule("rule-malformed-purpose", purpose_contains="einkauf")],
+            accounts={"account-giro": {"label": "Giro"}},
+            valid_targets={"household"},
+            catalogs={"categories": [], "areas": [], "projects": []},
+            pets={},
+        )
+
+        self.assertEqual(result["status"], "unresolved")
+        self.assertIsNone(result["suggestion"])
+        self.assertEqual(result["conflicts"], [])

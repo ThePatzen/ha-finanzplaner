@@ -874,22 +874,48 @@ def _rule_matches_booking(rule: dict[str, object], booking: dict[str, object]) -
 
 def _materialize_rule_allocations(
     amount: object, allocations: list[dict[str, object]]
-) -> list[dict[str, object]]:
+) -> list[dict[str, object]] | None:
     try:
         total = abs(_money(amount))
     except (InvalidOperation, ValueError, TypeError) as exc:
         raise ValueError("Der Buchungsbetrag ist ungültig.") from exc
+    if int(total * 100) < len(allocations):
+        return None
+
+    amounts: list[Decimal] = []
     materialized: list[dict[str, object]] = []
-    assigned = Decimal("0.00")
     for allocation in allocations:
         share_amount = (total * Decimal(str(allocation["share_percent"])) / Decimal("100")).quantize(
             MONEY_QUANT, rounding=ROUND_HALF_UP
         )
-        assigned += share_amount
+        amounts.append(max(MONEY_QUANT, share_amount))
+
+    remainder = total - sum(amounts, Decimal("0.00"))
+    if remainder >= 0:
+        amounts[0] += remainder
+    else:
+        remaining = -remainder
+        for index, share_amount in enumerate(amounts):
+            reduction = min(share_amount - MONEY_QUANT, remaining)
+            amounts[index] = share_amount - reduction
+            remaining -= reduction
+            if remaining == 0:
+                break
+        if remaining != 0:
+            return None
+
+    for allocation, share_amount in zip(allocations, amounts, strict=True):
         materialized.append({**allocation, "amount": float(share_amount)})
-    if materialized:
-        materialized[0]["amount"] = float(_money(materialized[0]["amount"]) + total - assigned)
     return materialized
+
+
+def _unresolved_rule_suggestion(reason: str) -> dict[str, object]:
+    return {
+        "status": "unresolved",
+        "suggestion": None,
+        "conflicts": [],
+        "reason": reason,
+    }
 
 
 def rule_suggestion(
@@ -903,14 +929,30 @@ def rule_suggestion(
 ) -> dict[str, object]:
     """Project the one unambiguous active rule suggestion for a booking."""
 
-    unresolved = {"status": "unresolved", "suggestion": None, "conflicts": []}
     if not isinstance(booking, dict) or not isinstance(rules, list):
-        return unresolved
+        return _unresolved_rule_suggestion("Die Buchungs- oder Regeldaten sind ungültig.")
     try:
         if abs(_money(booking.get("amount", 0))) <= 0:
-            return unresolved
+            return _unresolved_rule_suggestion("Der Buchungsbetrag muss positiv sein.")
     except (InvalidOperation, ValueError, TypeError):
-        return unresolved
+        return _unresolved_rule_suggestion("Der Buchungsbetrag ist ungültig.")
+    try:
+        normalized_booking = {
+            **booking,
+            "account_id": _normalized_match_text(
+                booking.get("account_id"), "Die Konto-ID", required=False
+            ),
+            "counterparty": _normalized_match_text(
+                booking.get("counterparty"), "Der Zahlungsempfänger", required=False
+            ),
+            "purpose": _normalized_match_text(
+                booking.get("purpose"), "Der Verwendungszweck", required=False
+            ),
+        }
+    except ValueError:
+        return _unresolved_rule_suggestion(
+            "Die Matching-Felder der Buchung sind ungültig."
+        )
     matches: list[tuple[dict[str, object], dict[str, object]]] = []
     for rule in rules:
         if not isinstance(rule, dict) or rule.get("active") is not True:
@@ -925,10 +967,10 @@ def rule_suggestion(
             )
         except ValueError:
             continue
-        if _rule_matches_booking(normalized, booking):
+        if _rule_matches_booking(normalized, normalized_booking):
             matches.append((rule, normalized))
     if not matches:
-        return unresolved
+        return _unresolved_rule_suggestion("Keine aktive Regel passt zu dieser Buchung.")
     matches.sort(key=lambda match: (-int(match[1]["priority"]), str(match[0].get("id", ""))))
     highest_priority = matches[0][1]["priority"]
     highest_matches = [match for match in matches if match[1]["priority"] == highest_priority]
@@ -939,15 +981,20 @@ def rule_suggestion(
             "conflicts": [str(match[0].get("id", "")) for match in highest_matches],
         }
     rule, normalized = highest_matches[0]
+    allocations = _materialize_rule_allocations(
+        booking.get("amount"), normalized["allocations"]
+    )
+    if allocations is None:
+        return _unresolved_rule_suggestion(
+            "Die Regelaufteilung kann für diesen Buchungsbetrag nicht positiv in Cent materialisiert werden."
+        )
     return {
         "status": "suggested",
         "suggestion": {
             "rule_id": str(rule.get("id", "")),
             "rule_label": normalized["label"],
             "reason": "Zahlungsempfänger und Konto stimmen mit der Regel überein.",
-            "allocations": _materialize_rule_allocations(
-                booking.get("amount"), normalized["allocations"]
-            ),
+            "allocations": allocations,
         },
         "conflicts": [],
     }
