@@ -471,13 +471,15 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
                 "pet_id": None,
             }],
         }]
+        before = deepcopy(self.coordinator.store.data)
 
         body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
 
         self.assertEqual(body["bookings"][0]["status"], "suggested")
         self.assertEqual(body["bookings"][0]["suggestion"]["rule_id"], "rule-1")
-        self.assertEqual(booking["status"], "unresolved")
-        self.assertEqual(booking["allocations"], [])
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
 
     def test_conflicting_rules_are_visible_without_selection(self):
         booking = {
@@ -493,14 +495,16 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
         second_rule["id"] = "rule-2"
         self.coordinator.store.data["bookings"] = [booking]
         self.coordinator.store.data["rules"].append(second_rule)
+        before = deepcopy(self.coordinator.store.data)
 
         body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
 
         projected = body["bookings"][0]
         self.assertEqual(projected["status"], "conflict")
         self.assertEqual(set(projected["conflicts"]), {"rule-1", "rule-2"})
-        self.assertEqual(booking["status"], "unresolved")
-        self.assertEqual(booking["allocations"], [])
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
 
     def test_invalid_rule_reference_stays_unresolved_with_reason(self):
         booking = {
@@ -514,14 +518,16 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
         }
         self.coordinator.store.data["catalogs"]["categories"][0]["active"] = False
         self.coordinator.store.data["bookings"] = [booking]
+        before = deepcopy(self.coordinator.store.data)
 
         body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
 
         projected = body["bookings"][0]
         self.assertEqual(projected["status"], "unresolved")
         self.assertIn("Keine aktive Regel", projected["reason"])
-        self.assertEqual(booking["status"], "unresolved")
-        self.assertEqual(booking["allocations"], [])
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
 
     def test_resolved_booking_is_not_returned_by_unresolved_view(self):
         self.coordinator.store.data["bookings"] = [{
@@ -529,10 +535,14 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
             "status": "resolved",
             "allocations": [],
         }]
+        before = deepcopy(self.coordinator.store.data)
 
         body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
 
         self.assertEqual(body["bookings"], [])
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
 
 
 class RuleRegistrationTests(unittest.TestCase):
