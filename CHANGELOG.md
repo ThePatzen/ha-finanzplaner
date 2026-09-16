@@ -10,6 +10,8 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+## [0.3.4] – 2026-09-16
+
 - Live-Dashboard ergänzt um echte Haushalts-, Bereichs- und Kategorieauswertungen sowie Monatsverlauf aus Planposten, Buchungen und Futterprognosen
 - Import → Zuordnung → Übersicht als durchgängigen API-Workflow abgesichert
 - Ungespeicherte Änderungen werden beim Verlassen einer Bearbeitungsansicht und beim Schließen des Browsers geschützt
@@ -95,3 +97,4 @@ Erste vorbereitete vertikale Version:
 [0.3.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.1
 [0.3.2]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.2
 [0.3.3]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.3
+[0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
