@@ -18,6 +18,7 @@ from .core import (
     Booking,
     CATALOG_KINDS,
     CATALOG_VALUE_FIELDS,
+    RULE_FIELDS,
     booking_fingerprint,
     catalog_id_for_label,
     ensure_account,
@@ -30,10 +31,12 @@ from .core import (
     parse_mt940,
     plan_item_totals,
     record_feed_profile_purchase,
+    rule_payload_from_booking,
     validate_pet_payload,
     validate_catalog_payload,
     validate_feed_profile_payload,
     validate_plan_item_payload,
+    validate_rule_payload,
     split_amount,
 )
 from .coordinator import FinanzplanerCoordinator
@@ -285,6 +288,32 @@ def account_payload(account: dict[str, object]) -> dict[str, object]:
     return sanitized
 
 
+def rule_payload(
+    rule: dict[str, object],
+    account: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Return one rule with current, redacted account display data."""
+
+    payload = {
+        field: rule[field]
+        for field in (
+            "id",
+            "label",
+            "active",
+            "priority",
+            "account_id",
+            "counterparty",
+            "purpose_contains",
+            "allocations",
+            "created_at",
+            "updated_at",
+        )
+        if field in rule
+    }
+    payload["account"] = account_payload(account) if account is not None else None
+    return _response_payload(payload)  # type: ignore[return-value]
+
+
 def _normalize_iban(value: object) -> str:
     if not isinstance(value, str):
         raise ValueError("Die IBAN muss als Text angegeben werden.")
@@ -442,6 +471,69 @@ def _valid_plan_targets(hass: Any) -> set[str]:
             if state.domain == "person"
         ),
     }
+
+
+def _rule_accounts(
+    coordinator: FinanzplanerCoordinator,
+) -> dict[str, dict[str, object]]:
+    accounts = coordinator.store.data.get("accounts", [])
+    if not isinstance(accounts, list):
+        return {}
+    return {
+        account["id"]: account
+        for account in accounts
+        if isinstance(account, dict) and isinstance(account.get("id"), str)
+    }
+
+
+def _rule_catalogs(
+    coordinator: FinanzplanerCoordinator,
+) -> dict[str, list[dict[str, object]]]:
+    catalogs = coordinator.store.data.get("catalogs", {})
+    if not isinstance(catalogs, dict):
+        return {kind: [] for kind in CATALOG_KINDS}
+    return {
+        kind: [entry for entry in catalogs.get(kind, []) if isinstance(entry, dict)]
+        if isinstance(catalogs.get(kind), list)
+        else []
+        for kind in CATALOG_KINDS
+    }
+
+
+def _validated_rule(
+    payload: object,
+    coordinator: FinanzplanerCoordinator,
+    hass: Any,
+    *,
+    partial: bool = False,
+) -> dict[str, object]:
+    return validate_rule_payload(
+        payload,
+        valid_targets=_valid_plan_targets(hass),
+        accounts=_rule_accounts(coordinator),
+        catalogs=_rule_catalogs(coordinator),
+        pets=_pet_records(coordinator),
+        partial=partial,
+    )
+
+
+def _rule_draft(rule: dict[str, object]) -> dict[str, object]:
+    return {field: rule.get(field) for field in RULE_FIELDS}
+
+
+def _rule_list(coordinator: FinanzplanerCoordinator) -> list[dict[str, object]]:
+    rules = coordinator.store.data.get("rules")
+    return rules if isinstance(rules, list) else []
+
+
+def _append_rule(
+    coordinator: FinanzplanerCoordinator, rule: dict[str, object]
+) -> None:
+    rules = coordinator.store.data.get("rules")
+    if not isinstance(rules, list):
+        rules = []
+        coordinator.store.data["rules"] = rules
+    rules.append(rule)
 
 
 def _catalog_link_payload(
@@ -1380,6 +1472,185 @@ class PlanItemView(HomeAssistantView):
                 {"plan_item": plan_item_payload(item), "archived": True}
             )
         )
+
+
+class RulesView(HomeAssistantView):
+    """List and create local booking-allocation rules."""
+
+    url = "/api/finanzplaner/rules"
+    name = "api:finanzplaner:rules"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            return self.json({"rules": []})
+        accounts = _rule_accounts(coordinator)
+        return self.json(
+            _response_payload(
+                {
+                    "rules": [
+                        rule_payload(
+                            rule,
+                            accounts.get(rule.get("account_id"))
+                            if isinstance(rule.get("account_id"), str)
+                            else None,
+                        )
+                        for rule in _rule_list(coordinator)
+                        if isinstance(rule, dict)
+                    ]
+                }
+            )
+        )
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Regeldaten sind kein gültiges JSON.") from exc
+        candidate = {**payload, "active": True} if isinstance(payload, dict) else payload
+        try:
+            values = _validated_rule(candidate, coordinator, request.app["hass"])
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        rule = {
+            "id": uuid4().hex,
+            **values,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        _append_rule(coordinator, rule)
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        account_id = rule.get("account_id")
+        account = (
+            _rule_accounts(coordinator).get(account_id)
+            if isinstance(account_id, str)
+            else None
+        )
+        return self.json(_response_payload({"rule": rule_payload(rule, account)}))
+
+
+class RuleView(HomeAssistantView):
+    """Update editable fields or reversibly deactivate one booking rule."""
+
+    url = "/api/finanzplaner/rules/{rule_id}"
+    name = "api:finanzplaner:rule"
+    requires_auth = True
+
+    @staticmethod
+    def _find_rule(
+        coordinator: FinanzplanerCoordinator, rule_id: str
+    ) -> dict[str, object] | None:
+        return next(
+            (
+                rule
+                for rule in _rule_list(coordinator)
+                if isinstance(rule, dict) and rule.get("id") == rule_id
+            ),
+            None,
+        )
+
+    async def post(self, request: web.Request, rule_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        rule = self._find_rule(coordinator, rule_id)
+        if rule is None:
+            raise web.HTTPNotFound(text="Regel nicht gefunden.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Regeldaten sind kein gültiges JSON.") from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Regeldaten müssen ein Objekt sein.")
+        try:
+            update = _validated_rule(
+                payload,
+                coordinator,
+                request.app["hass"],
+                partial=True,
+            )
+            values = _validated_rule(
+                {**_rule_draft(rule), **update},
+                coordinator,
+                request.app["hass"],
+            )
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        rule.update(values)
+        rule["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        account_id = rule.get("account_id")
+        account = (
+            _rule_accounts(coordinator).get(account_id)
+            if isinstance(account_id, str)
+            else None
+        )
+        return self.json(_response_payload({"rule": rule_payload(rule, account)}))
+
+
+class RuleFromBookingView(HomeAssistantView):
+    """Build a validated booking-rule template from one resolved booking."""
+
+    url = "/api/finanzplaner/rules/from-booking/{booking_id}"
+    name = "api:finanzplaner:rule:from-booking"
+    requires_auth = True
+
+    async def post(self, request: web.Request, booking_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        bookings = coordinator.store.data.get("bookings", [])
+        booking = next(
+            (
+                item
+                for item in bookings
+                if isinstance(item, dict) and item.get("id") == booking_id
+            ),
+            None,
+        ) if isinstance(bookings, list) else None
+        if booking is None or booking.get("status") != "resolved":
+            raise web.HTTPBadRequest(
+                text="Nur eine bestätigte Buchung kann als Regel gespeichert werden."
+            )
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Regeldaten sind kein gültiges JSON.") from exc
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Regeldaten müssen ein Objekt sein.")
+        if set(payload) - {"label"}:
+            raise web.HTTPBadRequest(text="Die Regeldaten enthalten ein unbekanntes Feld.")
+        try:
+            candidate = rule_payload_from_booking(booking)
+            candidate["purpose_contains"] = None
+            if "label" in payload:
+                candidate["label"] = payload["label"]
+            values = _validated_rule(
+                candidate,
+                coordinator,
+                request.app["hass"],
+            )
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+        account_id = values.get("account_id")
+        account = (
+            _rule_accounts(coordinator).get(account_id)
+            if isinstance(account_id, str)
+            else None
+        )
+        return self.json(_response_payload({"rule": rule_payload(values, account)}))
 
 
 class UnresolvedBookingsView(HomeAssistantView):

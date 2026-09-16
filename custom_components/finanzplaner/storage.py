@@ -228,6 +228,13 @@ def _normalize_booking_allocations(
                     allocation["pet_type"] = pet.get("pet_type")
 
 
+def _normalize_rules(data: dict[str, Any]) -> None:
+    """Keep existing rule records and replace malformed containers safely."""
+
+    if not isinstance(data.get("rules"), list):
+        data["rules"] = []
+
+
 def _catalog_source_values(data: dict[str, Any], kind: str) -> list[str]:
     field = CATALOG_VALUE_FIELDS[kind]
     values: list[str] = []
@@ -522,6 +529,7 @@ def migrate_store_data(
     _normalize_feed_profiles(data, pets)
     _normalize_plan_items(data, pets)
     _normalize_booking_allocations(data, pets)
+    _normalize_rules(data)
     _normalize_catalogs(data)
     _link_catalog_references(data)
     return data
@@ -585,6 +593,7 @@ def normalize_current_store_data(
     _normalize_feed_profiles(data, pets)
     _normalize_plan_items(data, pets)
     _normalize_booking_allocations(data, pets)
+    _normalize_rules(data)
     _normalize_catalogs(data)
     _link_catalog_references(data)
     return data
