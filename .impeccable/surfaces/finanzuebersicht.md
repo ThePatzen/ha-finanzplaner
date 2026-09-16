@@ -1,7 +1,7 @@
 ---
 version: 1
 slug: "finanzuebersicht"
-primary_target: "finanzuebersicht"
+primary_target: "custom_components/finanzplaner/frontend/panel.js"
 related_targets: []
 ---
 
