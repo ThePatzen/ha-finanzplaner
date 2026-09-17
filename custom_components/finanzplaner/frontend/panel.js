@@ -1,6 +1,7 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingSelectionState, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
+const BREAKDOWN_URL = "/api/finanzplaner/overview/breakdown";
 const PLAN_ITEMS_URL = "/api/finanzplaner/plan-items";
 const ACCOUNTS_URL = "/api/finanzplaner/accounts";
 const PETS_URL = "/api/finanzplaner/pets";
@@ -580,6 +581,18 @@ const styles = `
   .section-data-table tbody tr:last-child th, .section-data-table tbody tr:last-child td { border-block-end: 0; }
   .section-data-table .section-table-number { font-family: var(--fp-data); white-space: nowrap; }
   .section-data-table .section-table-muted { color: var(--fp-muted); }
+  .comparison-section { margin-block-start: 1.2rem; }
+  .comparison-section .section-actions { margin-block: 0.9rem; }
+  .comparison-section .section-action { white-space: nowrap; }
+  .comparison-section [aria-pressed="true"] { border-color: var(--fp-navy); color: var(--fp-paper); background: var(--fp-navy); }
+  .comparison-section .section-action:disabled { opacity: 0.65; cursor: wait; }
+  .comparison-section .section-data-table-wrap:focus-visible, .comparison-section h4:focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 3px; }
+  .comparison-section th, .comparison-section td { overflow-wrap: anywhere; }
+  .comparison-section th[scope="row"] { min-inline-size: 10rem; }
+  .comparison-section td small { display: block; color: var(--fp-muted); font-family: var(--fp-body); }
+  .comparison-details { margin-block-start: 1.2rem; padding-block-start: 1rem; border-block-start: 1px solid var(--fp-line); }
+  .comparison-details h4 { margin: 0; font-size: 1rem; }
+  .comparison-details caption { padding: 0.75rem; text-align: start; font-weight: 700; }
   .section-empty { display: grid; justify-items: start; gap: 0.75rem; margin-block-start: 0.9rem; padding: 1rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); font-size: 0.82rem; line-height: 1.45; }
   .section-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-block-start: 1rem; }
   .section-action { min-block-size: 2.65rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; padding: 0.55rem 0.8rem; border: 1px solid var(--fp-control-border); border-radius: 0.5rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 0.78rem; font-weight: 800; }
@@ -967,6 +980,13 @@ function trendTable(trend = fallbackOverview.trend) {
 
 function dataWithDefaults(data) {
   const liveData = data?.demo === false;
+  const demoComparison = (entries) => entries.map((entry) => {
+    const plan = Number(entry.plan || 0);
+    const actual = Number(entry.actual ?? entry.value ?? 0);
+    return { key: `name:${entry.name}`, name: entry.name, plan, forecast: actual, actual,
+      variance: actual - plan, forecast_variance: actual - plan,
+      variance_percent: plan ? (actual - plan) / Math.abs(plan) * 100 : null };
+  });
   return {
     ...fallbackOverview,
     ...data,
@@ -976,6 +996,11 @@ function dataWithDefaults(data) {
     trend: { ...fallbackOverview.trend, ...(data?.trend || {}) },
     areas: data?.areas?.length ? data.areas : liveData ? [] : fallbackOverview.areas,
     categories: data?.categories?.length ? data.categories : liveData ? [] : fallbackOverview.categories,
+    comparison: data?.comparison ?? (liveData ? {} : {
+      categories: demoComparison(data?.categories ?? fallbackOverview.categories),
+      areas: demoComparison(data?.areas ?? fallbackOverview.areas),
+      projects: [],
+    }),
   };
 }
 
@@ -993,6 +1018,12 @@ class FinanzplanerPanel extends HTMLElement {
     this._month = new Date();
     this._data = fallbackOverview;
     this._view = "overview";
+    this._comparisonDimension = "categories";
+    this._breakdownSelection = null;
+    this._breakdown = null;
+    this._breakdownLoading = false;
+    this._breakdownError = "";
+    this._overviewRequest = null;
     this._accounts = [];
     this._accountsLoading = false;
     this._accountsLoadFailed = false;
@@ -1085,26 +1116,91 @@ class FinanzplanerPanel extends HTMLElement {
     window.removeEventListener("beforeunload", this._handleBeforeUnload);
     this._clearFeedbackTimer();
     this.shadowRoot.querySelector("[data-confirm-dialog]")?.close();
+    this._clearBreakdown();
+    this._overviewRequest = null;
   }
 
   set hass(value) {
     this._hass = value;
   }
 
+  _monthValue() {
+    return `${this._month.getFullYear()}-${String(this._month.getMonth() + 1).padStart(2, "0")}`;
+  }
+
   async _loadOverview() {
+    const request = { month: this._monthValue() };
+    this._overviewRequest = request;
     this._loading = true;
     try {
-      const response = await fetchWithHomeAssistantAuth(this._hass, `${OVERVIEW_URL}?month=${this._month.toISOString().slice(0, 7)}`);
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${OVERVIEW_URL}?month=${request.month}`);
       const result = await readApiResponse(response);
+      if (this._overviewRequest !== request || this._monthValue() !== request.month) return;
       if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
       this._data = dataWithDefaults(result);
       this._message = "";
     } catch (error) {
+      if (this._overviewRequest !== request || this._monthValue() !== request.month) return;
       this._data = dataWithDefaults(fallbackOverview);
       this._message = `Demo-Ansicht aktiv: ${error.message || "Die Finanzplaner-API ist noch nicht erreichbar."}`;
     } finally {
-      this._loading = false;
-      if (this.isConnected) this._render();
+      if (this._overviewRequest === request && this._monthValue() === request.month) {
+        this._loading = false;
+        if (this.isConnected) this._render();
+      }
+    }
+  }
+
+  _clearBreakdown() {
+    this._breakdownSelection = null;
+    this._breakdown = null;
+    this._breakdownLoading = false;
+    this._breakdownError = "";
+  }
+
+  _setComparisonDimension(dimension) {
+    if (!["categories", "areas", "projects"].includes(dimension)) return;
+    this._comparisonDimension = dimension;
+    this._clearBreakdown();
+    this._render();
+    this.shadowRoot.querySelector(`[data-comparison-dimension="${dimension}"]`)?.focus();
+  }
+
+  _closeBreakdown() {
+    const key = this._breakdownSelection?.key;
+    this._clearBreakdown();
+    this._render();
+    [...this.shadowRoot.querySelectorAll("[data-comparison-detail]")]
+      .find((button) => button.dataset.comparisonDetail === key)?.focus();
+  }
+
+  async _loadBreakdown(dimension, key) {
+    if (this._view !== "overview" || this._loading || dimension !== this._comparisonDimension || this._data.demo !== false) return;
+    const selection = { month: this._monthValue(), dimension, key };
+    this._breakdownSelection = selection;
+    this._breakdown = null;
+    this._breakdownLoading = true;
+    this._breakdownError = "";
+    this._message = "";
+    const current = () => this._view === "overview" && this._breakdownSelection === selection
+      && this._monthValue() === selection.month && this._comparisonDimension === dimension;
+    this._render();
+    this.shadowRoot.querySelector("#comparison-details-heading")?.focus();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, breakdownRequestUrl(BREAKDOWN_URL, selection.month, dimension, key));
+      const result = await readApiResponse(response);
+      if (!current()) return;
+      if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+      this._breakdown = result;
+    } catch (error) {
+      if (!current()) return;
+      this._breakdownError = `Vergleich konnte nicht geladen werden: ${error.message || "Bitte erneut laden."}`;
+      this._message = this._breakdownError;
+    } finally {
+      if (current()) {
+        this._breakdownLoading = false;
+        this._render();
+      }
     }
   }
 
@@ -2813,6 +2909,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   async _navigateToOverview() {
     if (!(await this._confirmDiscardUnsavedChanges())) return;
+    if (this._view !== "overview") this._clearBreakdown();
     this._view = "overview";
     this._render();
     this._focusContent();
@@ -3279,10 +3376,15 @@ class FinanzplanerPanel extends HTMLElement {
 
   _shiftMonth(delta) {
     this._month = new Date(this._month.getFullYear(), this._month.getMonth() + delta, 1);
+    this._clearBreakdown();
     this._loadOverview();
+    this._render();
   }
 
   _render() {
+    if (this._view !== "overview") this._clearBreakdown();
+    const comparisonFocus = this.shadowRoot.activeElement;
+    const comparisonFocusId = comparisonFocus?.closest(".comparison-section") ? comparisonFocus.id : null;
     const template = this._view === "review"
       ? this._reviewTemplate()
       : this._view === "resolved"
@@ -3308,9 +3410,17 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => this._updateAllocationSummary(form));
     if (["review", "resolved"].includes(this._view)) this._syncBookingSelectionControls(this._view);
     this._syncFeedbackPresenter();
+    if (comparisonFocusId) this.shadowRoot.getElementById(comparisonFocusId)?.focus({ preventScroll: true });
   }
 
   _bindEvents() {
+    this.shadowRoot.querySelectorAll("[data-comparison-dimension]").forEach((button) => button.addEventListener("click", () => this._setComparisonDimension(button.dataset.comparisonDimension)));
+    this.shadowRoot.querySelectorAll("[data-comparison-detail]").forEach((button) => button.addEventListener("click", () => this._loadBreakdown(this._comparisonDimension, button.dataset.comparisonDetail)));
+    this.shadowRoot.querySelector("[data-comparison-close]")?.addEventListener("click", () => this._closeBreakdown());
+    this.shadowRoot.querySelector("[data-comparison-retry]")?.addEventListener("click", () => {
+      const selection = this._breakdownSelection;
+      if (selection) this._loadBreakdown(selection.dimension, selection.key);
+    });
     this.shadowRoot.querySelector("[data-skip-link]")?.addEventListener("click", (event) => {
       event.preventDefault();
       this.shadowRoot.querySelector("#content")?.focus();
@@ -3476,6 +3586,62 @@ class FinanzplanerPanel extends HTMLElement {
     </header>`;
   }
 
+  _comparisonTemplate(data) {
+    const dimension = this._comparisonDimension;
+    const label = comparisonDimensionLabel(dimension);
+    const entries = comparisonEntries(data.comparison, dimension);
+    const rows = entries.map((entry, index) => {
+      const variance = Number(entry.variance || 0);
+      const status = variance > 0 ? "Ist über Plan" : variance < 0 ? "Ist unter Plan" : "Ist entspricht Plan";
+      return `<tr><th scope="row">${escapeHtml(entry.name)}</th>
+        <td class="section-table-number">${formatEuro(entry.plan)}</td>
+        <td class="section-table-number">${formatEuro(entry.forecast)}</td>
+        <td class="section-table-number">${formatEuro(entry.actual)}</td>
+        <td class="section-table-number">${formatEuro(variance)}<small>${status}</small></td>
+        <td><button class="section-action" id="comparison-detail-${index}" type="button" data-comparison-detail="${escapeHtml(entry.key)}" aria-label="Details für ${escapeHtml(entry.name)}" aria-controls="comparison-details" aria-expanded="${this._breakdownSelection?.key === entry.key}" ${data.demo || this._loading ? "disabled" : ""}>Details</button></td></tr>`;
+    }).join("");
+    return `<section class="surface section-card comparison-section" aria-labelledby="comparison-heading">
+      <h3 id="comparison-heading">Budget-Ist-Vergleich</h3>
+      <p>${monthLabel(this._month)} · Abweichung = Ist minus Plan. Positive Werte liegen über, negative unter dem geplanten Saldo.</p>
+      ${data.demo ? `<p>Demo-Daten · Prognose entspricht hier dem Ist. Detailbuchungen sind in der Demo nicht verfügbar.</p>` : ""}
+      <div class="section-actions" role="group" aria-label="Vergleich gruppieren nach">
+        ${["categories", "areas", "projects"].map((kind) => `<button class="section-action" id="comparison-dimension-${kind}" type="button" data-comparison-dimension="${kind}" aria-pressed="${dimension === kind}">${comparisonDimensionLabel(kind)}</button>`).join("")}
+      </div>
+      ${this._loading ? `<p role="status" aria-live="polite">Vergleichswerte werden geladen …</p>` : rows ? `<div class="section-data-table-wrap" role="region" aria-label="${label} im Monatsvergleich" tabindex="0"><table class="section-data-table">
+        <caption class="visually-hidden">${label} · ${monthLabel(this._month)} · Beträge in Euro</caption>
+        <thead><tr><th scope="col">Bezeichnung</th><th scope="col">Plan</th><th scope="col">Prognose</th><th scope="col">Ist</th><th scope="col">Abweichung</th><th scope="col">Details</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>` : `<p class="empty-state" role="status" aria-live="polite">Keine Vergleichswerte für ${label} in diesem Monat. Werte erscheinen, sobald Planposten oder Buchungen vorhanden sind.</p>`}
+      <div id="comparison-details">${this._breakdownTemplate(entries)}</div>
+    </section>`;
+  }
+
+  _breakdownTemplate(entries) {
+    const selection = this._breakdownSelection;
+    if (!selection) return "";
+    const details = this._breakdown;
+    const name = details?.name ?? entries.find((entry) => entry.key === selection.key)?.name ?? "Vergleich";
+    const status = this._breakdownLoading ? "Details werden geladen …" : this._breakdownError || "Details geladen.";
+    const plans = (details?.plan_items || []).map((item) => `<tr><th scope="row">${escapeHtml(item.name)}</th>
+      <td>${({ income: "Einnahme", expense: "Ausgabe", saving: "Rücklage" })[item.direction] || "Planposten"}</td>
+      <td class="section-table-number">${formatEuro(item.amount)}</td><td>${escapeHtml(planItemFrequencyLabel(item.frequency_months))}</td></tr>`).join("");
+    const bookings = (details?.bookings || []).map((booking) => `<tr><th scope="row">${escapeHtml(booking.counterparty || "Ohne Zahlungsempfänger")}</th>
+      <td>${escapeHtml(formatDate(booking.booking_date))}</td><td>${escapeHtml(booking.purpose)}</td>
+      <td class="section-table-number">${formatEuro(booking.matched_amount)}</td></tr>`).join("");
+    return `<section class="comparison-details" aria-labelledby="comparison-details-heading">
+      <h4 id="comparison-details-heading" tabindex="-1">${escapeHtml(name)} · ${monthLabel(this._month)}</h4>
+      <p role="status" aria-live="polite" aria-atomic="true">${escapeHtml(status)}</p>
+      <div class="section-actions"><button class="section-action" id="comparison-close" type="button" data-comparison-close>Vergleich schließen</button>
+        <button class="section-action" id="comparison-retry" type="button" data-comparison-retry ${this._breakdownLoading ? "disabled" : ""}>Erneut laden</button></div>
+      ${details ? `<p>Planposten zeigen den hinterlegten Betrag und Rhythmus. Buchungen zeigen nur den Anteil dieser Zuordnung. Futterprognosen können zusätzliche Prognosewerte liefern.</p>
+        <div class="section-data-table-wrap" role="region" aria-label="Planposten für ${escapeHtml(name)}" tabindex="0"><table class="section-data-table"><caption>Planposten · ${escapeHtml(name)}</caption>
+          <thead><tr><th scope="col">Bezeichnung</th><th scope="col">Richtung</th><th scope="col">Betrag</th><th scope="col">Rhythmus</th></tr></thead>
+          <tbody>${plans || `<tr><td colspan="4">Keine Planposten für diese Zuordnung im ausgewählten Monat.</td></tr>`}</tbody></table></div>
+        <div class="section-data-table-wrap" role="region" aria-label="Buchungen für ${escapeHtml(name)}" tabindex="0"><table class="section-data-table"><caption>Buchungen · ${escapeHtml(name)}</caption>
+          <thead><tr><th scope="col">Zahlungsempfänger</th><th scope="col">Datum</th><th scope="col">Verwendungszweck</th><th scope="col">Zugeordneter Betrag</th></tr></thead>
+          <tbody>${bookings || `<tr><td colspan="4">Keine Buchungen für diese Zuordnung im ausgewählten Monat.</td></tr>`}</tbody></table></div>` : ""}
+    </section>`;
+  }
+
   _overviewTemplate() {
     const data = dataWithDefaults(this._data);
     const variance = Number(data.variance || 0);
@@ -3513,6 +3679,7 @@ class FinanzplanerPanel extends HTMLElement {
         <section class="surface trend-card" data-reveal style="--reveal-order: 6" aria-labelledby="trend-heading"><div class="section-heading"><h3 id="trend-heading">Monatsverlauf</h3><p>Einnahmen und Ausgaben kumuliert · ${monthLabel(this._month)}</p></div><div class="chart-wrap">${chartMarkup(data.trend)}${trendTable(data.trend)}</div><div class="chart-legend" aria-hidden="true"><span class="legend-item"><i class="legend-line legend-line--plan"></i>Planung (kumuliert)</span><span class="legend-item"><i class="legend-line legend-line--forecast"></i>Prognose (kumuliert)</span><span class="legend-item"><i class="legend-line"></i>Ist (kumuliert)</span><span class="legend-item"><i class="legend-dot legend-dot--plan"></i>Geplante Zahlung</span><span class="legend-item"><i class="legend-dot"></i>Gebuchte Zahlung</span></div></section>
         <aside class="surface review-card" data-reveal style="--reveal-order: 7" aria-labelledby="review-heading"><h3 class="review-heading" id="review-heading"><span class="warning-badge">${icon("warning", 18)}</span>Ungeklärte Buchungen</h3><p class="review-count">${escapeHtml(data.unresolved_count)}</p><p class="review-label">Buchungen in Prüfung</p><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 19)}</button><div class="review-amount"><p class="review-amount-label">Offener Betrag</p><p class="review-amount-value">${formatEuro(data.unresolved_total)}</p><p class="review-amount-note">Die zur Klärung nicht einberechneten Beträge.</p></div>${last ? `<div class="last-review">${icon("file", 19)}<span>Letzte ungeklärte Buchung<br><strong>${formatDate(last.date || last.booking_date)} · ${formatEuro(last.amount)}</strong></span></div>` : ""}</aside>
       </div>
+      ${this._comparisonTemplate(data)}
       <div class="bottom-grid">
         <section class="surface bottom-card" aria-labelledby="household-heading" data-reveal style="--reveal-order: 8"><h3 id="household-heading">Haushaltsübersicht</h3><p class="subline">${monthLabel(this._month)}</p><div class="metric-strip"><div class="mini-metric mini-metric--positive"><span class="mini-metric-icon">${icon("income", 25)}</span><p class="mini-metric-label">Einnahmen</p><p class="mini-metric-value">${formatEuro(household.income)}</p><p class="mini-metric-caption">${planShareCaption(household.income, household.income_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--negative"><span class="mini-metric-icon">${icon("expense", 25)}</span><p class="mini-metric-label">Ausgaben</p><p class="mini-metric-value">${formatEuro(household.expenses)}</p><p class="mini-metric-caption">${planShareCaption(household.expenses, household.expenses_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--negative"><span class="mini-metric-icon">${icon("savings", 25)}</span><p class="mini-metric-label">Rücklagen</p><p class="mini-metric-value">${formatEuro(household.savings)}</p><p class="mini-metric-caption">${planShareCaption(household.savings, household.savings_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--available"><span class="mini-metric-icon">${icon("coins", 25)}</span><p class="mini-metric-label">Verfügbar</p><p class="mini-metric-value">${formatEuro(household.available)}</p><p class="mini-metric-caption">bisheriger Saldo</p></div></div></section>
         <section class="surface bottom-card" aria-labelledby="areas-heading" data-reveal style="--reveal-order: 9"><h3 id="areas-heading">Bereiche <span class="visually-hidden">Ist gegenüber Plan</span></h3><p class="subline">Ist vs. Plan</p><div class="bar-list">${areaRows || `<p class="empty-state">Für diesen Monat sind noch keine Bereichswerte vorhanden.</p>`}</div></section>

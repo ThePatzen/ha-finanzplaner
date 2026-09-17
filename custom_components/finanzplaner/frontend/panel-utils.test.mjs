@@ -660,6 +660,201 @@ test("undoing a resolved booking posts to the unresolve endpoint and refreshes t
   assert.match(panel._message, /Prüfliste/);
 });
 
+test("comparison labels and entries select only the requested dimension", () => {
+  assert.equal(utils.comparisonDimensionLabel("categories"), "Kategorien");
+  assert.equal(utils.comparisonDimensionLabel("areas"), "Bereiche");
+  assert.equal(utils.comparisonDimensionLabel("projects"), "Projekte");
+  const entries = [{ key: "id:food", name: "Futter", plan: -50, actual: -30 }];
+  assert.deepEqual(utils.comparisonEntries({ categories: entries }, "categories"), entries);
+  assert.deepEqual(utils.comparisonEntries({ categories: entries }, "projects"), []);
+  assert.deepEqual(utils.comparisonEntries(null, "categories"), []);
+});
+
+test("breakdown URL encodes each query value independently", () => {
+  assert.equal(utils.breakdownRequestUrl("/api/finanzplaner/overview/breakdown", "2026-09", "categories", "name:Futter & Öl/+?#"),
+    "/api/finanzplaner/overview/breakdown?month=2026-09&dimension=categories&key=name%3AFutter%20%26%20%C3%96l%2F%2B%3F%23");
+  assert.equal(utils.breakdownRequestUrl("/breakdown", "2026&09", "areas/projects", "__unassigned__"),
+    "/breakdown?month=2026%2609&dimension=areas%2Fprojects&key=__unassigned__");
+});
+
+function comparisonTestPanel() {
+  const panel = ruleTestPanel();
+  panel._month = new Date(2026, 8, 1);
+  panel._data = { demo: false, comparison: { categories: [
+    { key: "id:food", name: "Futter <Bio>", plan: -50, forecast: -55, actual: -30, variance: 20, forecast_variance: -5, variance_percent: 40 },
+  ], areas: [], projects: [] } };
+  panel._render = () => { panel.markup = panel._overviewTemplate(); };
+  return panel;
+}
+
+function breakdownResponse(overrides = {}) {
+  return new Response(JSON.stringify({ month: "2026-09", dimension: "categories", key: "id:food", name: "Futter <Bio>",
+    plan_items: [{ id: "p1", name: "Futterbudget", amount: 50, direction: "expense", frequency_months: 1, active: true }],
+    bookings: [{ id: "b1", booking_date: "2026-09-10", counterparty: "Tierladen", purpose: "Futter <Bio>", amount: -90, matched_amount: -30 }],
+    ...overrides,
+  }), { headers: { "Content-Type": "application/json" } });
+}
+
+test("overview source includes comparison semantics, native controls and live status", () => {
+  assert.match(panelSource, /Budget-Ist-Vergleich/);
+  for (const label of ["Plan", "Prognose", "Ist", "Abweichung", "Details"]) {
+    assert.ok(panelSource.includes(`<th scope="col">${label}`), `Missing ${label} column`);
+  }
+  assert.match(panelSource, /<button[^>]*type="button"[^>]*data-comparison-dimension/);
+  assert.match(panelSource, /aria-pressed=/);
+  assert.match(panelSource, /data-comparison-detail/);
+  assert.match(panelSource, /aria-live="polite"/);
+  const panel = comparisonTestPanel();
+  const markup = panel._overviewTemplate();
+  assert.equal((markup.match(/data-comparison-dimension=/g) || []).length, 3);
+  assert.match(markup, /<caption[^>]*>[^<]*Kategorien/);
+  assert.match(markup, /<th scope="row">Futter &lt;Bio&gt;<\/th>/);
+  assert.match(markup, /Ist über Plan/);
+  assert.ok(markup.indexOf("Budget-Ist-Vergleich") > markup.indexOf("Monatsverlauf"));
+});
+
+test("breakdown loads through HA auth and renders source tables and matched booking amount", async () => {
+  const panel = comparisonTestPanel();
+  let respond;
+  panel._hass = { fetchWithAuth: (url) => {
+    assert.equal(url, "/api/finanzplaner/overview/breakdown?month=2026-09&dimension=categories&key=id%3Afood");
+    return new Promise((resolve) => { respond = resolve; });
+  } };
+  const pending = panel._loadBreakdown("categories", "id:food");
+  assert.match(panel.markup, /Details werden geladen/);
+  respond(breakdownResponse());
+  await pending;
+  assert.match(panel.markup, /<caption[^>]*>Planposten/);
+  assert.match(panel.markup, /<caption[^>]*>Buchungen/);
+  assert.match(panel.markup, /<th scope="row">Futterbudget<\/th>/);
+  assert.match(panel.markup, /Tierladen/);
+  assert.match(panel.markup, /−30,00 €/);
+  assert.match(panel.markup, /Futter &lt;Bio&gt;/);
+  assert.match(panel.markup, /Vergleich schließen/);
+  assert.match(panel.markup, /Erneut laden/);
+  assert.equal(panel._breakdownLoading, false);
+});
+
+test("breakdown error uses feedback and offers retry; empty results explain both source lists", async () => {
+  const panel = comparisonTestPanel();
+  panel._hass = { fetchWithAuth: async () => new Response("Zugriff verweigert", { status: 403 }) };
+  await panel._loadBreakdown("categories", "id:food");
+  assert.match(panel._message, /Zugriff verweigert/);
+  assert.match(panel.markup, /Erneut laden/);
+  assert.equal(panel._breakdownLoading, false);
+  panel._hass.fetchWithAuth = async () => breakdownResponse({ plan_items: [], bookings: [] });
+  await panel._loadBreakdown("categories", "id:food");
+  assert.match(panel.markup, /Keine Planposten/);
+  assert.match(panel.markup, /Keine Buchungen/);
+  assert.equal(panel._breakdownError, "");
+});
+
+test("opening breakdown focuses its heading without suppressing native scrolling", async () => {
+  const panel = comparisonTestPanel();
+  const focusOptions = [];
+  panel.shadowRoot.querySelector = (selector) => selector === "#comparison-details-heading"
+    ? { focus: (options) => focusOptions.push(options) } : null;
+  panel._hass = { fetchWithAuth: async () => breakdownResponse() };
+  await panel._loadBreakdown("categories", "id:food");
+  assert.equal(focusOptions.length, 1);
+  assert.notEqual(focusOptions[0]?.preventScroll, true);
+});
+
+test("new selection wins even if the previous breakdown finishes last", async () => {
+  const panel = comparisonTestPanel();
+  const responses = [];
+  panel._hass = { fetchWithAuth: () => new Promise((resolve) => responses.push(resolve)) };
+  const first = panel._loadBreakdown("categories", "id:food");
+  const second = panel._loadBreakdown("categories", "id:other");
+  responses[1](breakdownResponse({ key: "id:other", name: "Neu", bookings: [], plan_items: [] }));
+  await second;
+  responses[0](breakdownResponse());
+  await first;
+  assert.equal(panel._breakdown.key, "id:other");
+  assert.doesNotMatch(panel.markup, /Tierladen/);
+});
+
+test("month, dimension, close and view changes discard pending breakdown responses", async () => {
+  for (const change of [
+    (panel) => { panel._loadOverview = async () => {}; panel._shiftMonth(1); },
+    (panel) => panel._setComparisonDimension("projects"),
+    (panel) => panel._closeBreakdown(),
+    (panel) => { panel._view = "review"; },
+  ]) {
+    const panel = comparisonTestPanel();
+    let respond;
+    panel._hass = { fetchWithAuth: () => new Promise((resolve) => { respond = resolve; }) };
+    const pending = panel._loadBreakdown("categories", "id:food");
+    change(panel);
+    respond(breakdownResponse());
+    await pending;
+    assert.equal(panel._breakdown, null);
+    assert.equal(panel._message, "");
+  }
+});
+
+test("a stale error cannot replace a successful retry for the same selection", async () => {
+  const panel = comparisonTestPanel();
+  const responses = [];
+  panel._hass = { fetchWithAuth: () => new Promise((resolve, reject) => responses.push({ resolve, reject })) };
+  const first = panel._loadBreakdown("categories", "id:food");
+  const retry = panel._loadBreakdown("categories", "id:food");
+  responses[1].resolve(breakdownResponse());
+  await retry;
+  responses[0].reject(new Error("Veralteter Fehler"));
+  await first;
+  assert.match(panel.markup, /Tierladen/);
+  assert.equal(panel._breakdownError, "");
+  assert.equal(panel._message, "");
+});
+
+test("loaded details clear on dimension and month changes", async () => {
+  const panel = comparisonTestPanel();
+  panel._hass = { fetchWithAuth: async () => breakdownResponse() };
+  await panel._loadBreakdown("categories", "id:food");
+  panel._setComparisonDimension("projects");
+  assert.equal(panel._breakdown, null);
+  assert.doesNotMatch(panel.markup, /Tierladen/);
+  assert.match(panel.markup, /data-comparison-dimension="projects" aria-pressed="true"/);
+  panel._setComparisonDimension("categories");
+  await panel._loadBreakdown("categories", "id:food");
+  panel._loadOverview = async () => {};
+  panel._shiftMonth(1);
+  assert.equal(panel._breakdown, null);
+  assert.doesNotMatch(panel.markup, /Tierladen/);
+});
+
+test("empty live comparison stays empty and demo data has an explicit projection", () => {
+  const panel = comparisonTestPanel();
+  panel._data = { demo: false };
+  assert.match(panel._overviewTemplate(), /Keine Vergleichswerte/);
+  panel._data = { demo: true };
+  const markup = panel._overviewTemplate();
+  assert.match(markup, /<th scope="row">Lebensmittel<\/th>/);
+  assert.match(markup, /Demo-Daten/);
+  assert.match(markup, /Detailbuchungen.*Demo/);
+});
+
+test("overview ignores old month responses and requests the local calendar month", async () => {
+  const panel = comparisonTestPanel();
+  const responses = [];
+  panel._hass = { fetchWithAuth: (url) => {
+    responses.push({ url, resolve: null });
+    return new Promise((resolve) => { responses.at(-1).resolve = resolve; });
+  } };
+  const first = panel._loadOverview();
+  panel._month = new Date(2026, 9, 1);
+  const second = panel._loadOverview();
+  assert.equal(responses[0].url, "/api/finanzplaner/overview?month=2026-09");
+  assert.equal(responses[1].url, "/api/finanzplaner/overview?month=2026-10");
+  responses[1].resolve(new Response(JSON.stringify({ demo: false, month: "2026-10", actual: 20 }), { headers: { "Content-Type": "application/json" } }));
+  await second;
+  responses[0].resolve(new Response(JSON.stringify({ demo: false, month: "2026-09", actual: 10 }), { headers: { "Content-Type": "application/json" } }));
+  await first;
+  assert.equal(panel._data.month, "2026-10");
+  assert.equal(panel._data.actual, 20);
+});
+
 function validRuleDraft() {
   return {
     label: "Lebensmittel", active: true, priority: "100", account_id: "",

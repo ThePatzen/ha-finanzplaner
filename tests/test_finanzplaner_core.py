@@ -217,6 +217,120 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(details["trend"]["forecast"][-1], -135.0)
         self.assertEqual(details["trend"]["today_index"], 3)
 
+    def test_overview_comparison_exposes_plan_forecast_actual_and_variances(self):
+        core = load_core()
+
+        comparison = core.overview_comparison(
+            {
+                "catalogs": {
+                    "areas": [{"id": "area-pets", "label": "Haustiere"}],
+                    "categories": [{"id": "category-food", "label": "Futter"}],
+                    "projects": [{"id": "project-fio", "label": "Fio"}],
+                },
+                "plan_items": [
+                    {
+                        "active": True,
+                        "direction": "expense",
+                        "amount": 100,
+                        "frequency_months": 1,
+                        "due_day": 5,
+                        "area_id": "area-pets",
+                        "category_id": "category-food",
+                        "project_id": "project-fio",
+                    }
+                ],
+                "bookings": [
+                    {
+                        "booking_date": "2026-09-03",
+                        "amount": -30,
+                        "allocations": [
+                            {
+                                "amount": 30,
+                                "area_id": "area-pets",
+                                "category_id": "category-food",
+                                "project_id": "project-fio",
+                            }
+                        ],
+                    }
+                ],
+            },
+            "2026-09",
+        )
+
+        expected = {
+            "key": "area-pets",
+            "name": "Haustiere",
+            "plan": -100.0,
+            "forecast": -130.0,
+            "actual": -30.0,
+            "variance": 70.0,
+            "forecast_variance": -30.0,
+            "variance_percent": 70.0,
+        }
+        self.assertEqual(comparison["areas"], [expected])
+        self.assertEqual(
+            comparison["categories"],
+            [{**expected, "key": "category-food", "name": "Futter"}],
+        )
+        self.assertEqual(
+            comparison["projects"],
+            [{**expected, "key": "project-fio", "name": "Fio"}],
+        )
+
+    def test_overview_comparison_keeps_unassigned_values_and_catalog_keys(self):
+        core = load_core()
+
+        comparison = core.overview_comparison(
+            {
+                "catalogs": {"categories": []},
+                "plan_items": [
+                    {
+                        "active": True,
+                        "direction": "expense",
+                        "amount": 10,
+                        "frequency_months": 1,
+                        "due_day": 5,
+                    },
+                    {
+                        "active": True,
+                        "direction": "expense",
+                        "amount": 20,
+                        "frequency_months": 1,
+                        "due_day": 5,
+                        "category_id": "category-archived",
+                        "category": "Historisches Futter",
+                    },
+                ],
+                "bookings": [
+                    {
+                        "booking_date": "2026-09-03",
+                        "amount": -4,
+                        "allocations": [{"amount": 4}],
+                    },
+                    {
+                        "booking_date": "2026-09-04",
+                        "amount": -8,
+                        "allocations": [
+                            {
+                                "amount": 8,
+                                "category_id": "category-archived",
+                                "category": "Historisches Futter",
+                            }
+                        ],
+                    },
+                ],
+            },
+            "2026-09",
+        )
+
+        categories = {entry["key"]: entry for entry in comparison["categories"]}
+        self.assertEqual(categories["__unassigned__"]["name"], "Nicht zugeordnet")
+        self.assertEqual(categories["__unassigned__"]["plan"], -10.0)
+        self.assertEqual(categories["__unassigned__"]["actual"], -4.0)
+        self.assertEqual(categories["category-archived"]["name"], "Historisches Futter")
+        self.assertEqual(categories["category-archived"]["plan"], -20.0)
+        self.assertEqual(categories["category-archived"]["actual"], -8.0)
+
 
 class ImportTests(unittest.TestCase):
     def test_mt940_import_reads_booking_and_preserves_reference(self):

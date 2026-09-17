@@ -34,6 +34,16 @@ mit den folgenden Erweiterungen und UI-Verbesserungen:
 - lokale Versionierung über Home Assistants persistenten Store
 - ausgewählte Übersichtswerte als HA-Sensoren
 
+### Unreleased
+
+Die noch nicht veröffentlichte Erweiterung ergänzt die Monatsübersicht um den
+Budget-Ist-Vergleich. Er zeigt die Werte des ausgewählten Monats je Bereich,
+Kategorie oder Projekt. Über die drei Schaltflächen wechselst du die Dimension.
+Mit `Details` öffnest du unter der Tabelle eine Inline-Ansicht mit den passenden
+Planposten und Buchungen. Planposten zeigen Betrag, Richtung und Rhythmus;
+Buchungen zeigen den zugeordneten Teilbetrag. In Demo-Daten sind
+Detailbuchungen nicht verfügbar.
+
 Die Integration zeigt bei einem leeren Workspace klar markierte synthetische Demo-Daten. Private Konten, Bankdateien und die ursprüngliche Excel-Datei gehören nicht in dieses öffentliche Repository.
 
 ## Installation über HACS

@@ -42,6 +42,7 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
         FeedProfileView,
         FeedProfilesView,
         ImportView,
+        OverviewBreakdownView,
         OverviewView,
         PetView,
         PetsView,
@@ -57,6 +58,7 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
     hass.http.register_view(OverviewView)
+    hass.http.register_view(OverviewBreakdownView)
     hass.http.register_view(PlanItemsView)
     hass.http.register_view(PlanItemView)
     hass.http.register_view(PersonsView)
