@@ -1,7 +1,7 @@
 # Budget-Ist-Vergleich – Fachliche Spezifikation
 
-**Stand:** 2026-09-17  
-**Status:** Umsetzung im Feature-Worktree  
+**Stand:** 2026-09-17
+**Status:** Umsetzung im Feature-Worktree
 **Repository:** `ThePatzen/ha-finanzplaner`
 
 ## Ziel
