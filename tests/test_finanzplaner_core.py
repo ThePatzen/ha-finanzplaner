@@ -1,4 +1,5 @@
 import importlib
+import json
 import unittest
 from datetime import date
 
@@ -425,6 +426,70 @@ class ImportTests(unittest.TestCase):
         self.assertIn('UnknownBankData', unknown)
         self.assertIn('nicht verlieren', unknown)
         self.assertIn('X7', unknown)
+
+    def test_camt_records_keep_only_own_entry_with_statement_metadata(self):
+        core = load_core()
+
+        def raw_with_entries(count):
+            entries = "".join(
+                f"""
+                <Ntry data-id="entry-{index}">
+                  <Amt Ccy="EUR">{index + 1}.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+                  <BookgDt><Dt>2026-09-{index + 1:02d}</Dt></BookgDt>
+                  <NtryDtls><TxDtls><RmtInf><Ustrd>purpose-{index}</Ustrd></RmtInf>
+                    <UnknownBankData code="X{index}"><Value>unique-{index}</Value></UnknownBankData>
+                  </TxDtls></NtryDtls>
+                </Ntry>
+                """
+                for index in range(count)
+            )
+            return f"""<Document xmlns="urn:test"><BkToCstmrStmt><Stmt>
+              <Id>statement-metadata</Id>
+              <Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+              {entries}
+            </Stmt></BkToCstmrStmt></Document>"""
+
+        small = core.parse_camt053_records(raw_with_entries(2))
+        large = core.parse_camt053_records(raw_with_entries(8))
+
+        self.assertEqual(len(large), 8)
+        first_source = json.dumps(small[0].source_data, sort_keys=True)
+        first_large_source = json.dumps(large[0].source_data, sort_keys=True)
+        self.assertEqual(first_large_source, first_source)
+        self.assertIn("unique-0", first_large_source)
+        self.assertNotIn("unique-1", first_large_source)
+        self.assertNotIn("entry-7", first_large_source)
+        statement_children = large[0].source_data["context"]["statement"]["children"]
+        self.assertEqual([child["name"] for child in statement_children], ["Id", "Acct"])
+
+    def test_mt940_context_isolated_between_statement_boundaries(self):
+        core = load_core()
+        raw = (
+            ":20:FIRST-STATEMENT\n"
+            ":25:FIRST-ACCOUNT\n"
+            ":61:2609010901D10,00NTRFFIRST\n"
+            ":86:First purpose\n"
+            ":20:SECOND-STATEMENT\n"
+            ":25:SECOND-ACCOUNT\n"
+            ":61:2609020902C20,00NTRFSECOND\n"
+            ":86:Second purpose\n"
+        )
+
+        records = core.parse_mt940_records(raw)
+
+        self.assertEqual(len(records), 2)
+        self.assertEqual(
+            records[0].source_data["record"]["lines"],
+            [":61:2609010901D10,00NTRFFIRST", ":86:First purpose"],
+        )
+        self.assertEqual(
+            records[0].source_data["context"]["lines"],
+            [":20:FIRST-STATEMENT", ":25:FIRST-ACCOUNT"],
+        )
+        self.assertEqual(
+            records[1].source_data["context"]["lines"],
+            [":20:SECOND-STATEMENT", ":25:SECOND-ACCOUNT"],
+        )
 
     def test_mt940_import_reads_booking_and_preserves_reference(self):
         core = load_core()

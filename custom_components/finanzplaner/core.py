@@ -2051,7 +2051,11 @@ def parse_mt940_records(raw: str) -> list[ParsedBooking]:
 
     for raw_line in raw.splitlines():
         line = raw_line.strip()
-        if line.startswith(":25:"):
+        if line.startswith(":20:"):
+            finish()
+            account = ""
+            context_lines = [raw_line]
+        elif line.startswith(":25:"):
             finish()
             account = line[4:].strip()
             context_lines.append(raw_line)
@@ -2143,7 +2147,9 @@ def parse_camt053_records(raw: str) -> list[ParsedBooking]:
                     source_data={
                         "record": source_xml_node(entry),
                         "context": {
-                            "statement": source_xml_node(statement),
+                            "statement": source_xml_node(
+                                statement, exclude_names=frozenset({"Ntry"})
+                            ),
                             "account": account,
                         },
                     },

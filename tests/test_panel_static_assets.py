@@ -80,3 +80,41 @@ class PanelStaticAssetsTest(unittest.TestCase):
             'typeof value === "object" && Object.keys(value).length === 0',
             source,
         )
+
+    def test_booking_detail_preserves_dialog_request_and_focus_across_refreshes(self) -> None:
+        panel_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        )
+        source = panel_path.read_text(encoding="utf-8")
+
+        self.assertIn("const bookingDetailWasOpen =", source)
+        self.assertIn("this._bookingDetailId", source)
+        self.assertIn("const focusTarget =", source)
+        self.assertIn(
+            'content.querySelector("[data-booking-raw-toggle]")?.focus()',
+            source,
+        )
+
+    def test_booking_detail_loading_and_legacy_states_have_visible_close_or_notice(self) -> None:
+        panel_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        )
+        source = panel_path.read_text(encoding="utf-8")
+
+        loading = re.search(
+            r"if \(this\._bookingDetailLoading\) return '(.*?)';",
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(loading)
+        self.assertIn("data-booking-detail-close", loading.group(1))
+        self.assertIn("booking-detail-legacy", source)
+        self.assertIn("alten Import", source)

@@ -350,6 +350,7 @@ const styles = `
   .booking-detail-dialog h3 { font-size: 1.05rem; }
   .booking-detail-description, .booking-detail-status, .booking-detail-error { margin: 0.35rem 0 0; color: var(--fp-muted); line-height: 1.5; overflow-wrap: anywhere; }
   .booking-detail-error { padding: 0.8rem; border-inline-start: 0.25rem solid var(--fp-coral); color: var(--fp-ink); background: var(--fp-coral-soft); }
+  .booking-detail-legacy { margin: 0; padding: 0.75rem; border: 1px solid var(--fp-line); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-amber-soft); line-height: 1.45; }
   .booking-detail-section { display: grid; gap: 0.65rem; padding-block-start: 0.8rem; border-block-start: 1px solid var(--fp-line); }
   .booking-detail-fields, .booking-detail-nested { display: grid; gap: 0.5rem; margin: 0; }
   .booking-detail-fields > div, .booking-detail-nested > div { display: grid; grid-template-columns: minmax(8rem, 0.42fr) minmax(0, 1fr); gap: 0.8rem; padding-block: 0.4rem; border-block-end: 1px solid rgb(214 219 220 / 0.7); }
@@ -1076,6 +1077,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._bookingDetailRawVisible = false;
     this._bookingDetailTrigger = null;
     this._bookingDetailRequest = null;
+    this._bookingDetailId = null;
     this._selectedReviewBookings = new Set();
     this._selectedResolvedBookings = new Set();
     this._deletingBookings = false;
@@ -1236,35 +1238,45 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _bookingDetailDialogTemplate() {
-    if (this._bookingDetailLoading) return '<section class="booking-detail-section" aria-live="polite"><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-status">Buchungsdetails werden geladen …</p></section>';
+    if (this._bookingDetailLoading) return '<section class="booking-detail-section" aria-live="polite"><header class="booking-detail-header"><h2 id="booking-detail-title">Buchungsdetails</h2><button type="button" class="icon-button" data-booking-detail-close aria-label="Buchungsdetails schließen">Schließen</button></header><p id="booking-detail-description" class="booking-detail-status">Buchungsdetails werden geladen …</p></section>';
     if (this._bookingDetailError) return '<section class="booking-detail-section" aria-live="assertive"><div><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-error">' + escapeHtml(this._bookingDetailError) + '</p></div><div class="booking-detail-actions"><button type="button" data-booking-detail-close>Schließen</button></div></section>';
     if (!this._bookingDetail) return '<section class="booking-detail-section"><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-status">Keine Buchungsdetails vorhanden.</p><div class="booking-detail-actions"><button type="button" data-booking-detail-close>Schließen</button></div></section>';
     const { booking, account, details } = this._bookingDetail;
     const status = details?.status || booking?.status;
     const rawMarkup = this._bookingDetailRawVisible ? '<section class="booking-detail-section"><h3>Rohdaten</h3><pre class="booking-detail-raw" data-booking-raw></pre></section>' : '';
-    return `<header class="booking-detail-header"><div><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-description">${escapeHtml(String(booking?.counterparty || booking?.purpose || "Buchung"))}</p></div><button type="button" class="icon-button" data-booking-detail-close aria-label="Buchungsdetails schließen">Schließen</button></header><section class="booking-detail-section"><h3>Buchung</h3>${this._bookingDetailFieldsTemplate(booking)}</section><section class="booking-detail-section"><h3>Konto</h3>${this._bookingDetailFieldsTemplate(account)}</section><section class="booking-detail-section"><h3>Status und Zuordnung</h3><p class="booking-detail-status">${escapeHtml(this._bookingDetailStatusLabel(status))}</p>${this._bookingDetailFieldsTemplate(details)}</section>${rawMarkup}<div class="booking-detail-actions"><button type="button" data-booking-raw-toggle aria-pressed="${this._bookingDetailRawVisible ? "true" : "false"}">${this._bookingDetailRawVisible ? "Rohdaten ausblenden" : "Rohdaten anzeigen"}</button><button type="button" data-booking-detail-close>Schließen</button></div>`;
+    const legacyNotice = this._bookingDetail.source_data == null
+      ? '<p class="booking-detail-legacy" role="note">Für diese Buchung fehlen Quelldaten, weil sie aus einem alten Import stammt.</p>'
+      : '';
+    return `<header class="booking-detail-header"><div><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-description">${escapeHtml(String(booking?.counterparty || booking?.purpose || "Buchung"))}</p></div><button type="button" class="icon-button" data-booking-detail-close aria-label="Buchungsdetails schließen">Schließen</button></header>${legacyNotice}<section class="booking-detail-section"><h3>Buchung</h3>${this._bookingDetailFieldsTemplate(booking)}</section><section class="booking-detail-section"><h3>Konto</h3>${this._bookingDetailFieldsTemplate(account)}</section><section class="booking-detail-section"><h3>Status und Zuordnung</h3><p class="booking-detail-status">${escapeHtml(this._bookingDetailStatusLabel(status))}</p>${this._bookingDetailFieldsTemplate(details)}</section>${rawMarkup}<div class="booking-detail-actions"><button type="button" data-booking-raw-toggle aria-pressed="${this._bookingDetailRawVisible ? "true" : "false"}">${this._bookingDetailRawVisible ? "Rohdaten ausblenden" : "Rohdaten anzeigen"}</button><button type="button" data-booking-detail-close>Schließen</button></div>`;
   }
 
-  _renderBookingDetailDialog() {
+  _renderBookingDetailDialog({ focusRawToggle = false } = {}) {
     const content = this.shadowRoot.querySelector("[data-booking-detail-content]");
     if (!content) return;
     content.innerHTML = this._bookingDetailDialogTemplate();
     const rawNode = content.querySelector("[data-booking-raw]");
     if (rawNode && this._bookingDetail) rawNode.textContent = bookingDetailRawJson(this._bookingDetail);
+    if (focusRawToggle) content.querySelector("[data-booking-raw-toggle]")?.focus();
   }
 
   _closeBookingDetails() {
     const dialog = this.shadowRoot.querySelector("[data-booking-detail-dialog]");
     const trigger = this._bookingDetailTrigger;
+    const bookingId = this._bookingDetailId || trigger?.dataset?.bookingDetails;
     this._bookingDetailRequest = null;
     this._bookingDetail = null;
     this._bookingDetailLoading = false;
     this._bookingDetailError = "";
     this._bookingDetailRawVisible = false;
     this._bookingDetailTrigger = null;
+    this._bookingDetailId = null;
     if (dialog?.open) dialog.close();
     this._render();
-    if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+    const focusTarget = trigger?.isConnected
+      ? trigger
+      : [...this.shadowRoot.querySelectorAll("[data-booking-details]")]
+        .find((button) => button.dataset.bookingDetails === bookingId);
+    focusTarget?.focus();
   }
 
   async _openBookingDetails(bookingId, trigger) {
@@ -1277,6 +1289,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._bookingDetailError = "";
     this._bookingDetailRawVisible = false;
     this._bookingDetailTrigger = trigger;
+    this._bookingDetailId = String(bookingId);
     this._renderBookingDetailDialog();
     dialog.showModal();
     try {
@@ -3507,6 +3520,10 @@ class FinanzplanerPanel extends HTMLElement {
 
   _render() {
     if (!['review', 'resolved'].includes(this._view) && (this._bookingDetailRequest || this._bookingDetailTrigger)) this._closeBookingDetails();
+    const bookingDetailWasOpen = Boolean(
+      this._bookingDetailRequest || this._bookingDetail || this._bookingDetailLoading
+      || this._bookingDetailError || this._bookingDetailTrigger,
+    );
     if (this._view !== "overview") this._clearBreakdown();
     const comparisonFocus = this.shadowRoot.activeElement;
     const comparisonFocusId = comparisonFocus?.closest(".comparison-section") ? comparisonFocus.id : null;
@@ -3531,6 +3548,13 @@ class FinanzplanerPanel extends HTMLElement {
               : this._overviewTemplate();
     this.shadowRoot.innerHTML = `<style>${styles}</style>${template}`;
     this._bindEvents();
+    if (bookingDetailWasOpen) {
+      const dialog = this.shadowRoot.querySelector("[data-booking-detail-dialog]");
+      this._renderBookingDetailDialog();
+      this._bookingDetailTrigger = [...this.shadowRoot.querySelectorAll("[data-booking-details]")]
+        .find((button) => button.dataset.bookingDetails === this._bookingDetailId) || null;
+      if (dialog && !dialog.open && typeof dialog.showModal === "function") dialog.showModal();
+    }
     if (this._view === "rules" && this._ruleEditingId) this._syncRuleFormState();
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => this._updateAllocationSummary(form));
     if (["review", "resolved"].includes(this._view)) this._syncBookingSelectionControls(this._view);
@@ -3568,7 +3592,7 @@ class FinanzplanerPanel extends HTMLElement {
     bookingDetailDialog?.addEventListener("click", (event) => {
       if (event.target.matches("[data-booking-raw-toggle]")) {
         this._bookingDetailRawVisible = !this._bookingDetailRawVisible;
-        this._renderBookingDetailDialog();
+        this._renderBookingDetailDialog({ focusRawToggle: true });
       }
       if (event.target.matches("[data-booking-detail-close]")) this._closeBookingDetails();
     });

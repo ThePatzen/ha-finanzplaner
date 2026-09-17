@@ -1,6 +1,7 @@
 import asyncio
 from copy import deepcopy
 import importlib
+import json
 import sys
 import types
 import unittest
@@ -638,6 +639,140 @@ class RuleViewTests(unittest.TestCase):
         self.assertEqual(result["source_data"]["record"]["kind"], "mt940_transaction")
         self.assertEqual(result["account"]["label"], "Gemeinsames Girokonto")
         self.assertNotIn("AT123456789012345678", str(result))
+
+    def test_booking_details_mask_real_parser_account_references_without_store_mutation(self):
+        mt940_source = self.http.parse_mt940_records(
+            ":20:STATEMENT\n:25:BANK-ACCOUNT-42-SECRET\n"
+            ":61:2609020902D1,00NTRFREF\n"
+        )[0].source_data
+        camt_source = self.http.parse_camt053_records(
+            """<Document><BkToCstmrStmt><Stmt>
+              <Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+              <Ntry><Amt Ccy="EUR">1.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+                <BookgDt><Dt>2026-09-02</Dt></BookgDt><NtryDtls><TxDtls>
+                  <RltdPties><DbtrAcct><Id><Othr><Id>CAMT-ACCOUNT-SECRET</Id></Othr></Id></DbtrAcct></RltdPties>
+                </TxDtls></NtryDtls></Ntry>
+            </Stmt></BkToCstmrStmt></Document>"""
+        )[0].source_data
+        self.coordinator.store.data["bookings"][0]["source_data"] = mt940_source
+        self.coordinator.store.data["bookings"][1]["source_data"] = camt_source
+        before = deepcopy(self.coordinator.store.data)
+
+        mt940_result = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "booking-resolved")
+        )
+        camt_result = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "booking-unresolved")
+        )
+
+        mt940_text = json.dumps(mt940_result, ensure_ascii=False)
+        camt_text = json.dumps(camt_result, ensure_ascii=False)
+        self.assertNotIn("BANK-ACCOUNT-42-SECRET", mt940_text)
+        self.assertNotIn("AT123456789012345678", camt_text)
+        self.assertNotIn("CAMT-ACCOUNT-SECRET", camt_text)
+        self.assertEqual(self.coordinator.store.data, before)
+
+    def test_booking_details_include_unresolved_rule_reason(self):
+        result = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "booking-unresolved")
+        )
+
+        self.assertEqual(
+            result["details"]["reason"],
+            "Keine aktive Regel passt zu dieser Buchung.",
+        )
+
+    def test_booking_details_include_reason_from_suggested_rule(self):
+        booking = self.coordinator.store.data["bookings"][1]
+        booking.update(counterparty="Supermarkt", purpose="Einkauf")
+
+        result = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "booking-unresolved")
+        )
+
+        self.assertEqual(
+            result["details"]["reason"],
+            result["details"]["suggestion"]["reason"],
+        )
+
+    def test_booking_details_include_reason_for_invalid_rule_reference(self):
+        self.coordinator.store.data["catalogs"]["categories"][0]["active"] = False
+        self.coordinator.store.data["bookings"][1].update(
+            counterparty="Supermarkt", purpose="Einkauf"
+        )
+
+        result = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "booking-unresolved")
+        )
+
+        self.assertIn("Kategorie-ID", result["details"]["reason"])
+
+    def test_booking_details_use_fallback_for_missing_or_invalid_rule_reason(self):
+        with patch.object(
+            self.http,
+            "rule_suggestion",
+            return_value={"status": "conflict", "suggestion": None, "conflicts": []},
+        ):
+            missing = asyncio.run(
+                self.http.BookingDetailsView().get(
+                    self._request(), "booking-unresolved"
+                )
+            )
+        self.assertEqual(
+            missing["details"]["reason"],
+            "Mehrere aktive Regeln mit gleicher Priorität passen zu dieser Buchung.",
+        )
+
+        with patch.object(
+            self.http,
+            "rule_suggestion",
+            return_value={
+                "status": "unresolved",
+                "suggestion": None,
+                "conflicts": [],
+                "reason": {"invalid": True},
+            },
+        ):
+            invalid = asyncio.run(
+                self.http.BookingDetailsView().get(
+                    self._request(), "booking-unresolved"
+                )
+            )
+        self.assertEqual(
+            invalid["details"]["reason"],
+            "Für diese Buchung liegt kein gültiger Prüfgrund vor.",
+        )
+
+    def test_booking_mutation_responses_project_out_source_data(self):
+        async def async_refresh():
+            self.coordinator.refresh_count += 1
+
+        self.coordinator.async_refresh = async_refresh
+
+        assignment = asyncio.run(
+            self.http.BookingAssignmentView().post(
+                self._request({"targets": ["household"]}), "booking-unresolved"
+            )
+        )
+        self.assertNotIn("source_data", assignment["booking"])
+
+        allocation = asyncio.run(
+            self.http.BookingAllocationsView().post(
+                self._request({
+                    "allocations": [{"target": "household", "amount": 15.0}]
+                }),
+                "booking-unresolved",
+            )
+        )
+        self.assertNotIn("source_data", allocation["booking"])
+
+        unresolve = asyncio.run(
+            self.http.BookingUnresolveView().post(
+                self._request({}), "booking-resolved"
+            )
+        )
+        self.assertNotIn("source_data", unresolve["booking"])
+        self.assertIn("source_data", self.coordinator.store.data["bookings"][0])
 
     def test_booking_details_expose_resolved_allocations_and_rule(self):
         self.coordinator.store.data["bookings"][0]["matched_rule"] = {

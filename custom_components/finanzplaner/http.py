@@ -72,6 +72,24 @@ _OPAQUE_ID_FIELDS = frozenset({
     "id", "rule_id", "account_id", "booking_id", "category_id", "area_id",
     "project_id", "pet_id", "feed_profile_id", "conflicts",
 })
+_ACCOUNT_FIELD_NAMES = frozenset({
+    "account",
+    "account_reference",
+    "account_number",
+    "account_no",
+    "accountnumber",
+    "bank_account",
+    "iban",
+})
+_ACCOUNT_XML_NODE_NAMES = frozenset({
+    "acct",
+    "account",
+    "accountid",
+    "cdtracct",
+    "dbtracct",
+    "iban",
+    "othr",
+})
 
 # ISO 13616 country lengths. Keeping this local avoids accepting a syntactically
 # valid checksum for an unknown country or for a country with the wrong BBAN size.
@@ -280,24 +298,66 @@ def _mask_iban_occurrences(value: str) -> str:
     return _IBAN_PATTERN.sub(replace, value)
 
 
-def _response_payload(value: object, *, field: str | None = None) -> object:
+def _is_account_field(field: object) -> bool:
+    normalized = str(field).casefold()
+    return normalized in _ACCOUNT_FIELD_NAMES or bool(
+        re.fullmatch(r"\??31[a-z]?", normalized)
+    )
+
+
+def _xml_node_name(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    name = value.get("name")
+    return name.casefold() if isinstance(name, str) else None
+
+
+def _mask_mt940_account_line(value: str) -> str:
+    match = re.match(r"^(\s*:25:)(.*)$", value, re.IGNORECASE)
+    if not match:
+        return value
+    return f"{match.group(1)}{_redact_account_value(match.group(2).strip())}"
+
+
+def _response_payload(
+    value: object,
+    *,
+    field: str | None = None,
+    account_context: bool = False,
+) -> object:
     """Copy JSON data while redacting IBANs at every response boundary."""
 
     if isinstance(value, dict):
-        return {
-            key: (
-                _redact_account_value(item)
-                if key in {"account", "account_reference"}
-                and isinstance(item, str)
-                else _response_payload(item, field=key)
-            )
-            for key, item in value.items()
-        }
+        node_name = _xml_node_name(value)
+        xml_account_context = account_context or node_name in _ACCOUNT_XML_NODE_NAMES
+        redacted: dict[object, object] = {}
+        for key, item in value.items():
+            if _is_account_field(key) and isinstance(item, str):
+                redacted[key] = _redact_account_value(item)
+            elif key == "text" and (
+                node_name in {"iban", "othr"}
+                or (account_context and node_name in {"id", "account", "accountid"})
+            ) and isinstance(item, str):
+                redacted[key] = _redact_account_value(item)
+            else:
+                redacted[key] = _response_payload(
+                    item,
+                    field=str(key),
+                    account_context=xml_account_context,
+                )
+        return redacted
     if isinstance(value, list):
-        return [_response_payload(item, field=field) for item in value]
+        return [
+            _response_payload(item, field=field, account_context=account_context)
+            for item in value
+        ]
     if isinstance(value, str):
         if field in _OPAQUE_ID_FIELDS and _OPAQUE_ID_PATTERN.fullmatch(value):
             return value
+        if field == "lines":
+            return _mask_mt940_account_line(value)
+        if account_context and _is_account_field(field):
+            return _redact_account_value(value)
         return _mask_iban_occurrences(value)
     return value
 
@@ -1871,6 +1931,29 @@ class UnresolvedBookingsView(HomeAssistantView):
         return self.json(_response_payload({"bookings": projected}))
 
 
+def _booking_detail_reason(
+    booking: dict[str, object], suggestion: dict[str, object]
+) -> str | None:
+    """Return a safe, human-readable explanation for the detail view."""
+
+    if booking.get("status") == "resolved":
+        matched_rule = booking.get("matched_rule")
+        reason = matched_rule.get("reason") if isinstance(matched_rule, dict) else None
+        return reason if isinstance(reason, str) and reason.strip() else None
+
+    reason = suggestion.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        return reason
+    nested_suggestion = suggestion.get("suggestion")
+    if isinstance(nested_suggestion, dict):
+        reason = nested_suggestion.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            return reason
+    if suggestion.get("status") == "conflict":
+        return "Mehrere aktive Regeln mit gleicher Priorität passen zu dieser Buchung."
+    return "Für diese Buchung liegt kein gültiger Prüfgrund vor."
+
+
 def _booking_details_payload(
     coordinator: FinanzplanerCoordinator,
     hass: Any,
@@ -1906,6 +1989,7 @@ def _booking_details_payload(
             "conflicts": suggestion.get("conflicts", []),
             "matched_rule": booking.get("matched_rule"),
             "allocations": booking.get("allocations", []),
+            "reason": _booking_detail_reason(booking, suggestion),
         },
         "source_data": booking.get("source_data"),
     }
@@ -2109,7 +2193,9 @@ class BookingAssignmentView(HomeAssistantView):
         booking["matched_rule"] = None
         await coordinator.store.async_save()
         await coordinator.async_refresh()
-        return self.json(_response_payload({"booking": booking}))
+        return self.json(
+            _response_payload({"booking": _booking_response_projection(booking)})
+        )
 
 
 class BookingAllocationsView(HomeAssistantView):
@@ -2179,7 +2265,9 @@ class BookingAllocationsView(HomeAssistantView):
         booking["matched_rule"] = None
         await coordinator.store.async_save()
         await coordinator.async_refresh()
-        return self.json(_response_payload({"booking": booking}))
+        return self.json(
+            _response_payload({"booking": _booking_response_projection(booking)})
+        )
 
 
 class BookingUnresolveView(HomeAssistantView):
@@ -2210,7 +2298,9 @@ class BookingUnresolveView(HomeAssistantView):
         booking["status"] = "unresolved"
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
-        return self.json(_response_payload({"booking": booking}))
+        return self.json(
+            _response_payload({"booking": _booking_response_projection(booking)})
+        )
 
 
 class ImportView(HomeAssistantView):
