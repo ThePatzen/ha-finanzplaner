@@ -55,6 +55,13 @@ export function ruleStatusLabel(status) {
   return Object.hasOwn(labels, status) ? labels[status] : "Prüfung erforderlich";
 }
 
+export function resolvedBookingSourceLabel(booking) {
+  const matchedRule = booking?.matched_rule;
+  if (matchedRule?.rule_label) return `Automatisch über Regel „${matchedRule.rule_label}“`;
+  if (matchedRule?.rule_id) return "Automatisch über Regel";
+  return "Manuell zugeordnet";
+}
+
 export function acceptSuggestionDraft(booking) {
   return { bookingId: booking.id, allocations: suggestionDraft(booking) };
 }

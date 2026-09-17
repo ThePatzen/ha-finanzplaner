@@ -1,4 +1,4 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const PLAN_ITEMS_URL = "/api/finanzplaner/plan-items";
@@ -8,6 +8,8 @@ const FEED_PROFILES_URL = "/api/finanzplaner/feed-profiles";
 const CATALOGS_URL = "/api/finanzplaner/catalogs";
 const PERSONS_URL = "/api/finanzplaner/persons";
 const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
+const RESOLVED_URL = "/api/finanzplaner/bookings/resolved";
+const APPLY_RULES_URL = "/api/finanzplaner/bookings/apply-rules";
 const RULES_URL = "/api/finanzplaner/rules";
 const BOOKINGS_URL = "/api/finanzplaner/bookings";
 const IMPORT_URL = "/api/finanzplaner/import";
@@ -329,6 +331,7 @@ const styles = `
   .feedback-presenter-close:hover { border-color: var(--fp-paper); background: rgb(247 247 244 / 0.12); }
 
   .review-view, .accounts-view, .plan-items-view, .pets-view, .feed-profiles-view, .catalogs-view { inline-size: 100%; padding-block: 1.8rem; }
+  .resolved-view { inline-size: 100%; padding-block: 1.8rem; }
   .review-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .review-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
   .review-view-header p { margin: 0.5rem 0 0; color: var(--fp-muted); }
@@ -630,6 +633,27 @@ const styles = `
   .booking-rule-hint h3 { font-size: 1rem; }
   .booking-rule-hint ul { padding-inline-start: 1.2rem; }
   .review-view .allocation-status { flex-basis: auto; }
+  .resolved-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .resolved-view h2 { margin: 0; font-family: var(--fp-display); font-size: clamp(2rem, 3vw, 2.65rem); line-height: 1; }
+  .resolved-view-header p { max-inline-size: 55rem; margin: 0.5rem 0 0; color: var(--fp-muted); }
+  .resolved-table-wrap { overflow-x: auto; margin-block-start: 1rem; border: 1px solid var(--fp-line); border-radius: var(--fp-radius); background: rgb(255 254 249 / 0.82); box-shadow: var(--fp-shadow); scrollbar-gutter: stable; }
+  .resolved-table { inline-size: 100%; min-inline-size: 68rem; border-collapse: collapse; }
+  .resolved-table caption { padding: 0; }
+  .resolved-table th, .resolved-table td { padding: 0.85rem 1rem; border-block-end: 1px solid var(--fp-line); text-align: start; vertical-align: top; }
+  .resolved-table th { color: var(--fp-muted); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+  .resolved-table tbody th { color: var(--fp-ink); font-size: 0.92rem; letter-spacing: 0; text-transform: none; }
+  .resolved-table tbody tr:last-child th, .resolved-table tbody tr:last-child td { border-block-end: 0; }
+  .resolved-table tbody tr:hover { background: rgb(223 244 247 / 0.35); }
+  .resolved-table .table-number { color: var(--fp-coral); font-family: var(--fp-data); font-weight: 700; white-space: nowrap; }
+  .resolved-table .table-actions { text-align: end; white-space: nowrap; }
+  .resolved-table p, .resolved-table ul { margin: 0; }
+  .resolved-table ul { display: grid; gap: 0.25rem; padding-inline-start: 1.1rem; }
+  .resolved-booking-date, .resolved-booking-purpose, .resolved-rule-reason { display: block; margin-block-start: 0.25rem; color: var(--fp-muted); font-size: 0.75rem; font-weight: 400; }
+  .resolved-booking-purpose { overflow-wrap: anywhere; }
+  .resolved-rule-source { color: var(--fp-ink); font-weight: 800; }
+  .resolved-rule-source--manual { color: var(--fp-muted); }
+  .resolved-rule-reason { max-inline-size: 24rem; overflow-wrap: anywhere; }
+  .resolved-empty { margin-block-start: 1rem; }
   .confirmed-bookings { display: grid; gap: 0.65rem; padding: 0; list-style: none; }
   .confirmed-bookings li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.65rem; padding-block: 0.65rem; border-block-end: 1px solid var(--fp-line); }
 
@@ -696,7 +720,7 @@ const styles = `
     .statusbar { display: block; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
-    .review-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .feed-profiles-view-header, .catalogs-view-header, .section-view-header, .import-strip, .excel-review-header { display: block; }
+    .review-view-header, .resolved-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .feed-profiles-view-header, .catalogs-view-header, .section-view-header, .import-strip, .excel-review-header { display: block; }
     .back-button { margin-block-start: 1rem; }
     .section-view-actions { justify-content: flex-start; margin-block-start: 1rem; }
     .accounts-actions { margin-block-start: 1rem; }
@@ -722,7 +746,7 @@ const styles = `
     .catalog-kind-nav button { flex: 0 0 auto; }
     .management-toolbar-actions { align-items: stretch; flex-direction: column; }
     .table-new-button, .management-editor-back { inline-size: 100%; }
-    .management-table { min-inline-size: 50rem; }
+    .management-table, .resolved-table { min-inline-size: 50rem; }
     .management-editor-header { flex-direction: column; }
     .plan-item-new-row { display: block; }
     .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
@@ -950,6 +974,11 @@ class FinanzplanerPanel extends HTMLElement {
     this._bookings = [];
     this._reviewLoading = false;
     this._reviewLoadFailed = false;
+    this._resolvedBookings = [];
+    this._resolvedLoading = false;
+    this._resolvedLoadFailed = false;
+    this._ruleApplying = false;
+    this._unresolvingBookings = new Set();
     this._rules = [];
     this._rulesLoading = false;
     this._rulesLoadFailed = false;
@@ -1061,6 +1090,47 @@ class FinanzplanerPanel extends HTMLElement {
     this._reviewLoading = false;
     this._render();
     this._focusContent();
+  }
+
+  async _openResolvedBookings() {
+    if (!this._confirmDiscardUnsavedChanges()) return;
+    this._view = "resolved";
+    this._message = "";
+    this._resolvedLoading = true;
+    this._resolvedLoadFailed = false;
+    this._render();
+    this._focusContent();
+    try {
+      await this._loadResolvedBookings();
+    } catch (error) {
+      this._resolvedBookings = [];
+      this._message = error.message || "Die übernommenen Buchungen konnten nicht geladen werden.";
+      this._resolvedLoadFailed = true;
+    }
+    this._resolvedLoading = false;
+    this._render();
+    this._focusContent();
+  }
+
+  async _applyRules() {
+    if (this._ruleApplying) return;
+    this._ruleApplying = true;
+    this._message = "Regeln werden erneut angewendet …";
+    this._render();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, APPLY_RULES_URL, { method: "POST" });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Die Regeln konnten nicht angewendet werden."));
+      await this._loadReviewData();
+      await this._loadOverview();
+      this._message = `${result.applied || 0} übernommen, ${result.conflicts || 0} Regelkonflikte, ${result.unresolved || 0} weiterhin ungeklärt.`;
+    } catch (error) {
+      this._message = error.message || "Die Regeln konnten nicht erneut angewendet werden.";
+    } finally {
+      this._ruleApplying = false;
+      this._render();
+      this._focusContent();
+    }
   }
 
   async _openSectionOverview(view) {
@@ -1462,6 +1532,13 @@ class FinanzplanerPanel extends HTMLElement {
       }
     }
     await this._loadRules().catch(() => {});
+  }
+
+  async _loadResolvedBookings() {
+    const response = await fetchWithHomeAssistantAuth(this._hass, RESOLVED_URL);
+    const result = await readApiResponse(response);
+    if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+    this._resolvedBookings = Array.isArray(result.bookings) ? result.bookings : [];
   }
 
   async _openAccounts() {
@@ -2824,6 +2901,28 @@ class FinanzplanerPanel extends HTMLElement {
     [...this.shadowRoot.querySelectorAll("[data-rule-from-booking]")].find((button) => button.dataset.ruleFromBooking === bookingId)?.focus();
   }
 
+  async _unresolveBooking(bookingId) {
+    const id = String(bookingId);
+    if (this._unresolvingBookings.has(id)) return;
+    this._unresolvingBookings.add(id);
+    this._message = "Zuordnung wird rückgängig gemacht …";
+    this._render();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${BOOKINGS_URL}/${encodeURIComponent(id)}/unresolve`, { method: "POST" });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Die Zuordnung konnte nicht rückgängig gemacht werden."));
+      await this._loadResolvedBookings();
+      await this._loadOverview();
+      this._message = "Zuordnung rückgängig gemacht. Die Buchung liegt wieder in der Prüfliste.";
+    } catch (error) {
+      this._message = error.message || "Die Zuordnung konnte nicht rückgängig gemacht werden.";
+    } finally {
+      this._unresolvingBookings.delete(id);
+      this._render();
+      this._focusContent();
+    }
+  }
+
   async _handleImport(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -2840,7 +2939,7 @@ class FinanzplanerPanel extends HTMLElement {
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Import fehlgeschlagen"));
       const fileFeedback = result.format === "ZIP" ? ` · ${result.files?.length || 0} Dateien geprüft` : "";
-      const feedback = `${result.format}: ${result.accepted} Buchungen übernommen, ${result.duplicates} Duplikate übersprungen${fileFeedback}; ${result.new_accounts || 0} neue Konten, ${result.unconfigured_accounts || 0} ohne konfigurierte Inhaber.`;
+      const feedback = `${result.format}: ${result.accepted} Buchungen importiert, ${result.auto_assigned || 0} automatisch übernommen, ${result.duplicates} Duplikate übersprungen${fileFeedback}; ${result.new_accounts || 0} neue Konten, ${result.unconfigured_accounts || 0} ohne konfigurierte Inhaber.`;
       await this._loadOverview();
       await this._openReview();
       this._message = feedback;
@@ -3001,6 +3100,8 @@ class FinanzplanerPanel extends HTMLElement {
   _render() {
     const template = this._view === "review"
       ? this._reviewTemplate()
+      : this._view === "resolved"
+        ? this._resolvedBookingsTemplate()
       : this._view === "rules"
         ? this._rulesTemplate()
       : this._view === "plan_items"
@@ -3032,12 +3133,15 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelector("[data-action='previous-month']")?.addEventListener("click", () => this._shiftMonth(-1));
     this.shadowRoot.querySelector("[data-action='next-month']")?.addEventListener("click", () => this._shiftMonth(1));
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
+    this.shadowRoot.querySelectorAll("[data-action='resolved']").forEach((button) => button.addEventListener("click", () => this._openResolvedBookings()));
+    this.shadowRoot.querySelectorAll("[data-action='apply-rules']").forEach((button) => button.addEventListener("click", () => this._applyRules()));
     this.shadowRoot.querySelectorAll("[data-action='rules']").forEach((button) => button.addEventListener("click", () => this._openRules()));
     this.shadowRoot.querySelectorAll("[data-open-rule-editor]").forEach((button) => button.addEventListener("click", () => this._openRuleEditor(button.dataset.openRuleEditor)));
     this.shadowRoot.querySelector("[data-close-rule-editor]")?.addEventListener("click", () => this._closeRuleEditor());
     this.shadowRoot.querySelectorAll("[data-deactivate-rule]").forEach((button) => button.addEventListener("click", () => this._deactivateRule(button.dataset.deactivateRule)));
     this.shadowRoot.querySelectorAll("[data-rule-from-booking]").forEach((button) => button.addEventListener("click", () => this._openRuleFromBooking(button.dataset.ruleFromBooking)));
     this.shadowRoot.querySelectorAll("[data-accept-suggestion]").forEach((button) => button.addEventListener("click", () => this._acceptSuggestion(button.dataset.acceptSuggestion)));
+    this.shadowRoot.querySelectorAll("[data-unresolve-booking]").forEach((button) => button.addEventListener("click", () => this._unresolveBooking(button.dataset.unresolveBooking)));
     const ruleForm = this.shadowRoot.querySelector("[data-rule-form]");
     ruleForm?.addEventListener("submit", (event) => this._handleRuleSave(event));
     for (const type of ["input", "change", "focusout"]) ruleForm?.addEventListener(type, (event) => this._updateRuleField(event));
@@ -3101,6 +3205,7 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-section-nav]").forEach((button) => button.addEventListener("click", () => {
       const target = button.dataset.sectionNav;
       if (target === "review") this._openReview();
+      else if (target === "resolved") this._openResolvedBookings();
       else if (target === "plan_items") this._openPlanItems();
       else if (target === "accounts") this._openAccounts();
       else if (target === "pets") this._openPets();
@@ -3111,6 +3216,7 @@ class FinanzplanerPanel extends HTMLElement {
     }));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
       if (button.dataset.nav === "review") this._openReview();
+      else if (button.dataset.nav === "resolved") this._openResolvedBookings();
       else if (button.dataset.nav === "plan_items") this._openPlanItems();
       else if (button.dataset.nav === "accounts") this._openAccounts();
       else if (button.dataset.nav === "pets") this._openPets();
@@ -3136,6 +3242,7 @@ class FinanzplanerPanel extends HTMLElement {
       ["catalogs", "tags", "Stammdaten"],
       ["accounts", "settings", "Konten"],
       ["rules", "tasks", "Regeln"],
+      ["resolved", "check", "Übernommen"],
     ];
     return items.map(([id, iconName, label]) => {
       const target = id === "planner" ? "plan_items" : id;
@@ -3871,6 +3978,37 @@ class FinanzplanerPanel extends HTMLElement {
     </fieldset>`;
   }
 
+  _resolvedBookingsTemplate() {
+    const rows = this._resolvedBookings.map((booking) => {
+      const bookingId = String(booking.id);
+      const counterparty = String(booking.counterparty || "").trim();
+      const purpose = String(booking.purpose || "").trim();
+      const matchedRule = booking.matched_rule;
+      const source = resolvedBookingSourceLabel(booking);
+      const sourceClass = matchedRule ? "" : " resolved-rule-source--manual";
+      const allocations = Array.isArray(booking.allocations) && booking.allocations.length
+        ? `<ul>${booking.allocations.map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row))}</li>`).join("")}</ul>`
+        : "Keine Aufteilung gespeichert";
+      return `<tr>
+        <th scope="row"><span>${escapeHtml(counterparty || "Zahlungsempfänger nicht erkannt")}</span><span class="resolved-booking-date">${escapeHtml(formatDate(booking.booking_date))}</span></th>
+        <td><span class="resolved-booking-purpose">${escapeHtml(purpose || "Kein Verwendungszweck")}</span></td>
+        <td class="table-number">${formatEuro(booking.amount)}</td>
+        <td>${allocations}</td>
+        <td><span class="resolved-rule-source${sourceClass}">${escapeHtml(source)}</span>${matchedRule?.reason ? `<span class="resolved-rule-reason">${escapeHtml(matchedRule.reason)}</span>` : ""}</td>
+        <td class="table-actions"><button class="table-edit-button" type="button" data-unresolve-booking="${escapeHtml(bookingId)}"${this._unresolvingBookings.has(bookingId) ? " disabled" : ""}>${this._unresolvingBookings.has(bookingId) ? "Wird geändert …" : "Zuordnung rückgängig"}</button></td>
+      </tr>`;
+    }).join("");
+    const body = this._resolvedLoading
+      ? `<p class="empty-state" role="status">Übernommene Buchungen werden geladen …</p>`
+      : this._resolvedLoadFailed
+        ? `<div class="empty-state"><p>Die übernommenen Buchungen konnten nicht geladen werden.</p><button class="table-edit-button" type="button" data-action="resolved">Erneut laden</button></div>`
+        : this._resolvedBookings.length
+          ? `<div class="resolved-table-wrap" tabindex="0" role="region" aria-label="Übernommene Buchungen, horizontal scrollbar"><table class="resolved-table"><caption class="visually-hidden">Übernommene Buchungen</caption><thead><tr><th scope="col">Buchung</th><th scope="col">Verwendungszweck</th><th scope="col">Betrag</th><th scope="col">Aufteilung</th><th scope="col">Zuordnungsquelle</th><th scope="col">Aktion</th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : `<div class="empty-state resolved-empty">Noch keine Buchungen übernommen. Bestätigte manuelle Aufteilungen und automatische Regelübernahmen erscheinen hier.</div>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="resolved-view"><div class="resolved-view-header"><div><h2>Übernommene Buchungen</h2><p>Alle bestätigten Buchungen an einem Ort. Regelübernahmen zeigen die verwendete Regel und ihren Treffergrund; manuelle Zuordnungen bleiben als solche gekennzeichnet.</p></div><div class="accounts-actions"><button class="table-edit-button" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 18)}</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${body}</div></main>`;
+    return this._shellTemplate(content);
+  }
+
   _reviewTemplate() {
     const bookingList = this._reviewLoading ? `<p class="empty-state" role="status">Buchungen werden geladen …</p>`
       : this._reviewLoadFailed ? `<div class="empty-state"><p>Die Prüfliste konnte nicht geladen werden.</p><button class="table-edit-button" type="button" data-action="review">Erneut laden</button></div>`
@@ -3882,7 +4020,7 @@ class FinanzplanerPanel extends HTMLElement {
       const purposeMarkup = purpose ? `<span class="booking-purpose-detail">Verwendungszweck: ${escapeHtml(purpose)}</span>` : "";
       return `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose"><span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
     }).join("")}</ul>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
     return this._shellTemplate(content);
   }
 }

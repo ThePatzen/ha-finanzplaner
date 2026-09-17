@@ -259,6 +259,60 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(booking["status"], "unresolved")
         self.assertNotIn("AT123456789012345678", str(result["preview"]))
 
+    def test_import_automatically_resolves_unique_rule_match_and_records_rule(self):
+        self.coordinator.store.data.update({
+            "accounts": [{
+                "id": "account-1",
+                "label": "Girokonto",
+                "account_reference": "AT123456789012345678",
+                "iban": "AT123456789012345678",
+                "owner_targets": [],
+                "active": True,
+            }],
+            "catalogs": {
+                "categories": [{"id": "category-food", "label": "Lebensmittel", "active": True}],
+                "areas": [],
+                "projects": [],
+            },
+            "pets": [],
+            "rules": [{
+                "id": "rule-grocery",
+                "label": "Supermarkt Haushalt",
+                "active": True,
+                "priority": 100,
+                "account_id": "account-1",
+                "counterparty": "Supermarkt AG",
+                "purpose_contains": None,
+                "allocations": [{
+                    "target": "household",
+                    "share_percent": 100.0,
+                    "area_id": None,
+                    "category_id": "category-food",
+                    "project_id": None,
+                    "pet_id": None,
+                }],
+            }],
+        })
+        raw = """<?xml version="1.0" encoding="UTF-8"?>
+        <Document><BkToCstmrStmt><Stmt>
+          <Acct><Id><IBAN>AT12 3456 7890 1234 5678</IBAN></Id></Acct>
+          <Ntry><Amt Ccy="EUR">42.37</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+            <BookgDt><Dt>2026-09-04</Dt></BookgDt><NtryDtls><TxDtls>
+            <RltdPties><Cdtr><Nm>Supermarkt AG</Nm></Cdtr></RltdPties>
+            <RmtInf><Ustrd>Einkauf</Ustrd></RmtInf>
+          </TxDtls></NtryDtls></Ntry></Stmt></BkToCstmrStmt></Document>"""
+
+        result = self._import("statement.xml", raw)
+        booking = self.coordinator.store.data["bookings"][0]
+
+        self.assertEqual(result["auto_assigned"], 1)
+        self.assertEqual(booking["status"], "resolved")
+        self.assertEqual(booking["allocations"][0]["amount"], 42.37)
+        self.assertEqual(booking["allocations"][0]["category_id"], "category-food")
+        self.assertEqual(booking["matched_rule"]["rule_id"], "rule-grocery")
+        self.assertEqual(booking["matched_rule"]["rule_label"], "Supermarkt Haushalt")
+        self.assertEqual(result["preview"][0]["matched_rule"]["rule_id"], "rule-grocery")
+
     def test_mt940_import_discovers_reference_without_setting_targets(self):
         raw = (
             ":20:STATEMENT-42\n"

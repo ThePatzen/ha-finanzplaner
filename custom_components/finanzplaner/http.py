@@ -213,6 +213,7 @@ def _booking_payload(
         "counterparty": booking.counterparty,
         "allocations": [],
         "status": "unresolved",
+        "matched_rule": None,
     }
 
 
@@ -548,6 +549,111 @@ def _append_rule(
         rules = []
         coordinator.store.data["rules"] = rules
     rules.append(rule)
+
+
+def _allocation_records(allocations: object) -> list[dict[str, object]]:
+    """Serialize validated allocation dataclasses for persistent bookings."""
+
+    if not isinstance(allocations, list):
+        return []
+    return [
+        {
+            "target": allocation.target,
+            "amount": allocation.amount,
+            "area": allocation.area,
+            "area_id": allocation.area_id,
+            "category": allocation.category,
+            "category_id": allocation.category_id,
+            "project": allocation.project,
+            "project_id": allocation.project_id,
+            "pet_id": allocation.pet_id,
+            "pet_name": allocation.pet_name,
+            "pet_type": allocation.pet_type,
+        }
+        for allocation in allocations
+    ]
+
+
+def _apply_rule_to_booking(
+    coordinator: FinanzplanerCoordinator,
+    hass: Any,
+    booking: dict[str, object],
+) -> tuple[bool, dict[str, object]]:
+    """Apply one unambiguous rule to a booking without partial mutation."""
+
+    projection = rule_suggestion(
+        booking,
+        _rule_list(coordinator),
+        accounts=_rule_accounts(coordinator),
+        valid_targets=_valid_plan_targets(hass),
+        catalogs=_rule_catalogs(coordinator),
+        pets=_pet_records(coordinator),
+    )
+    if projection.get("status") != "suggested":
+        return False, projection
+
+    suggestion = projection.get("suggestion")
+    if not isinstance(suggestion, dict):
+        return False, {
+            "status": "unresolved",
+            "suggestion": None,
+            "conflicts": [],
+            "reason": "Die passende Regel konnte nicht materialisiert werden.",
+        }
+    try:
+        allocation_payload = [
+            _catalog_link_payload(coordinator, allocation)
+            for allocation in suggestion.get("allocations", [])
+        ]
+        allocations = parse_allocation_payload(
+            allocation_payload,
+            float(booking.get("amount", 0)),
+            _valid_plan_targets(hass),
+            _allocation_pet_records(coordinator, booking),
+        )
+    except (TypeError, ValueError) as exc:
+        return False, {
+            "status": "unresolved",
+            "suggestion": None,
+            "conflicts": [],
+            "reason": f"Die automatische Zuordnung wurde nicht übernommen: {exc}",
+        }
+
+    booking["allocations"] = _allocation_records(allocations)
+    booking["status"] = "resolved"
+    booking["matched_rule"] = {
+        "rule_id": suggestion.get("rule_id"),
+        "rule_label": suggestion.get("rule_label"),
+        "reason": suggestion.get("reason"),
+        "applied_at": datetime.now(timezone.utc).isoformat(),
+    }
+    return True, projection
+
+
+def _apply_rules_to_unresolved(
+    coordinator: FinanzplanerCoordinator,
+    hass: Any,
+    *,
+    candidates: list[dict[str, object]] | None = None,
+) -> dict[str, int]:
+    """Apply rules to selected unresolved bookings and return a summary."""
+
+    bookings = candidates
+    if bookings is None:
+        stored_bookings = coordinator.store.data.get("bookings", [])
+        bookings = stored_bookings if isinstance(stored_bookings, list) else []
+    summary = {"applied": 0, "conflicts": 0, "unresolved": 0}
+    for booking in bookings:
+        if not isinstance(booking, dict) or booking.get("status") != "unresolved":
+            continue
+        applied, projection = _apply_rule_to_booking(coordinator, hass, booking)
+        if applied:
+            summary["applied"] += 1
+        elif projection.get("status") == "conflict":
+            summary["conflicts"] += 1
+        else:
+            summary["unresolved"] += 1
+    return summary
 
 
 def _catalog_link_payload(
@@ -1699,6 +1805,42 @@ class UnresolvedBookingsView(HomeAssistantView):
         return self.json(_response_payload({"bookings": projected}))
 
 
+class ResolvedBookingsView(HomeAssistantView):
+    """List every booking that has a confirmed allocation."""
+
+    url = "/api/finanzplaner/bookings/resolved"
+    name = "api:finanzplaner:bookings:resolved"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        bookings = [] if not coordinator or not coordinator.data else coordinator.data.get("bookings", [])
+        resolved = [
+            booking
+            for booking in bookings
+            if isinstance(booking, dict) and booking.get("status") == "resolved"
+        ]
+        return self.json(_response_payload({"bookings": resolved}))
+
+
+class ApplyRulesView(HomeAssistantView):
+    """Re-apply rules to every currently unresolved booking."""
+
+    url = "/api/finanzplaner/bookings/apply-rules"
+    name = "api:finanzplaner:bookings:apply-rules"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        summary = _apply_rules_to_unresolved(coordinator, request.app["hass"])
+        if summary["applied"]:
+            await coordinator.store.async_save()
+            await coordinator.async_refresh_data()
+        return self.json(_response_payload(summary))
+
+
 class BookingAssignmentView(HomeAssistantView):
     """Resolve one booking against live Home Assistant persons or the household."""
 
@@ -1774,25 +1916,11 @@ class BookingAssignmentView(HomeAssistantView):
             )
         except (TypeError, ValueError) as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
-        booking["allocations"] = [
-            {
-                "target": allocation.target,
-                "amount": allocation.amount,
-                "area": allocation.area,
-                "area_id": allocation.area_id,
-                "category": allocation.category,
-                "category_id": allocation.category_id,
-                "project": allocation.project,
-                "project_id": allocation.project_id,
-                "pet_id": allocation.pet_id,
-                "pet_name": allocation.pet_name,
-                "pet_type": allocation.pet_type,
-            }
-            for allocation in allocations
-        ]
+        booking["allocations"] = _allocation_records(allocations)
         for allocation in booking["allocations"]:
             ensure_catalog_entries(coordinator.store.data, allocation)
         booking["status"] = "resolved"
+        booking["matched_rule"] = None
         await coordinator.store.async_save()
         await coordinator.async_refresh()
         return self.json(_response_payload({"booking": booking}))
@@ -1858,27 +1986,44 @@ class BookingAllocationsView(HomeAssistantView):
         except (TypeError, ValueError) as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
 
-        booking["allocations"] = [
-            {
-                "target": allocation.target,
-                "amount": allocation.amount,
-                "area": allocation.area,
-                "area_id": allocation.area_id,
-                "category": allocation.category,
-                "category_id": allocation.category_id,
-                "project": allocation.project,
-                "project_id": allocation.project_id,
-                "pet_id": allocation.pet_id,
-                "pet_name": allocation.pet_name,
-                "pet_type": allocation.pet_type,
-            }
-            for allocation in allocations
-        ]
+        booking["allocations"] = _allocation_records(allocations)
         for allocation in booking["allocations"]:
             ensure_catalog_entries(coordinator.store.data, allocation)
         booking["status"] = "resolved"
+        booking["matched_rule"] = None
         await coordinator.store.async_save()
         await coordinator.async_refresh()
+        return self.json(_response_payload({"booking": booking}))
+
+
+class BookingUnresolveView(HomeAssistantView):
+    """Move one resolved booking back into the review queue."""
+
+    url = "/api/finanzplaner/bookings/{booking_id}/unresolve"
+    name = "api:finanzplaner:booking:unresolve"
+    requires_auth = True
+
+    async def post(self, request: web.Request, booking_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        booking = next(
+            (
+                item
+                for item in coordinator.store.data.get("bookings", [])
+                if isinstance(item, dict) and item.get("id") == booking_id
+            ),
+            None,
+        )
+        if booking is None:
+            raise web.HTTPNotFound(text="Buchung nicht gefunden.")
+        if booking.get("status") != "resolved":
+            raise web.HTTPBadRequest(text="Die Buchung ist noch nicht übernommen.")
+        booking["allocations"] = []
+        booking["matched_rule"] = None
+        booking["status"] = "unresolved"
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
         return self.json(_response_payload({"booking": booking}))
 
 
@@ -2015,6 +2160,11 @@ class ImportView(HomeAssistantView):
                         "duplicates": file_duplicates,
                     }
                 )
+        auto_summary = _apply_rules_to_unresolved(
+            coordinator,
+            request.app["hass"],
+            candidates=accepted,
+        )
         archive_import = filename.lower().endswith(".zip")
         import_record = {
             "format": "ZIP" if archive_import else import_files[0][3],
@@ -2038,6 +2188,9 @@ class ImportView(HomeAssistantView):
                     "duplicates": duplicates,
                     "new_accounts": len(new_account_ids),
                     "unconfigured_accounts": len(unconfigured_account_ids),
+                    "auto_assigned": auto_summary["applied"],
+                    "rule_conflicts": auto_summary["conflicts"],
+                    "rule_unresolved": auto_summary["unresolved"],
                     "files": file_summaries if archive_import else [],
                     "preview": accepted,
                 }

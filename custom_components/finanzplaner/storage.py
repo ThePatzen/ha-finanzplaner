@@ -509,6 +509,8 @@ def migrate_store_data(
         )
         if "allocations" not in booking:
             booking["allocations"] = []
+        if not isinstance(booking.get("matched_rule"), dict):
+            booking["matched_rule"] = None
         if reference and reference not in account_by_reference:
             account = {
                 "id": account_id_for_reference(reference),
@@ -586,6 +588,8 @@ def normalize_current_store_data(
             account = account_by_reference.get(reference)
             booking["account_id"] = account.get("id") if account else None
         booking.setdefault("allocations", [])
+        if not isinstance(booking.get("matched_rule"), dict):
+            booking["matched_rule"] = None
 
     data["version"] = STORAGE_VERSION
     _normalize_pets(data)

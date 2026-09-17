@@ -60,8 +60,10 @@ Zusätzlich enthalten:
 - Regelverwaltung für Buchungsvorschläge mit aktiven und deaktivierten Regeln, Priorität und Aufteilungsvorlage
 - Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim optionalen Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung.
 - optionaler Verwendungszweckfilter, der nur Buchungen mit dem angegebenen Textabschnitt berücksichtigt; jede Regel benötigt mindestens eine Bedingung aus Konto, Zahlungsempfänger oder Verwendungszweckfilter
-- ein Vorschlag pro Buchung aus der Regel mit der höchsten Priorität; Regeln mit gleicher höchster Priorität erzeugen einen Konfliktstatus
-- ausdrückliche Übernahme eines Vorschlags in den Entwurf und anschließende Bestätigung der Aufteilung durch den Nutzer
+- automatische Übernahme nur bei einem eindeutigen, gültigen Treffer mit höchster Priorität; Regeln mit gleicher höchster Priorität bleiben ungeklärt
+- Regelübernahme beim Import und über einen expliziten erneuten Lauf aus der Prüfliste; kein automatisches Nachfassen beim bloßen Anzeigen einer Buchung
+- nachvollziehbare Kennzeichnung der verwendeten Regel und ihres Treffergrunds bei automatisch übernommenen Buchungen
+- Ansicht aller übernommenen Buchungen mit Rückgängig-Funktion, die die Buchung wieder in die Prüfliste verschiebt
 - Regelvorlage aus einer bestätigten Buchung über „Als Regel speichern“
 - ungültige passende Regeln mit höchster Priorität halten die Buchung mit konkretem Prüfgrund ungeklärt; es erfolgt kein Rückgriff auf niedrigere Prioritäten
 - aus bestätigten Buchungen vorbelegte Regeln lassen sich vor der ausdrücklichen Speicherung korrigieren; der Server validiert den bearbeiteten Entwurf
@@ -85,7 +87,8 @@ Weitere Produktfähigkeiten und Leitplanken:
 - Installation und Updates über HACS
 - EUR als erste Währung
 - lokale Verarbeitung ohne Bankzugangsdaten
-- Regelvorschläge beziehen sich auf offene Buchungen. „Vorschlag übernehmen“ füllt nur den Entwurf; erst „Aufteilung speichern“ bestätigt die Buchung.
+- Nur eindeutige, gültige Regeltreffer mit höchster Priorität werden beim Import oder auf ausdrückliche Anforderung automatisch übernommen. Konflikte, ungültige Treffer und fehlende Treffer bleiben in der Prüfliste.
+- Manuelle Zuordnungen werden ausdrücklich gespeichert; eine automatische oder manuelle Übernahme kann über die Ansicht „Übernommene Buchungen“ rückgängig gemacht werden.
 - Regeländerungen und deaktivierte Regeln verändern bestehende bestätigte Buchungsaufteilungen nicht rückwirkend.
 - Vollständige Kontoreferenzen bleiben im lokalen Speicher; Panel und API zeigen Kontodaten nur maskiert.
 - keine direkte Open-Banking-Anbindung in der ersten Version

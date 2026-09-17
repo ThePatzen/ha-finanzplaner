@@ -115,6 +115,15 @@ test("ruleStatusLabel falls back for prototype-key statuses", () => {
   }
 });
 
+test("labels resolved booking origins with the matching rule or manual assignment", () => {
+  assert.equal(
+    utils.resolvedBookingSourceLabel({ matched_rule: { rule_label: "Supermarkt" } }),
+    "Automatisch über Regel „Supermarkt“",
+  );
+  assert.equal(utils.resolvedBookingSourceLabel({ matched_rule: { rule_id: "rule-1" }}), "Automatisch über Regel");
+  assert.equal(utils.resolvedBookingSourceLabel({}), "Manuell zugeordnet");
+});
+
 test("rulePayloadFromForm trims text and keeps null filters", () => {
   assert.deepEqual(utils.rulePayloadFromForm({
     label: "  Supermarkt  ",
@@ -511,6 +520,57 @@ function ruleTestPanel() {
   panel._render = () => {};
   return panel;
 }
+
+test("review exposes rule reapplication and the resolved booking navigation", () => {
+  assert.match(panelSource, /const APPLY_RULES_URL = "\/api\/finanzplaner\/bookings\/apply-rules"/);
+  assert.match(panelSource, /const RESOLVED_URL = "\/api\/finanzplaner\/bookings\/resolved"/);
+  assert.match(panelSource, /data-action="apply-rules"/);
+  assert.match(panelSource, /\["resolved", "check", "Übernommen"\]/);
+  assert.match(panelSource, /data-unresolve-booking=/);
+  assert.match(panelSource, /<table[^>]*>.*Übernommene Buchungen/s);
+});
+
+test("reapplying rules posts once and refreshes the review and overview", async () => {
+  const panel = ruleTestPanel();
+  let reviewLoads = 0;
+  let overviewLoads = 0;
+  const writes = [];
+  panel._loadReviewData = async () => { reviewLoads += 1; };
+  panel._loadOverview = async () => { overviewLoads += 1; };
+  panel._hass = { fetchWithAuth: async (url, options) => {
+    writes.push({ url, method: options.method });
+    return new Response(JSON.stringify({ applied: 2, conflicts: 1, unresolved: 3 }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } };
+
+  await panel._applyRules();
+
+  assert.deepEqual(writes, [{ url: "/api/finanzplaner/bookings/apply-rules", method: "POST" }]);
+  assert.equal(reviewLoads, 1);
+  assert.equal(overviewLoads, 1);
+  assert.match(panel._message, /2 übernommen/);
+});
+
+test("undoing a resolved booking posts to the unresolve endpoint and refreshes the list", async () => {
+  const panel = ruleTestPanel();
+  let resolvedLoads = 0;
+  const writes = [];
+  panel._loadResolvedBookings = async () => { resolvedLoads += 1; };
+  panel._loadOverview = async () => {};
+  panel._hass = { fetchWithAuth: async (url, options) => {
+    writes.push({ url, method: options.method });
+    return new Response(JSON.stringify({ booking: { id: "b1", status: "unresolved" } }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } };
+
+  await panel._unresolveBooking("b1");
+
+  assert.deepEqual(writes, [{ url: "/api/finanzplaner/bookings/b1/unresolve", method: "POST" }]);
+  assert.equal(resolvedLoads, 1);
+  assert.match(panel._message, /Prüfliste/);
+});
 
 function validRuleDraft() {
   return {

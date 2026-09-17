@@ -1027,7 +1027,9 @@ def rule_suggestion(
         f"Konto „{accounts[account_id].get('label') or account_id}“"
         if account_id is not None else "Alle Konten (keine Kontobedingung)"
     )
-    reason = f"{account_condition}; Zahlungsempfänger „{normalized['counterparty']}“ stimmt überein."
+    reason = f"{account_condition}."
+    if normalized["counterparty"]:
+        reason += f" Zahlungsempfänger „{normalized['counterparty']}“ stimmt überein."
     if normalized["purpose_contains"]:
         reason += f" Verwendungszweck enthält „{normalized['purpose_contains']}“."
     return {

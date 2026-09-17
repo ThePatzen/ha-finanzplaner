@@ -661,6 +661,7 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
         self.assertEqual(self.coordinator.store.save_count, 0)
         self.assertEqual(self.coordinator.refresh_count, 0)
 
+
     def test_conflicting_rules_are_visible_without_selection(self):
         booking = {
             "id": "booking-1",
@@ -765,6 +766,81 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
         self.assertEqual(self.coordinator.store.data, before)
         self.assertEqual(self.coordinator.store.save_count, 0)
         self.assertEqual(self.coordinator.refresh_count, 0)
+
+
+class AutomaticRuleApplicationTests(unittest.TestCase):
+    setUp = RuleViewTests.setUp
+    _request = RuleViewTests._request
+
+    def test_apply_rules_resolves_only_unique_matches_and_reports_conflicts(self):
+        unique = {
+            "id": "booking-unique",
+            "status": "unresolved",
+            "account_id": "account-1",
+            "counterparty": "Supermarkt",
+            "purpose": "Einkauf",
+            "amount": -42.37,
+            "allocations": [],
+        }
+        conflict = deepcopy(unique)
+        conflict.update(id="booking-conflict", purpose="Konflikt")
+        second_rule = deepcopy(self.coordinator.store.data["rules"][0])
+        second_rule.update(id="rule-2", purpose_contains="Konflikt")
+        self.coordinator.store.data["bookings"] = [unique, conflict]
+        self.coordinator.store.data["rules"].append(second_rule)
+
+        result = asyncio.run(
+            self.http.ApplyRulesView().post(self._request({}))
+        )
+
+        self.assertEqual(result["applied"], 1)
+        self.assertEqual(result["conflicts"], 1)
+        self.assertEqual(result["unresolved"], 0)
+        self.assertEqual(unique["status"], "resolved")
+        self.assertEqual(unique["matched_rule"]["rule_id"], "rule-1")
+        self.assertEqual(conflict["status"], "unresolved")
+        self.assertEqual(conflict["allocations"], [])
+        self.assertEqual(self.coordinator.store.save_count, 1)
+
+    def test_resolved_view_lists_manual_and_rule_resolved_bookings(self):
+        resolved = self.coordinator.store.data["bookings"][0]
+        resolved["matched_rule"] = {
+            "rule_id": "rule-1",
+            "rule_label": "Bestehende Regel",
+            "reason": "Konto und Zahlungsempfänger stimmen überein.",
+            "applied_at": "2026-09-17T10:00:00+00:00",
+        }
+
+        result = asyncio.run(
+            self.http.ResolvedBookingsView().get(self._request())
+        )
+
+        self.assertEqual([booking["id"] for booking in result["bookings"]], ["booking-resolved"])
+        self.assertEqual(result["bookings"][0]["matched_rule"]["rule_id"], "rule-1")
+        self.assertEqual(self.coordinator.store.save_count, 0)
+
+    def test_unresolve_returns_booking_to_review_and_clears_rule_metadata(self):
+        booking = self.coordinator.store.data["bookings"][0]
+        booking["matched_rule"] = {
+            "rule_id": "rule-1",
+            "rule_label": "Bestehende Regel",
+            "reason": "Treffer",
+            "applied_at": "2026-09-17T10:00:00+00:00",
+        }
+        before_refreshes = self.coordinator.refresh_count
+
+        result = asyncio.run(
+            self.http.BookingUnresolveView().post(
+                self._request({}),
+                "booking-resolved",
+            )
+        )
+
+        self.assertEqual(result["booking"]["status"], "unresolved")
+        self.assertEqual(booking["allocations"], [])
+        self.assertIsNone(booking["matched_rule"])
+        self.assertEqual(self.coordinator.store.save_count, 1)
+        self.assertEqual(self.coordinator.refresh_count, before_refreshes + 1)
 
 
 class RuleRegistrationTests(unittest.TestCase):

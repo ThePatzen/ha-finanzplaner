@@ -229,6 +229,16 @@ class RuleMatchingTests(unittest.TestCase):
                     else:
                         self.assertNotIn("Verwendungszweck", reason)
 
+    def test_reason_does_not_claim_missing_counterparty_as_a_match(self):
+        rule = self._rule("rule-account-purpose", purpose_contains="Einkauf")
+        rule["counterparty"] = None
+
+        result = self._suggestion([rule], purpose="Einkauf im Markt")
+
+        reason = result["suggestion"]["reason"]
+        self.assertNotIn("Zahlungsempfänger", reason)
+        self.assertIn("Verwendungszweck", reason)
+
     def test_equal_highest_priority_rules_create_conflict(self):
         result = self._suggestion([
             self._rule("rule-a", priority=20),
