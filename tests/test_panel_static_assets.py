@@ -19,7 +19,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
             / "manifest.json"
         )
         version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-        self.assertEqual(version, "0.3.4")
+        self.assertEqual(version, "0.4.0")
         build_path = getattr(
             const, "panel_static_path", lambda _version: "/api/finanzplaner/static"
         )(version)
@@ -27,5 +27,5 @@ class PanelStaticAssetsTest(unittest.TestCase):
 
         self.assertEqual(
             urljoin(panel_url, "panel-utils.mjs"),
-            "https://ha.example/api/finanzplaner/static/0.3.4/panel-utils.mjs",
+            "https://ha.example/api/finanzplaner/static/0.4.0/panel-utils.mjs",
         )

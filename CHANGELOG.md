@@ -10,6 +10,10 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+Noch keine Änderungen.
+
+## [0.4.0] – 2026-09-17
+
 - Regelverwaltung für Buchungsvorschläge mit aktiven, deaktivierten und priorisierten Regeln ergänzt
 - Konto- und Zahlungsempfänger-Matching präzisiert: Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung; der Verwendungszweckfilter bleibt optional
 - Vorschläge mit höchster Priorität und ein sichtbarer Konfliktstatus bei gleicher Priorität ergänzt
@@ -110,3 +114,4 @@ Erste vorbereitete vertikale Version:
 [0.3.2]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.2
 [0.3.3]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.3
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
+[0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
