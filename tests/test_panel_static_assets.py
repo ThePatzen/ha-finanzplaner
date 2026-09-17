@@ -29,3 +29,19 @@ class PanelStaticAssetsTest(unittest.TestCase):
             urljoin(panel_url, "panel-utils.mjs"),
             "https://ha.example/api/finanzplaner/static/0.7.0/panel-utils.mjs",
         )
+
+    def test_booking_lists_use_shared_detail_dialog_and_raw_data_action(self) -> None:
+        panel_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        )
+        source = panel_path.read_text(encoding="utf-8")
+
+        self.assertIn("data-booking-detail-dialog", source)
+        self.assertGreaterEqual(source.count("data-booking-details"), 2)
+        self.assertIn("data-booking-raw-toggle", source)
+        self.assertIn("bookingDetailsRequestUrl", source)
+        self.assertIn("textContent = bookingDetailRawJson", source)

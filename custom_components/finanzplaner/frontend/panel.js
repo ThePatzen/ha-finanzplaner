@@ -1,4 +1,4 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const BREAKDOWN_URL = "/api/finanzplaner/overview/breakdown";
@@ -341,6 +341,28 @@ const styles = `
   .confirm-dialog-cancel:hover { border-color: var(--fp-navy); background: var(--fp-cyan-soft); }
   .confirm-dialog-submit { border-color: var(--fp-navy) !important; color: var(--fp-paper); background: var(--fp-navy); }
   .confirm-dialog-submit:hover { background: var(--fp-navy-deep); }
+  .booking-detail-dialog { inline-size: min(58rem, calc(100vw - 2rem)); max-inline-size: none; max-block-size: min(86dvh, 64rem); margin: auto; padding: 0; border: 1px solid var(--fp-navy); border-radius: var(--fp-radius); color: var(--fp-ink); background: var(--fp-paper-strong); box-shadow: 0 1.1rem 3rem rgb(11 30 63 / 0.24); }
+  .booking-detail-dialog::backdrop { background: rgb(11 30 63 / 0.52); }
+  .booking-detail-content { display: grid; gap: 1rem; max-block-size: min(86dvh, 64rem); overflow: auto; padding: clamp(1rem, 3vw, 1.6rem); }
+  .booking-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .booking-detail-dialog h2, .booking-detail-dialog h3 { margin: 0; font-family: var(--fp-display); line-height: 1.1; }
+  .booking-detail-dialog h2 { font-size: clamp(1.55rem, 3vw, 2.1rem); }
+  .booking-detail-dialog h3 { font-size: 1.05rem; }
+  .booking-detail-description, .booking-detail-status, .booking-detail-error { margin: 0.35rem 0 0; color: var(--fp-muted); line-height: 1.5; overflow-wrap: anywhere; }
+  .booking-detail-error { padding: 0.8rem; border-inline-start: 0.25rem solid var(--fp-coral); color: var(--fp-ink); background: var(--fp-coral-soft); }
+  .booking-detail-section { display: grid; gap: 0.65rem; padding-block-start: 0.8rem; border-block-start: 1px solid var(--fp-line); }
+  .booking-detail-fields, .booking-detail-nested { display: grid; gap: 0.5rem; margin: 0; }
+  .booking-detail-fields > div, .booking-detail-nested > div { display: grid; grid-template-columns: minmax(8rem, 0.42fr) minmax(0, 1fr); gap: 0.8rem; padding-block: 0.4rem; border-block-end: 1px solid rgb(214 219 220 / 0.7); }
+  .booking-detail-fields dt, .booking-detail-nested dt { color: var(--fp-muted); font-size: 0.78rem; font-weight: 800; }
+  .booking-detail-fields dd, .booking-detail-nested dd { min-inline-size: 0; margin: 0; overflow-wrap: anywhere; }
+  .booking-detail-empty { color: var(--fp-muted); font-style: italic; }
+  .booking-detail-list { display: grid; gap: 0.45rem; margin: 0; padding-inline-start: 1.2rem; }
+  .booking-detail-list li { padding-inline-start: 0.2rem; }
+  .booking-detail-key { display: block; margin-block-end: 0.2rem; color: var(--fp-muted); font-size: 0.73rem; font-weight: 800; }
+  .booking-detail-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.55rem; }
+  .booking-detail-actions button { min-block-size: 2.75rem; padding: 0.55rem 0.85rem; border: 1px solid var(--fp-control-border); border-radius: 0.45rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-weight: 800; }
+  .booking-detail-actions button:hover { border-color: var(--fp-navy); background: var(--fp-cyan-soft); }
+  .booking-detail-raw { max-block-size: 32rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--fp-data); font-size: 0.78rem; line-height: 1.55; }
 
   .review-view, .accounts-view, .plan-items-view, .pets-view, .feed-profiles-view, .catalogs-view { inline-size: 100%; padding-block: 1.8rem; }
   .resolved-view { inline-size: 100%; padding-block: 1.8rem; }
@@ -800,16 +822,23 @@ const styles = `
     .confirm-dialog { inline-size: calc(100vw - 1.7rem); }
     .confirm-dialog-actions { justify-content: stretch; }
     .confirm-dialog-actions button { flex: 1 1 9rem; }
+    .booking-detail-dialog { inline-size: calc(100vw - 1.7rem); }
+    .booking-detail-fields > div, .booking-detail-nested > div { grid-template-columns: 1fr; gap: 0.2rem; }
+    .booking-detail-actions { justify-content: stretch; }
+    .booking-detail-actions button { flex: 1 1 9rem; }
   }
 
   @media (forced-colors: active) {
     .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .catalog-section, .catalog-entry-form, .section-card, .section-note, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select, .catalog-field input, .feedback-presenter { border: 1px solid CanvasText; box-shadow: none; }
-    .feedback-presenter, .confirm-dialog { color: CanvasText; background: Canvas; }
+    .feedback-presenter, .confirm-dialog, .booking-detail-dialog { color: CanvasText; background: Canvas; }
     .feedback-presenter-close { border-color: ButtonText; color: ButtonText; }
     .confirm-dialog { border-color: CanvasText; box-shadow: none; }
     .confirm-dialog::backdrop { background: CanvasText; opacity: 0.5; }
     .confirm-dialog-actions button { border-color: ButtonText; color: ButtonText; background: Canvas; }
     .confirm-dialog-submit { color: Canvas; background: ButtonText !important; }
+    .booking-detail-dialog { border-color: CanvasText; box-shadow: none; }
+    .booking-detail-dialog::backdrop { background: CanvasText; opacity: 0.5; }
+    .booking-detail-actions button { border-color: ButtonText; color: ButtonText; background: Canvas; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -1041,6 +1070,12 @@ class FinanzplanerPanel extends HTMLElement {
     this._resolvedBookings = [];
     this._resolvedLoading = false;
     this._resolvedLoadFailed = false;
+    this._bookingDetail = null;
+    this._bookingDetailLoading = false;
+    this._bookingDetailError = "";
+    this._bookingDetailRawVisible = false;
+    this._bookingDetailTrigger = null;
+    this._bookingDetailRequest = null;
     this._selectedReviewBookings = new Set();
     this._selectedResolvedBookings = new Set();
     this._deletingBookings = false;
@@ -1117,6 +1152,8 @@ class FinanzplanerPanel extends HTMLElement {
     window.removeEventListener("beforeunload", this._handleBeforeUnload);
     this._clearFeedbackTimer();
     this.shadowRoot.querySelector("[data-confirm-dialog]")?.close();
+    this._bookingDetailRequest = null;
+    this.shadowRoot.querySelector("[data-booking-detail-dialog]")?.close();
     this._clearBreakdown();
     this._overviewRequest = null;
   }
@@ -1175,6 +1212,89 @@ class FinanzplanerPanel extends HTMLElement {
       .find((button) => button.dataset.comparisonDetail === key)?.focus();
   }
 
+  _bookingDetailLabel(key) {
+    return String(key).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  _bookingDetailStatusLabel(status) {
+    return ({ unresolved: "Manuelle Zuordnung erforderlich", suggested: "Regelvorschlag vorhanden", conflict: "Regelkonflikt", resolved: "Übernommen" })[status] || "Prüfung erforderlich";
+  }
+
+  _bookingDetailValueTemplate(value, path = "Buchungsfeld") {
+    if (value === null || value === undefined || value === "") return '<span class="booking-detail-empty">Nicht vorhanden</span>';
+    if (Array.isArray(value)) {
+      return value.length ? '<ul class="booking-detail-list">' + value.map((item, index) => '<li><span class="booking-detail-key">' + escapeHtml(path + " " + (index + 1)) + '</span>' + this._bookingDetailValueTemplate(item, path) + '</li>').join("") + '</ul>' : '<span class="booking-detail-empty">Nicht vorhanden</span>';
+    }
+    if (typeof value === "object") return '<dl class="booking-detail-nested">' + Object.entries(value).map(([key, item]) => '<div><dt>' + escapeHtml(this._bookingDetailLabel(key)) + '</dt><dd>' + this._bookingDetailValueTemplate(item, key) + '</dd></div>').join("") + '</dl>';
+    return '<span>' + escapeHtml(String(value)) + '</span>';
+  }
+
+  _bookingDetailFieldsTemplate(record) {
+    const fields = Object.entries(record || {}).filter(([key]) => key !== "source_data");
+    return fields.length ? '<dl class="booking-detail-fields">' + fields.map(([key, value]) => '<div><dt>' + escapeHtml(this._bookingDetailLabel(key)) + '</dt><dd>' + this._bookingDetailValueTemplate(value, key) + '</dd></div>').join("") + '</dl>' : '<span class="booking-detail-empty">Nicht vorhanden</span>';
+  }
+
+  _bookingDetailDialogTemplate() {
+    if (this._bookingDetailLoading) return '<section class="booking-detail-section" aria-live="polite"><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-status">Buchungsdetails werden geladen …</p></section>';
+    if (this._bookingDetailError) return '<section class="booking-detail-section" aria-live="assertive"><div><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-error">' + escapeHtml(this._bookingDetailError) + '</p></div><div class="booking-detail-actions"><button type="button" data-booking-detail-close>Schließen</button></div></section>';
+    if (!this._bookingDetail) return '<section class="booking-detail-section"><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-status">Keine Buchungsdetails vorhanden.</p><div class="booking-detail-actions"><button type="button" data-booking-detail-close>Schließen</button></div></section>';
+    const { booking, account, details } = this._bookingDetail;
+    const status = details?.status || booking?.status;
+    const rawMarkup = this._bookingDetailRawVisible ? '<section class="booking-detail-section"><h3>Rohdaten</h3><pre class="booking-detail-raw" data-booking-raw></pre></section>' : '';
+    return `<header class="booking-detail-header"><div><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-description">${escapeHtml(String(booking?.counterparty || booking?.purpose || "Buchung"))}</p></div><button type="button" class="icon-button" data-booking-detail-close aria-label="Buchungsdetails schließen">Schließen</button></header><section class="booking-detail-section"><h3>Buchung</h3>${this._bookingDetailFieldsTemplate(booking)}</section><section class="booking-detail-section"><h3>Konto</h3>${this._bookingDetailFieldsTemplate(account)}</section><section class="booking-detail-section"><h3>Status und Zuordnung</h3><p class="booking-detail-status">${escapeHtml(this._bookingDetailStatusLabel(status))}</p>${this._bookingDetailFieldsTemplate(details)}</section>${rawMarkup}<div class="booking-detail-actions"><button type="button" data-booking-raw-toggle aria-pressed="${this._bookingDetailRawVisible ? "true" : "false"}">${this._bookingDetailRawVisible ? "Rohdaten ausblenden" : "Rohdaten anzeigen"}</button><button type="button" data-booking-detail-close>Schließen</button></div>`;
+  }
+
+  _renderBookingDetailDialog() {
+    const content = this.shadowRoot.querySelector("[data-booking-detail-content]");
+    if (!content) return;
+    content.innerHTML = this._bookingDetailDialogTemplate();
+    const rawNode = content.querySelector("[data-booking-raw]");
+    if (rawNode && this._bookingDetail) rawNode.textContent = bookingDetailRawJson(this._bookingDetail);
+  }
+
+  _closeBookingDetails() {
+    const dialog = this.shadowRoot.querySelector("[data-booking-detail-dialog]");
+    const trigger = this._bookingDetailTrigger;
+    this._bookingDetailRequest = null;
+    this._bookingDetail = null;
+    this._bookingDetailLoading = false;
+    this._bookingDetailError = "";
+    this._bookingDetailRawVisible = false;
+    this._bookingDetailTrigger = null;
+    if (dialog?.open) dialog.close();
+    this._render();
+    if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+  }
+
+  async _openBookingDetails(bookingId, trigger) {
+    const dialog = this.shadowRoot.querySelector("[data-booking-detail-dialog]");
+    if (!dialog || typeof dialog.showModal !== "function" || this._bookingDetailRequest) return;
+    const request = {};
+    this._bookingDetailRequest = request;
+    this._bookingDetail = null;
+    this._bookingDetailLoading = true;
+    this._bookingDetailError = "";
+    this._bookingDetailRawVisible = false;
+    this._bookingDetailTrigger = trigger;
+    this._renderBookingDetailDialog();
+    dialog.showModal();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, bookingDetailsRequestUrl(BOOKINGS_URL, bookingId));
+      const result = await readApiResponse(response);
+      if (this._bookingDetailRequest !== request) return;
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Die Buchungsdetails konnten nicht geladen werden."));
+      this._bookingDetail = result;
+    } catch (error) {
+      if (this._bookingDetailRequest !== request) return;
+      this._bookingDetailError = error.message || "Die Buchungsdetails konnten nicht geladen werden.";
+    } finally {
+      if (this._bookingDetailRequest === request) {
+        this._bookingDetailLoading = false;
+        this._renderBookingDetailDialog();
+      }
+    }
+  }
+
   async _loadBreakdown(dimension, key) {
     if (this._view !== "overview" || this._loading || dimension !== this._comparisonDimension || this._data.demo !== false) return;
     const selection = { month: this._monthValue(), dimension, key };
@@ -1207,6 +1327,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   async _openReview() {
     if (!(await this._confirmDiscardUnsavedChanges())) return;
+    if (this._bookingDetailRequest || this._bookingDetailTrigger) this._closeBookingDetails();
     this._view = "review";
     this._message = "";
     this._selectedReviewBookings.clear();
@@ -1229,6 +1350,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   async _openResolvedBookings() {
     if (!(await this._confirmDiscardUnsavedChanges())) return;
+    if (this._bookingDetailRequest || this._bookingDetailTrigger) this._closeBookingDetails();
     this._view = "resolved";
     this._message = "";
     this._selectedResolvedBookings.clear();
@@ -3383,6 +3505,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _render() {
+    if (!['review', 'resolved'].includes(this._view) && (this._bookingDetailRequest || this._bookingDetailTrigger)) this._closeBookingDetails();
     if (this._view !== "overview") this._clearBreakdown();
     const comparisonFocus = this.shadowRoot.activeElement;
     const comparisonFocusId = comparisonFocus?.closest(".comparison-section") ? comparisonFocus.id : null;
@@ -3439,6 +3562,18 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-rule-from-booking]").forEach((button) => button.addEventListener("click", () => this._openRuleFromBooking(button.dataset.ruleFromBooking)));
     this.shadowRoot.querySelectorAll("[data-accept-suggestion]").forEach((button) => button.addEventListener("click", () => this._acceptSuggestion(button.dataset.acceptSuggestion)));
     this.shadowRoot.querySelectorAll("[data-unresolve-booking]").forEach((button) => button.addEventListener("click", () => this._unresolveBooking(button.dataset.unresolveBooking)));
+    this.shadowRoot.querySelectorAll("[data-booking-details]").forEach((button) => button.addEventListener("click", () => this._openBookingDetails(button.dataset.bookingDetails, button)));
+    const bookingDetailDialog = this.shadowRoot.querySelector("[data-booking-detail-dialog]");
+    bookingDetailDialog?.addEventListener("click", (event) => {
+      if (event.target.matches("[data-booking-raw-toggle]")) {
+        this._bookingDetailRawVisible = !this._bookingDetailRawVisible;
+        this._renderBookingDetailDialog();
+      }
+      if (event.target.matches("[data-booking-detail-close]")) this._closeBookingDetails();
+    });
+    bookingDetailDialog?.addEventListener("close", () => {
+      if (this._bookingDetailRequest || this._bookingDetail || this._bookingDetailLoading || this._bookingDetailError || this._bookingDetailTrigger) this._closeBookingDetails();
+    });
     this.shadowRoot.querySelectorAll("[data-booking-select], [data-booking-select-all]").forEach((input) => input.addEventListener("change", (event) => this._updateBookingSelection(event)));
     this.shadowRoot.querySelectorAll("[data-delete-bookings]").forEach((button) => button.addEventListener("click", () => this._deleteSelectedBookings(button.dataset.bookingView)));
     const ruleForm = this.shadowRoot.querySelector("[data-rule-form]");
@@ -3572,6 +3707,9 @@ class FinanzplanerPanel extends HTMLElement {
             <button class="confirm-dialog-submit" type="submit" value="confirm" data-confirm-submit>Bestätigen</button>
           </form>
         </div>
+      </dialog>
+      <dialog class="booking-detail-dialog" data-booking-detail-dialog closedby="closerequest" aria-labelledby="booking-detail-title" aria-describedby="booking-detail-description">
+        <div class="booking-detail-content" data-booking-detail-content></div>
       </dialog>
     </div>`;
   }
@@ -4375,7 +4513,7 @@ class FinanzplanerPanel extends HTMLElement {
         <td class="table-number">${formatEuro(booking.amount)}</td>
         <td>${allocations}</td>
         <td><span class="resolved-rule-source${sourceClass}">${escapeHtml(source)}</span>${matchedRule?.reason ? `<span class="resolved-rule-reason">${escapeHtml(matchedRule.reason)}</span>` : ""}</td>
-        <td class="table-actions"><button class="table-edit-button" type="button" data-unresolve-booking="${escapeHtml(bookingId)}"${this._unresolvingBookings.has(bookingId) ? " disabled" : ""}>${this._unresolvingBookings.has(bookingId) ? "Wird geändert …" : "Zuordnung rückgängig"}</button></td>
+        <td class="table-actions"><button class="table-edit-button" type="button" data-booking-details="${escapeHtml(bookingId)}" aria-label="Details für ${escapeHtml(counterparty || "Buchung")} anzeigen">Details</button><button class="table-edit-button" type="button" data-unresolve-booking="${escapeHtml(bookingId)}"${this._unresolvingBookings.has(bookingId) ? " disabled" : ""}>${this._unresolvingBookings.has(bookingId) ? "Wird geändert …" : "Zuordnung rückgängig"}</button></td>
       </tr>`;
     }).join("");
     const body = this._resolvedLoading
@@ -4406,7 +4544,7 @@ class FinanzplanerPanel extends HTMLElement {
       const accountMarkup = accountLabel
         ? `<strong>Erkanntes Konto: ${escapeHtml(accountLabel)}</strong>${accountReference ? `<span class="booking-account-reference">Kontoreferenz: ${escapeHtml(accountReference)}</span>` : ""}`
         : `<strong>Erkanntes Konto: ${escapeHtml(accountReference || "nicht zugeordnet")}</strong>`;
-      return `<li><form class="booking-row${selected ? " booking-row--selected" : ""}" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="review" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose"><span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${accountMarkup}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
+      return `<li><form class="booking-row${selected ? " booking-row--selected" : ""}" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="review" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose"><span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${accountMarkup}</span><span class="booking-amount">${formatEuro(booking.amount)}</span><button class="table-edit-button" type="button" data-booking-details="${escapeHtml(bookingId)}" aria-label="Details für ${escapeHtml(counterparty || "Buchung")} anzeigen">Details</button>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
     }).join("")}</ul>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
     const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
     return this._shellTemplate(content);
