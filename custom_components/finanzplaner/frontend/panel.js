@@ -329,6 +329,17 @@ const styles = `
   .feedback-presenter-message { min-inline-size: 0; margin: 0; font-size: 0.82rem; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
   .feedback-presenter-close { min-inline-size: 2.25rem; min-block-size: 2.25rem; padding: 0.35rem 0.5rem; border: 1px solid rgb(247 247 244 / 0.42); border-radius: 0.4rem; color: var(--fp-paper); background: transparent; font-size: 0.72rem; font-weight: 800; white-space: nowrap; }
   .feedback-presenter-close:hover { border-color: var(--fp-paper); background: rgb(247 247 244 / 0.12); }
+  .confirm-dialog { inline-size: min(32rem, calc(100vw - 2rem)); max-inline-size: none; margin: auto; padding: 0; border: 1px solid var(--fp-navy); border-radius: var(--fp-radius); color: var(--fp-ink); background: var(--fp-paper-strong); box-shadow: 0 1.1rem 3rem rgb(11 30 63 / 0.24); }
+  .confirm-dialog::backdrop { background: rgb(11 30 63 / 0.52); }
+  .confirm-dialog-content { display: grid; gap: 0.8rem; padding: 1.3rem; }
+  .confirm-dialog h2 { margin: 0; font-family: var(--fp-display); font-size: 1.45rem; line-height: 1.05; }
+  .confirm-dialog-message { margin: 0; color: var(--fp-muted); line-height: 1.5; overflow-wrap: anywhere; }
+  .confirm-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.55rem; margin: 0.35rem 0 0; }
+  .confirm-dialog-actions button { min-block-size: 2.75rem; padding: 0.55rem 0.85rem; border: 1px solid var(--fp-control-border); border-radius: 0.45rem; font-weight: 800; }
+  .confirm-dialog-cancel { color: var(--fp-ink); background: var(--fp-paper-strong); }
+  .confirm-dialog-cancel:hover { border-color: var(--fp-navy); background: var(--fp-cyan-soft); }
+  .confirm-dialog-submit { border-color: var(--fp-navy) !important; color: var(--fp-paper); background: var(--fp-navy); }
+  .confirm-dialog-submit:hover { background: var(--fp-navy-deep); }
 
   .review-view, .accounts-view, .plan-items-view, .pets-view, .feed-profiles-view, .catalogs-view { inline-size: 100%; padding-block: 1.8rem; }
   .resolved-view { inline-size: 100%; padding-block: 1.8rem; }
@@ -772,12 +783,19 @@ const styles = `
     .allocation-actions { align-items: stretch; flex-direction: column; }
     .allocation-status, .allocation-add, .assign-button { inline-size: 100%; }
     .feedback-presenter { inset: auto 0.85rem 0.85rem; inline-size: auto; }
+    .confirm-dialog { inline-size: calc(100vw - 1.7rem); }
+    .confirm-dialog-actions { justify-content: stretch; }
+    .confirm-dialog-actions button { flex: 1 1 9rem; }
   }
 
   @media (forced-colors: active) {
     .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .catalog-section, .catalog-entry-form, .section-card, .section-note, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select, .catalog-field input, .feedback-presenter { border: 1px solid CanvasText; box-shadow: none; }
-    .feedback-presenter { color: CanvasText; background: Canvas; }
+    .feedback-presenter, .confirm-dialog { color: CanvasText; background: Canvas; }
     .feedback-presenter-close { border-color: ButtonText; color: ButtonText; }
+    .confirm-dialog { border-color: CanvasText; box-shadow: none; }
+    .confirm-dialog::backdrop { background: CanvasText; opacity: 0.5; }
+    .confirm-dialog-actions button { border-color: ButtonText; color: ButtonText; background: Canvas; }
+    .confirm-dialog-submit { color: Canvas; background: ButtonText !important; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -1045,6 +1063,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._sectionLoadFailed = false;
     this._message = "";
     this._feedbackTimer = null;
+    this._confirmDialogPromise = null;
     this._loading = false;
     this._handleBeforeUnload = (event) => {
       if (!this._hasUnsavedChanges()) return;
@@ -1065,6 +1084,7 @@ class FinanzplanerPanel extends HTMLElement {
   disconnectedCallback() {
     window.removeEventListener("beforeunload", this._handleBeforeUnload);
     this._clearFeedbackTimer();
+    this.shadowRoot.querySelector("[data-confirm-dialog]")?.close();
   }
 
   set hass(value) {
@@ -1089,7 +1109,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openReview() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "review";
     this._message = "";
     this._selectedReviewBookings.clear();
@@ -1111,7 +1131,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openResolvedBookings() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "resolved";
     this._message = "";
     this._selectedResolvedBookings.clear();
@@ -1153,7 +1173,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openSectionOverview(view) {
-    if (!SECTION_VIEWS.includes(view) || !this._confirmDiscardUnsavedChanges()) return;
+    if (!SECTION_VIEWS.includes(view) || !(await this._confirmDiscardUnsavedChanges())) return;
     this._view = view;
     this._message = "";
     this._sectionLoading = view === "people";
@@ -1216,7 +1236,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openRules() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "rules";
     this._resetRuleEditor();
     this._ruleMessage = "";
@@ -1252,8 +1272,8 @@ class FinanzplanerPanel extends HTMLElement {
     };
   }
 
-  _openRuleEditor(ruleId) {
-    if (this._rulesLoading || this._rulesLoadFailed || !this._confirmDiscardUnsavedChanges()) return;
+  async _openRuleEditor(ruleId) {
+    if (this._rulesLoading || this._rulesLoadFailed || !(await this._confirmDiscardUnsavedChanges())) return;
     const rule = this._rules.find((candidate) => String(candidate.id) === String(ruleId));
     if (ruleId !== "new" && !rule) return;
     this._resetRuleEditor();
@@ -1265,8 +1285,8 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelector("#rule-label")?.focus();
   }
 
-  _closeRuleEditor() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+  async _closeRuleEditor() {
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._resetRuleEditor();
     this._ruleMessage = "";
     this._render();
@@ -1275,7 +1295,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   async _openRuleFromBooking(bookingId) {
     const booking = this._confirmedBookings.get(String(bookingId));
-    if (!booking || booking.status !== "resolved" || !this._confirmDiscardUnsavedChanges()) return;
+    if (!booking || booking.status !== "resolved" || !(await this._confirmDiscardUnsavedChanges())) return;
     await this._openRules();
     if (this._view !== "rules" || this._rulesLoadFailed) return;
     const total = Math.abs(Number(booking.amount));
@@ -1612,14 +1632,17 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _deleteSelectedBookings(view) {
-    if (this._deletingBookings || !this._confirmDiscardUnsavedChanges()) return;
+    if (this._deletingBookings || !(await this._confirmDiscardUnsavedChanges())) return;
     const selection = this._bookingSelectionForView(view);
     const bookingIds = [...selection].filter((bookingId) =>
       this._bookingListForView(view).some((booking) => String(booking.id) === bookingId),
     );
     if (!bookingIds.length) return;
     const noun = bookingIds.length === 1 ? "Buchung" : "Buchungen";
-    if (!window.confirm(`Möchtest du ${bookingIds.length} ${noun} dauerhaft löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.`)) return;
+    if (!(await this._requestConfirmation(`Möchtest du ${bookingIds.length} ${noun} dauerhaft löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.`, {
+      title: `${noun} löschen`,
+      confirmLabel: "Dauerhaft löschen",
+    }))) return;
 
     this._deletingBookings = true;
     this._message = `${bookingIds.length} ${noun} werden gelöscht …`;
@@ -1658,7 +1681,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openAccounts() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "accounts";
     this._message = "";
     this._accountEditorId = null;
@@ -1731,7 +1754,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openPets() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "pets";
     this._message = "";
     this._petEditorId = null;
@@ -1810,7 +1833,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openFeedProfiles() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "feed_profiles";
     this._message = "";
     this._feedProfileEditorId = null;
@@ -1875,7 +1898,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openCatalogs() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "catalogs";
     this._message = "";
     this._catalogOverviewKind = "categories";
@@ -1991,7 +2014,10 @@ class FinanzplanerPanel extends HTMLElement {
     const kind = String(button.dataset.catalogKind);
     const entryId = String(button.dataset.catalogId);
     const entry = this._catalogEntries(kind).find((candidate) => String(candidate.id) === entryId);
-    if (!entry || !window.confirm(`„${entry.label || "Eintrag"}“ archivieren?`)) return;
+    if (!entry || !(await this._requestConfirmation(`„${entry.label || "Eintrag"}“ archivieren?`, {
+      title: `${catalogKindSingularLabel(kind)} archivieren`,
+      confirmLabel: "Archivieren",
+    }))) return;
     const key = this._catalogKey(kind, entryId);
     if (this._catalogSubmissions.has(key)) return;
     const form = button.closest("[data-catalog-form]");
@@ -2119,7 +2145,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _openPlanItems() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "plan_items";
     this._message = "";
     this._planItemEditorId = null;
@@ -2273,7 +2299,10 @@ class FinanzplanerPanel extends HTMLElement {
     const button = event.currentTarget;
     const itemId = String(button.dataset.planItemId);
     const item = this._planItems.find((candidate) => String(candidate.id) === itemId);
-    if (!item || !window.confirm(`„${item.name || "Planposten"}“ archivieren?`)) return;
+    if (!item || !(await this._requestConfirmation(`„${item.name || "Planposten"}“ archivieren?`, {
+      title: "Planposten archivieren",
+      confirmLabel: "Archivieren",
+    }))) return;
     if (this._planItemSubmissions.has(itemId)) return;
     const form = button.closest("[data-plan-item-form]");
     const status = form?.querySelector("[data-plan-item-save-status]");
@@ -2377,7 +2406,10 @@ class FinanzplanerPanel extends HTMLElement {
     const button = event.currentTarget;
     const petId = String(button.dataset.petId);
     const pet = this._pets.find((candidate) => String(candidate.id) === petId);
-    if (!pet || !window.confirm(`„${pet.name || "Tier"}“ archivieren?`)) return;
+    if (!pet || !(await this._requestConfirmation(`„${pet.name || "Tier"}“ archivieren?`, {
+      title: "Tier archivieren",
+      confirmLabel: "Archivieren",
+    }))) return;
     if (this._petSubmissions.has(petId)) return;
     const form = button.closest("[data-pet-form]");
     const status = form?.querySelector("[data-pet-save-status]");
@@ -2502,7 +2534,10 @@ class FinanzplanerPanel extends HTMLElement {
     const button = event.currentTarget;
     const profileId = String(button.dataset.feedProfileId);
     const profile = this._feedProfiles.find((candidate) => String(candidate.id) === profileId);
-    if (!profile || !window.confirm(`„${profile.product || "Futterprofil"}“ archivieren?`)) return;
+    if (!profile || !(await this._requestConfirmation(`„${profile.product || "Futterprofil"}“ archivieren?`, {
+      title: "Futterprofil archivieren",
+      confirmLabel: "Archivieren",
+    }))) return;
     if (this._feedProfileSubmissions.has(profileId)) return;
     const form = button.closest("[data-feed-profile-form]");
     const status = form?.querySelector("[data-feed-profile-save-status]");
@@ -2538,7 +2573,10 @@ class FinanzplanerPanel extends HTMLElement {
     const button = event.currentTarget;
     const profileId = String(button.dataset.feedProfileId);
     const profile = this._feedProfiles.find((candidate) => String(candidate.id) === profileId);
-    if (!profile || !window.confirm(`„${profile.product || "Futter"}“ für ${profile.pet_name || "das Tier"} als gekauft markieren?`)) return;
+    if (!profile || !(await this._requestConfirmation(`„${profile.product || "Futter"}“ für ${profile.pet_name || "das Tier"} als gekauft markieren?`, {
+      title: "Futterkauf bestätigen",
+      confirmLabel: "Kauf bestätigen",
+    }))) return;
     if (this._feedProfileSubmissions.has(profileId)) return;
     const form = button.closest("[data-feed-profile-form]");
     const status = form?.querySelector("[data-feed-profile-save-status]");
@@ -2755,13 +2793,16 @@ class FinanzplanerPanel extends HTMLElement {
     }
   }
 
-  _confirmDiscardUnsavedChanges() {
+  async _confirmDiscardUnsavedChanges() {
     if (this._hasPendingSubmissions()) {
       window.alert("Eine Änderung wird gerade gespeichert. Bitte warte, bis der Vorgang abgeschlossen ist.");
       return false;
     }
     if (!this._hasUnsavedChanges()) return true;
-    if (!window.confirm("Es gibt ungespeicherte Änderungen. Möchtest du sie verwerfen?")) return false;
+    if (!(await this._requestConfirmation("Es gibt ungespeicherte Änderungen. Möchtest du sie verwerfen?", {
+      title: "Änderungen verwerfen",
+      confirmLabel: "Änderungen verwerfen",
+    }))) return false;
     this._discardUnsavedChanges();
     return true;
   }
@@ -2770,8 +2811,8 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelector("#content")?.focus({ preventScroll: true });
   }
 
-  _navigateToOverview() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+  async _navigateToOverview() {
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._view = "overview";
     this._render();
     this._focusContent();
@@ -2784,8 +2825,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._focusContent();
   }
 
-  _closeAccountEditor() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+  async _closeAccountEditor() {
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._accountEditorId = null;
     this._render();
     this._focusContent();
@@ -2798,8 +2839,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._focusContent();
   }
 
-  _closePlanItemEditor() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+  async _closePlanItemEditor() {
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._planItemEditorId = null;
     this._render();
     this._focusContent();
@@ -2812,8 +2853,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._focusContent();
   }
 
-  _closePetEditor() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+  async _closePetEditor() {
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._petEditorId = null;
     this._render();
     this._focusContent();
@@ -2826,8 +2867,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._focusContent();
   }
 
-  _closeFeedProfileEditor() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+  async _closeFeedProfileEditor() {
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._feedProfileEditorId = null;
     this._render();
     this._focusContent();
@@ -2840,8 +2881,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._focusContent();
   }
 
-  _closeCatalogEditor() {
-    if (!this._confirmDiscardUnsavedChanges()) return;
+  async _closeCatalogEditor() {
+    if (!(await this._confirmDiscardUnsavedChanges())) return;
     this._catalogEditor = null;
     this._render();
     this._focusContent();
@@ -3208,6 +3249,34 @@ class FinanzplanerPanel extends HTMLElement {
     this._feedbackTimer = window.setTimeout(() => this._dismissFeedback(), 4200);
   }
 
+  _requestConfirmation(message, { title = "Bestätigung erforderlich", confirmLabel = "Bestätigen" } = {}) {
+    const dialog = this.shadowRoot.querySelector("[data-confirm-dialog]");
+    if (!dialog || typeof dialog.showModal !== "function" || this._confirmDialogPromise) return Promise.resolve(false);
+    const titleNode = dialog.querySelector("[data-confirm-title]");
+    const messageNode = dialog.querySelector("[data-confirm-message]");
+    const submitButton = dialog.querySelector("[data-confirm-submit]");
+    if (titleNode) titleNode.textContent = title;
+    if (messageNode) messageNode.textContent = message;
+    if (submitButton) submitButton.textContent = confirmLabel;
+    dialog.returnValue = "cancel";
+    this._confirmDialogPromise = new Promise((resolve) => {
+      const settle = () => {
+        this._confirmDialogPromise = null;
+        resolve(dialog.returnValue === "confirm");
+      };
+      dialog.addEventListener("close", settle, { once: true });
+      try {
+        dialog.showModal();
+        dialog.querySelector("[data-confirm-cancel]")?.focus();
+      } catch {
+        dialog.removeEventListener("close", settle);
+        this._confirmDialogPromise = null;
+        resolve(false);
+      }
+    });
+    return this._confirmDialogPromise;
+  }
+
   _shiftMonth(delta) {
     this._month = new Date(this._month.getFullYear(), this._month.getMonth() + delta, 1);
     this._loadOverview();
@@ -3383,6 +3452,16 @@ class FinanzplanerPanel extends HTMLElement {
         <p class="feedback-presenter-message" data-feedback-message></p>
         <button class="feedback-presenter-close" type="button" data-feedback-close popovertarget="feedback-presenter" popovertargetaction="hide" aria-label="Meldung schließen">Schließen</button>
       </div>
+      <dialog class="confirm-dialog" data-confirm-dialog closedby="closerequest" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message">
+        <div class="confirm-dialog-content">
+          <h2 id="confirm-dialog-title" data-confirm-title>Bestätigung erforderlich</h2>
+          <p class="confirm-dialog-message" id="confirm-dialog-message" data-confirm-message></p>
+          <form method="dialog" class="confirm-dialog-actions">
+            <button class="confirm-dialog-cancel" type="submit" value="cancel" data-confirm-cancel>Abbrechen</button>
+            <button class="confirm-dialog-submit" type="submit" value="confirm" data-confirm-submit>Bestätigen</button>
+          </form>
+        </div>
+      </dialog>
     </div>`;
   }
 

@@ -433,6 +433,15 @@ test("protects unsaved edits when leaving a view or closing the browser", () => 
   assert.match(panelSource, /_navigateToOverview\(\)/);
 });
 
+test("uses an in-app dialog instead of native confirm prompts", () => {
+  assert.doesNotMatch(panelSource, /window\.confirm\(/);
+  assert.match(panelSource, /<dialog class="confirm-dialog" data-confirm-dialog/);
+  assert.match(panelSource, /dialog\.showModal\(\)/);
+  assert.match(panelSource, /<form method="dialog" class="confirm-dialog-actions">/);
+  assert.match(panelSource, /data-confirm-cancel/);
+  assert.match(panelSource, /data-confirm-submit/);
+});
+
 test("renders a skip link to focusable main content and reveals it on keyboard focus", () => {
   assert.match(panelSource, /class="skip-link visually-hidden" href="#content" data-skip-link/);
   assert.match(panelSource, /\.skip-link:focus-visible\s*\{[^}]*clip-path:\s*none\s*!important/s);
@@ -527,14 +536,34 @@ test("acceptSuggestionDraft identifies the booking and copies allocations", () =
 // Exercise panel behavior without claiming layout or browser rendering coverage.
 function ruleTestPanel() {
   let Panel;
-  const root = { querySelector: () => null, querySelectorAll: () => [] };
+  const dialogNodes = new Map([
+    ["[data-confirm-title]", { textContent: "" }],
+    ["[data-confirm-message]", { textContent: "" }],
+    ["[data-confirm-submit]", { textContent: "" }],
+    ["[data-confirm-cancel]", { focus: () => {} }],
+  ]);
+  const confirmDialog = {
+    returnValue: "cancel",
+    addEventListener: (_type, listener) => { confirmDialog.closeListener = listener; },
+    removeEventListener: () => { confirmDialog.closeListener = null; },
+    querySelector: (selector) => dialogNodes.get(selector) || null,
+    showModal: () => {
+      confirmDialog.returnValue = "confirm";
+      confirmDialog.closeListener?.();
+    },
+    close: () => {},
+  };
+  const root = {
+    querySelector: (selector) => selector === "[data-confirm-dialog]" ? confirmDialog : null,
+    querySelectorAll: () => [],
+  };
   runInNewContext(panelSource
     .replace(/^import \{([^}]+)\} from "\.\/panel-utils.mjs";/, "const {$1} = utils;")
     .replaceAll("import.meta.url", JSON.stringify(new URL("./panel.js", import.meta.url).href)), {
     utils, URL, Intl, console,
     HTMLElement: class { attachShadow() { this.shadowRoot = root; } },
     customElements: { define: (_name, value) => { Panel = value; } },
-    window: { confirm: () => true, alert: () => {}, location: { href: "https://ha.example/finanzplaner" } },
+    window: { alert: () => {}, location: { href: "https://ha.example/finanzplaner" } },
   });
   const panel = new Panel();
   panel._render = () => {};
