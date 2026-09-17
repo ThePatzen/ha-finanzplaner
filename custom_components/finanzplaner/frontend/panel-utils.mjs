@@ -9,6 +9,18 @@ export function formatEuro(value) {
   return `${sign}${euroNumber.format(Math.abs(amount))} €`;
 }
 
+export function comparisonDimensionLabel(dimension) {
+  return ({ categories: "Kategorien", areas: "Bereiche", projects: "Projekte" })[dimension] || "Kategorien";
+}
+
+export function comparisonEntries(comparison, dimension) {
+  return Array.isArray(comparison?.[dimension]) ? comparison[dimension] : [];
+}
+
+export function breakdownRequestUrl(baseUrl, month, dimension, key) {
+  return `${baseUrl}?month=${encodeURIComponent(month)}&dimension=${encodeURIComponent(dimension)}&key=${encodeURIComponent(key)}`;
+}
+
 export function trendSummary(trend) {
   const last = (key) => Number(trend?.[key]?.at(-1) || 0);
   const todayIndex = Number(trend?.today_index ?? 0);
