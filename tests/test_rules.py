@@ -56,6 +56,42 @@ class RuleMatchingTests(unittest.TestCase):
         self.assertEqual(result["status"], "suggested")
         self.assertEqual(result["suggestion"]["allocations"][0]["amount"], 42.37)
 
+    def test_rule_without_counterparty_matches_by_account_and_purpose(self):
+        core = load_core()
+        rule = self._rule("rule-purpose-only", purpose_contains="POS")
+        rule["counterparty"] = ""
+        result = core.rule_suggestion(
+            {
+                "account_id": "account-giro",
+                "counterparty": "",
+                "purpose": "Sparenzu POS 166,90 AT K1",
+                "amount": -0.10,
+            },
+            [rule],
+            accounts={"account-giro": {"label": "Giro"}},
+            valid_targets={"household"},
+            catalogs={"categories": [], "areas": [], "projects": []},
+            pets={},
+        )
+
+        self.assertEqual(result["status"], "suggested")
+
+    def test_rule_requires_at_least_one_matching_condition(self):
+        core = load_core()
+        rule = self._rule("rule-without-condition", account_id=None)
+        rule["counterparty"] = ""
+        rule["purpose_contains"] = None
+        rule.pop("id")
+
+        with self.assertRaisesRegex(ValueError, "mindestens eine Bedingung"):
+            core.validate_rule_payload(
+                rule,
+                valid_targets={"household"},
+                accounts={"account-giro": {"active": True}},
+                catalogs={"categories": [], "areas": [], "projects": []},
+                pets={},
+            )
+
     def _rule(self, rule_id, *, priority=100, active=True,
               account_id="account-giro", purpose_contains=None,
               allocations=None):
@@ -317,6 +353,18 @@ class RuleMatchingTests(unittest.TestCase):
         self.assertEqual(payload["account_id"], "account-giro")
         self.assertEqual(payload["allocations"][0]["category_id"], "category-food")
         self.assertEqual(sum(row["share_percent"] for row in payload["allocations"]), 100.0)
+
+    def test_rule_payload_from_booking_allows_missing_counterparty(self):
+        core = load_core()
+        payload = core.rule_payload_from_booking({
+            "account_id": "account-giro",
+            "counterparty": "",
+            "purpose": "Sparenzu POS 166,90 AT K1",
+            "allocations": [{"target": "household", "amount": 0.10}],
+        })
+
+        self.assertIsNone(payload["counterparty"])
+        self.assertEqual(payload["label"], "Sparenzu POS 166,90 AT K1")
 
     def test_zero_amount_booking_is_not_suggested(self):
         result = load_core().rule_suggestion(

@@ -552,6 +552,41 @@ test("confirmed booking opens a prefilled rule with no purpose filter and no POS
   assert.equal(panel._ruleSourceBookingId, "b1");
 });
 
+test("confirmed booking keeps a missing counterparty empty and derives the rule label from its purpose", async () => {
+  const panel = ruleTestPanel();
+  panel._confirmedBookings.set("b-mt940", {
+    id: "b-mt940", status: "resolved", counterparty: "",
+    purpose: "Sparenzu POS 166,90 AT K1 05.06. 10:30",
+    account_id: "a1", amount: -0.10,
+    allocations: [{ target: "household", amount: 0.10 }],
+  });
+  panel._hass = { fetchWithAuth: async (_url, options) => {
+    assert.notEqual(options.method, "POST");
+    return new Response(JSON.stringify({ rules: [], accounts: [], persons: [], pets: [], catalogs: {} }), { headers: { "Content-Type": "application/json" } });
+  } };
+  await panel._openRuleFromBooking("b-mt940");
+  assert.equal(panel._ruleDraft.counterparty, "");
+  assert.equal(panel._ruleDraft.label, "Sparenzu POS 166,90 AT K1 05.06. 10:30");
+  assert.doesNotMatch(panel._ruleFormTemplate(), /data-rule-field="counterparty"[^>]* required/);
+});
+
+test("review shows payment recipient separately from purpose", () => {
+  const panel = ruleTestPanel();
+  panel._bookings = [{
+    id: "b-display", booking_date: "2026-06-08", counterparty: "Sparenzu",
+    purpose: "POS 166,90 AT K1 05.06. 10:30", amount: -0.10, status: "unresolved",
+  }];
+  const markup = panel._reviewTemplate();
+  assert.match(markup, /Zahlungsempfänger:.*Sparenzu/);
+  assert.match(markup, /Verwendungszweck:.*POS 166,90/);
+
+  panel._bookings[0].counterparty = "";
+  panel._bookings[0].purpose = "Sparenzu POS 166,90 AT K1 05.06. 10:30";
+  const missingCounterpartyMarkup = panel._reviewTemplate();
+  assert.match(missingCounterpartyMarkup, /Zahlungsempfänger nicht erkannt/);
+  assert.match(missingCounterpartyMarkup, /Verwendungszweck:.*Sparenzu POS 166,90/);
+});
+
 test("saving a booking rule validates the edited payload and persists once and returns to the list", async () => {
   const panel = ruleTestPanel();
   panel._ruleDraft = validRuleDraft();
@@ -611,6 +646,16 @@ test("rule validation enforces percentage bounds without rounding", async () => 
     draft.allocations = shares.map((share, index) => ({ target: index ? "person.anna" : "household", share_percent: share }));
     assert.deepEqual(Object.keys(panel._ruleValidationErrors(draft)), []);
   }
+});
+
+test("rule validation allows a missing counterparty when another condition exists", () => {
+  const panel = ruleTestPanel();
+  const draft = validRuleDraft();
+  draft.counterparty = "";
+  draft.purpose_contains = "POS";
+  assert.deepEqual(Object.keys(panel._ruleValidationErrors(draft)), []);
+  draft.purpose_contains = "";
+  assert.equal(panel._ruleValidationErrors(draft).conditions, "Eine Regel benötigt mindestens eine Bedingung.");
 });
 
 test("rule text validation uses 120 for labels and 160 for matching filters", () => {

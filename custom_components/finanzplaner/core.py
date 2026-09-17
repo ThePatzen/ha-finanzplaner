@@ -800,12 +800,14 @@ def validate_rule_payload(
         normalized["account_id"] = account_id
     if not partial or "counterparty" in payload:
         normalized["counterparty"] = _normalized_rule_text(
-            payload.get("counterparty"), "Der Zahlungsempfänger", required=True, max_length=160
+            payload.get("counterparty"), "Der Zahlungsempfänger", required=False, max_length=160
         )
     if not partial or "purpose_contains" in payload:
         normalized["purpose_contains"] = _normalized_rule_text(
             payload.get("purpose_contains"), "Der Verwendungszweckfilter", required=False, max_length=160
         )
+    if not partial and all(normalized.get(field) is None for field in ("account_id", "counterparty", "purpose_contains")):
+        raise ValueError("Eine Regel benötigt mindestens eine Bedingung.")
     if not partial or "allocations" in payload:
         allocations = payload.get("allocations")
         if not isinstance(allocations, list) or not allocations:
@@ -868,11 +870,10 @@ def _rule_matches_booking(rule: dict[str, object], booking: dict[str, object]) -
     counterparty = _normalized_match_text(
         booking.get("counterparty"), "Der Zahlungsempfänger", required=False
     )
-    if counterparty is None:
-        return False
     rule_counterparty = rule.get("counterparty")
-    if not isinstance(rule_counterparty, str) or rule_counterparty.casefold() != counterparty.casefold():
-        return False
+    if rule_counterparty not in (None, ""):
+        if counterparty is None or not isinstance(rule_counterparty, str) or rule_counterparty.casefold() != counterparty.casefold():
+            return False
     purpose_contains = rule.get("purpose_contains")
     if purpose_contains in (None, ""):
         return True
@@ -978,7 +979,7 @@ def rule_suggestion(
                     rule.get("account_id"), "Die Konto-ID", required=False
                 ),
                 "counterparty": _normalized_match_text(
-                    rule.get("counterparty"), "Der Zahlungsempfänger", required=True
+                    rule.get("counterparty"), "Der Zahlungsempfänger", required=False
                 ),
                 "purpose_contains": _normalized_match_text(
                     rule.get("purpose_contains"), "Der Verwendungszweckfilter", required=False
@@ -1080,10 +1081,13 @@ def rule_payload_from_booking(booking: dict[str, object]) -> dict[str, object]:
         Decimal(str(template_allocations[0]["share_percent"])) + Decimal("100") - assigned
     )
     counterparty = _normalized_match_text(
-        booking.get("counterparty"), "Der Zahlungsempfänger", required=True
+        booking.get("counterparty"), "Der Zahlungsempfänger", required=False
+    )
+    purpose = _normalized_match_text(
+        booking.get("purpose"), "Der Verwendungszweck", required=False
     )
     return {
-        "label": counterparty,
+        "label": counterparty or (purpose[:120] if purpose else "Buchungsregel"),
         "active": True,
         "priority": 100,
         "account_id": _normalized_match_text(
