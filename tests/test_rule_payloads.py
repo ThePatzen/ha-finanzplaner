@@ -219,6 +219,9 @@ class RuleViewTests(unittest.TestCase):
                                     "pet_id": None,
                                 },
                             ],
+                            "source_data": {
+                                "record": {"kind": "mt940_transaction"},
+                            },
                         },
                         {
                             "id": "booking-unresolved",
@@ -227,6 +230,9 @@ class RuleViewTests(unittest.TestCase):
                             "amount": -15.0,
                             "status": "unresolved",
                             "allocations": [],
+                            "source_data": {
+                                "record": {"kind": "mt940_transaction"},
+                            },
                         },
                     ],
                 }
@@ -619,6 +625,74 @@ class RuleViewTests(unittest.TestCase):
         self.assertEqual(self.coordinator.store.save_count, 0)
 
 
+    def test_booking_details_expose_unresolved_context_and_source(self):
+        result = asyncio.run(
+            self.http.BookingDetailsView().get(
+                self._request(authenticated=True), "booking-unresolved"
+            )
+        )
+
+        self.assertEqual(result["booking"]["id"], "booking-unresolved")
+        self.assertEqual(result["details"]["status"], "unresolved")
+        self.assertIn("source_data", result)
+        self.assertEqual(result["source_data"]["record"]["kind"], "mt940_transaction")
+        self.assertEqual(result["account"]["label"], "Gemeinsames Girokonto")
+        self.assertNotIn("AT123456789012345678", str(result))
+
+    def test_booking_details_expose_resolved_allocations_and_rule(self):
+        self.coordinator.store.data["bookings"][0]["matched_rule"] = {
+            "rule_id": "rule-1",
+            "rule_label": "Supermarkt Haushalt",
+        }
+
+        result = asyncio.run(
+            self.http.BookingDetailsView().get(
+                self._request(authenticated=True), "booking-resolved"
+            )
+        )
+
+        self.assertEqual(result["details"]["status"], "resolved")
+        self.assertEqual(result["details"]["allocations"][0]["target"], "household")
+        self.assertEqual(result["details"]["matched_rule"]["rule_label"], "Supermarkt Haushalt")
+
+    def test_booking_details_require_authentication(self):
+        with self.assertRaises(self.unauthorized):
+            asyncio.run(
+                self.http.BookingDetailsView().get(
+                    self._request(authenticated=False), "booking-unresolved"
+                )
+            )
+
+    def test_booking_details_return_not_found_for_unknown_id(self):
+        with self.assertRaises(self.not_found):
+            asyncio.run(
+                self.http.BookingDetailsView().get(
+                    self._request(), "booking-missing"
+                )
+            )
+
+    def test_booking_details_mark_legacy_booking_without_source(self):
+        self.coordinator.store.data["bookings"] = [{
+            "id": "legacy-booking",
+            "status": "unresolved",
+            "allocations": [],
+        }]
+
+        result = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "legacy-booking")
+        )
+
+        self.assertIn("source_data", result)
+        self.assertIsNone(result["source_data"])
+
+    def test_booking_lists_do_not_expose_source_data(self):
+        unresolved = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+        resolved = asyncio.run(self.http.ResolvedBookingsView().get(self._request()))
+
+        self.assertNotIn("source_data", unresolved["bookings"][0])
+        self.assertNotIn("source_data", resolved["bookings"][0])
+
+
 class UnresolvedRuleProjectionTests(unittest.TestCase):
     setUp = RuleViewTests.setUp
     _request = RuleViewTests._request
@@ -787,7 +861,6 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
         self.assertEqual(self.coordinator.store.save_count, 0)
         self.assertEqual(self.coordinator.refresh_count, 0)
 
-
 class AutomaticRuleApplicationTests(unittest.TestCase):
     setUp = RuleViewTests.setUp
     _request = RuleViewTests._request
@@ -901,7 +974,13 @@ class RuleRegistrationTests(unittest.TestCase):
         with patch.dict(sys.modules, {"custom_components.finanzplaner.http": http}):
             asyncio.run(finanzplaner.async_setup(hass, {}))
 
-        for view in (http.RulesView, http.RuleView, http.RuleFromBookingView, http.BookingDeleteView):
+        for view in (
+            http.RulesView,
+            http.RuleView,
+            http.RuleFromBookingView,
+            http.BookingDetailsView,
+            http.BookingDeleteView,
+        ):
             with self.subTest(view=view.__name__):
                 self.assertIn(view, registered)
                 self.assertIs(view.requires_auth, True)

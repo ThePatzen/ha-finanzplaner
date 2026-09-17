@@ -1871,6 +1871,75 @@ class UnresolvedBookingsView(HomeAssistantView):
         return self.json(_response_payload({"bookings": projected}))
 
 
+def _booking_details_payload(
+    coordinator: FinanzplanerCoordinator,
+    hass: Any,
+    booking: dict[str, object],
+) -> dict[str, object]:
+    """Build the full, read-only detail context for one stored booking."""
+
+    suggestion: dict[str, object] = {}
+    if booking.get("status") != "resolved":
+        suggestion = rule_suggestion(
+            booking,
+            _rule_list(coordinator),
+            accounts=_rule_accounts(coordinator),
+            valid_targets=_valid_plan_targets(hass),
+            catalogs=_rule_catalogs(coordinator),
+            pets=_pet_records(coordinator),
+        )
+    account_id = booking.get("account_id")
+    account = (
+        _rule_accounts(coordinator).get(account_id)
+        if isinstance(account_id, str)
+        else None
+    )
+    return {
+        "booking": {
+            key: value for key, value in booking.items() if key != "source_data"
+        },
+        "account": account_payload(account) if isinstance(account, dict) else None,
+        "details": {
+            "status": booking.get("status"),
+            "suggestion": suggestion.get("suggestion"),
+            "suggestion_status": suggestion.get("status"),
+            "conflicts": suggestion.get("conflicts", []),
+            "matched_rule": booking.get("matched_rule"),
+            "allocations": booking.get("allocations", []),
+        },
+        "source_data": booking.get("source_data"),
+    }
+
+
+class BookingDetailsView(HomeAssistantView):
+    """Expose the full context for one unresolved or resolved booking."""
+
+    url = "/api/finanzplaner/bookings/{booking_id}/details"
+    name = "api:finanzplaner:booking:details"
+    requires_auth = True
+
+    async def get(self, request: web.Request, booking_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        bookings = coordinator.store.data.get("bookings", [])
+        booking = next(
+            (
+                item
+                for item in bookings
+                if isinstance(item, dict) and item.get("id") == booking_id
+            ),
+            None,
+        ) if isinstance(bookings, list) else None
+        if booking is None:
+            raise web.HTTPNotFound(text="Buchung nicht gefunden.")
+        return self.json(
+            _response_payload(
+                _booking_details_payload(coordinator, request.app["hass"], booking)
+            )
+        )
+
+
 class ResolvedBookingsView(HomeAssistantView):
     """List every booking that has a confirmed allocation."""
 
