@@ -333,6 +333,58 @@ class ForecastTests(unittest.TestCase):
 
 
 class ImportTests(unittest.TestCase):
+    def test_mt940_records_keep_unknown_tags_and_continuations(self):
+        core = load_core()
+        raw = (
+            ':20:STATEMENT-1\n'
+            ':25:AT123456789012345678\n'
+            ':61:2609020902D42,50NTRFNONREF\n'
+            ':86:Hundefutter\n'
+            ':99:Bankeigene Zusatzinformation\n'
+            'weitere Zusatzinformation\n'
+        )
+
+        records = core.parse_mt940_records(raw)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].booking.purpose, 'Hundefutter')
+        self.assertEqual(
+            records[0].source_data['record']['lines'],
+            [
+                ':61:2609020902D42,50NTRFNONREF',
+                ':86:Hundefutter',
+                ':99:Bankeigene Zusatzinformation',
+                'weitere Zusatzinformation',
+            ],
+        )
+        self.assertIn(':20:STATEMENT-1', records[0].source_data['context']['lines'])
+        self.assertIn(':25:AT123456789012345678', records[0].source_data['context']['lines'])
+
+    def test_camt_records_keep_unknown_nested_transaction_data(self):
+        core = load_core()
+        raw = '''<Document xmlns="urn:test">
+          <BkToCstmrStmt><Stmt>
+            <Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+            <Ntry>
+              <Amt Ccy="EUR">12.50</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+              <BookgDt><Dt>2026-09-04</Dt></BookgDt>
+              <NtryDtls><TxDtls><RmtInf><Ustrd>Testkauf</Ustrd></RmtInf>
+                <UnknownBankData code="X7"><Value>nicht verlieren</Value></UnknownBankData>
+              </TxDtls></NtryDtls>
+            </Ntry>
+          </Stmt></BkToCstmrStmt>
+        </Document>'''
+
+        records = core.parse_camt053_records(raw)
+
+        self.assertEqual(len(records), 1)
+        xml_record = records[0].source_data['record']
+        self.assertEqual(xml_record['name'], 'Ntry')
+        unknown = str(xml_record)
+        self.assertIn('UnknownBankData', unknown)
+        self.assertIn('nicht verlieren', unknown)
+        self.assertIn('X7', unknown)
+
     def test_mt940_import_reads_booking_and_preserves_reference(self):
         core = load_core()
         raw = (

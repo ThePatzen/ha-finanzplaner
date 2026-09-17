@@ -10,6 +10,8 @@ import re
 from typing import TypedDict
 import xml.etree.ElementTree as ET
 
+from .booking_source import source_xml_node
+
 
 MONEY_QUANT = Decimal("0.01")
 PLAN_DIRECTIONS = frozenset({"income", "expense", "saving"})
@@ -534,6 +536,12 @@ class Booking:
     reference: str = ""
     counterparty: str = ""
     currency: str = "EUR"
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedBooking:
+    booking: Booking
+    source_data: dict[str, object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -2017,22 +2025,38 @@ def _parse_date(value: str) -> date:
     return date(2000 + int(value[0:2]), int(value[2:4]), int(value[4:6]))
 
 
-def parse_mt940(raw: str) -> list[Booking]:
+def parse_mt940_records(raw: str) -> list[ParsedBooking]:
     """Parse the common MT940 transaction subset into normalized bookings."""
 
     account = ""
-    bookings: list[Booking] = []
+    bookings: list[ParsedBooking] = []
     current: dict[str, object] | None = None
+    current_lines: list[str] = []
+    context_lines: list[str] = []
+
+    def finish() -> None:
+        nonlocal current, current_lines
+        if current is not None:
+            bookings.append(
+                ParsedBooking(
+                    booking=Booking(account=account, **current),
+                    source_data={
+                        "record": {"kind": "mt940_transaction", "lines": current_lines},
+                        "context": {"lines": context_lines.copy()},
+                    },
+                )
+            )
+            current = None
+            current_lines = []
+
     for line in raw.splitlines():
         line = line.strip()
         if line.startswith(":25:"):
-            if current is not None:
-                bookings.append(Booking(account=account, **current))
-                current = None
+            finish()
             account = line[4:].strip()
+            context_lines.append(line)
         elif line.startswith(":61:"):
-            if current is not None:
-                bookings.append(Booking(account=account, **current))
+            finish()
             match = re.match(
                 r":61:(?P<date>\d{6})(?:\d{4})?(?P<direction>[CD])(?P<amount>[\d.,]+)"
                 r"(?:N[A-Z0-9]{3})?(?P<reference>[^/]*)",
@@ -2047,11 +2071,19 @@ def parse_mt940(raw: str) -> list[Booking]:
                 "reference": match.group("reference").strip(),
                 "purpose": "",
             }
-        elif line.startswith(":86:") and current is not None:
-            current["purpose"] = line[4:].strip()
-    if current is not None:
-        bookings.append(Booking(account=account, **current))
+            current_lines = [line]
+        elif current is not None:
+            current_lines.append(line)
+            if line.startswith(":86:"):
+                current["purpose"] = line[4:].strip()
+        else:
+            context_lines.append(line)
+    finish()
     return bookings
+
+
+def parse_mt940(raw: str) -> list[Booking]:
+    return [record.booking for record in parse_mt940_records(raw)]
 
 
 def _local_name(tag: str) -> str:
@@ -2065,11 +2097,11 @@ def _descendant_text(element: ET.Element, name: str) -> str:
     return ""
 
 
-def parse_camt053(raw: str) -> list[Booking]:
+def parse_camt053_records(raw: str) -> list[ParsedBooking]:
     """Parse CAMT.053 entries without binding the UI to a bank-specific namespace."""
 
     root = ET.fromstring(raw)
-    bookings: list[Booking] = []
+    bookings: list[ParsedBooking] = []
     for statement in root.iter():
         if _local_name(statement.tag) != "Stmt":
             continue
@@ -2098,17 +2130,30 @@ def parse_camt053(raw: str) -> list[Booking]:
             if direction.upper() != "CRDT":
                 amount = -amount
             bookings.append(
-                Booking(
-                    account=account,
-                    booking_date=booking_date,
-                    amount=amount,
-                    purpose=_descendant_text(entry, "Ustrd"),
-                    reference=_descendant_text(entry, "EndToEndId"),
-                    counterparty=_descendant_text(entry, "Nm"),
-                    currency=amount_node.attrib.get("Ccy", "EUR"),
+                ParsedBooking(
+                    booking=Booking(
+                        account=account,
+                        booking_date=booking_date,
+                        amount=amount,
+                        purpose=_descendant_text(entry, "Ustrd"),
+                        reference=_descendant_text(entry, "EndToEndId"),
+                        counterparty=_descendant_text(entry, "Nm"),
+                        currency=amount_node.attrib.get("Ccy", "EUR"),
+                    ),
+                    source_data={
+                        "record": source_xml_node(entry),
+                        "context": {
+                            "statement": source_xml_node(statement),
+                            "account": account,
+                        },
+                    },
                 )
             )
     return bookings
+
+
+def parse_camt053(raw: str) -> list[Booking]:
+    return [record.booking for record in parse_camt053_records(raw)]
 
 
 def booking_fingerprint(booking: Booking) -> str:
