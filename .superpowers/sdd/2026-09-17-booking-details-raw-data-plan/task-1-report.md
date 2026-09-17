@@ -128,3 +128,43 @@ Full Python suite:
     OK
 
 The fix was committed after these checks.
+
+## Fix round 2
+
+### What changed
+
+MT940 pre-:25: context lines are now stored from the original input line
+(raw_line) rather than the stripped parsing value. Marker detection and
+normalized account parsing continue to use the separate stripped value.
+
+The focused whitespace regression now asserts both transaction lines and
+pre-:25: context lines byte-for-byte, including leading and trailing spaces.
+
+### Commands and outputs
+
+RED verification:
+
+    python3 -m unittest discover -s tests -p 'test_finanzplaner_core.py' -v
+
+    Ran 21 tests in 0.035s
+    FAILED (failures=1)
+
+    AssertionError: Lists differ:
+    [':20:STATEMENT-1', ' :25:AT123456789012345678 '] !=
+    ['  :20:STATEMENT-1  ', ' :25:AT123456789012345678 ']
+
+GREEN focused parser verification:
+
+    python3 -m unittest discover -s tests -p 'test_finanzplaner_core.py' -v
+
+    Ran 21 tests in 0.042s
+    OK
+
+Full Python suite:
+
+    python3 -m unittest discover -s tests -v
+
+    Ran 183 tests in 0.163s
+    OK
+
+The fix was committed after these checks.

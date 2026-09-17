@@ -2077,7 +2077,7 @@ def parse_mt940_records(raw: str) -> list[ParsedBooking]:
             if line.startswith(":86:"):
                 current["purpose"] = line[4:].strip()
         else:
-            context_lines.append(line)
+            context_lines.append(raw_line)
     finish()
     return bookings
 

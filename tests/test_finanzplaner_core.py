@@ -351,6 +351,13 @@ class ImportTests(unittest.TestCase):
                 " :86:Hundefutter ",
             ],
         )
+        self.assertEqual(
+            record.source_data["context"]["lines"],
+            [
+                "  :20:STATEMENT-1  ",
+                " :25:AT123456789012345678 ",
+            ],
+        )
 
     def test_mt940_records_keep_unknown_tags_and_continuations(self):
         core = load_core()
