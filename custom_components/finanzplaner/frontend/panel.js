@@ -1225,6 +1225,7 @@ class FinanzplanerPanel extends HTMLElement {
     if (Array.isArray(value)) {
       return value.length ? '<ul class="booking-detail-list">' + value.map((item, index) => '<li><span class="booking-detail-key">' + escapeHtml(path + " " + (index + 1)) + '</span>' + this._bookingDetailValueTemplate(item, path) + '</li>').join("") + '</ul>' : '<span class="booking-detail-empty">Nicht vorhanden</span>';
     }
+    if (typeof value === "object" && Object.keys(value).length === 0) return '<span class="booking-detail-empty">Nicht vorhanden</span>';
     if (typeof value === "object") return '<dl class="booking-detail-nested">' + Object.entries(value).map(([key, item]) => '<div><dt>' + escapeHtml(this._bookingDetailLabel(key)) + '</dt><dd>' + this._bookingDetailValueTemplate(item, key) + '</dd></div>').join("") + '</dl>';
     return '<span>' + escapeHtml(String(value)) + '</span>';
   }

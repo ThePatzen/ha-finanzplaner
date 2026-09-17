@@ -1,6 +1,7 @@
 """Regression tests for release-scoped frontend assets."""
 
 import json
+import re
 from pathlib import Path
 from urllib.parse import urljoin
 import unittest
@@ -45,3 +46,37 @@ class PanelStaticAssetsTest(unittest.TestCase):
         self.assertIn("data-booking-raw-toggle", source)
         self.assertIn("bookingDetailsRequestUrl", source)
         self.assertIn("textContent = bookingDetailRawJson", source)
+
+        resolved = re.search(
+            r"  _resolvedBookingsTemplate\(\) \{(.*?)\n  _reviewTemplate\(\)",
+            source,
+            re.DOTALL,
+        )
+        review = re.search(
+            r"  _reviewTemplate\(\) \{(.*?)\n}\n\ncustomElements.define",
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(resolved)
+        self.assertIsNotNone(review)
+        details_button = re.compile(
+            r'<button(?=[^>]*\btype="button")'
+            r'(?=[^>]*\bdata-booking-details="\$\{escapeHtml\(bookingId\)\}")'
+        )
+        self.assertEqual(len(details_button.findall(resolved.group(1))), 1)
+        self.assertEqual(len(details_button.findall(review.group(1))), 1)
+
+    def test_booking_detail_empty_objects_use_missing_value_fallback(self) -> None:
+        panel_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        )
+        source = panel_path.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'typeof value === "object" && Object.keys(value).length === 0',
+            source,
+        )
