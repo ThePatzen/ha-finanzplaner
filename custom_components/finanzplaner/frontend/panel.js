@@ -365,7 +365,10 @@ const styles = `
   .booking-list { display: grid; gap: 0.65rem; margin-block-start: 1rem; padding: 0; list-style: none; }
   .booking-row { display: grid; grid-template-columns: 7rem minmax(0, 1fr) auto auto; align-items: center; gap: 1rem; padding: 0.85rem 1rem; border: 1px solid var(--fp-line); border-radius: 0.65rem; background: rgb(255 254 249 / 0.86); }
   .booking-date { color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.75rem; }
-  .booking-purpose { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .booking-purpose { min-inline-size: 0; display: grid; gap: 0.2rem; }
+  .booking-counterparty, .booking-purpose-detail { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .booking-counterparty { font-weight: 700; }
+  .booking-purpose-detail { color: var(--fp-muted); font-size: 0.75rem; }
   .booking-account { color: var(--fp-muted); font-size: 0.75rem; }
   .booking-amount { color: var(--fp-coral); font-family: var(--fp-data); font-weight: 700; white-space: nowrap; }
   .allocation-editor { grid-column: 1 / -1; min-inline-size: 0; margin: 0; padding: 0.85rem 0 0; border: 0; border-block-start: 1px solid var(--fp-line); }
@@ -1182,10 +1185,12 @@ class FinanzplanerPanel extends HTMLElement {
       const assigned = allocations.reduce((sum, row) => sum + Math.round(row.share_percent * 100), 0);
       allocations[0].share_percent = (Math.round(allocations[0].share_percent * 100) + 10000 - assigned) / 100;
     }
+    const counterparty = String(booking.counterparty || "").trim();
+    const purpose = String(booking.purpose || "").trim();
     this._ruleEditingId = "new";
     this._ruleSourceBookingId = String(bookingId);
     this._ruleDraft = this._ruleDraftFromRule({
-      label: booking.counterparty, counterparty: booking.counterparty,
+      label: counterparty || purpose.slice(0, 120) || "Buchungsregel", counterparty,
       account_id: booking.account_id, purpose_contains: "", allocations,
     });
     this._ruleBaseline = this._ruleDraftFromRule();
@@ -1196,11 +1201,16 @@ class FinanzplanerPanel extends HTMLElement {
 
   _ruleValidationErrors(draft) {
     const errors = {};
-    for (const [key, label, maxLength] of [["label", "Regelname", 120], ["counterparty", "Zahlungsempfänger", 160], ["purpose_contains", "Verwendungszweckfilter", 160]]) {
+    for (const [key, label, maxLength] of [["label", "Regelname", 120], ["purpose_contains", "Verwendungszweckfilter", 160]]) {
       const text = String(draft[key] || "").trim().replace(/\s+/gu, " ");
-      if (key !== "purpose_contains" && !text) errors[key] = `${label} fehlt.`;
+      if (key === "label" && !text) errors[key] = `${label} fehlt.`;
       else if (text.length > maxLength) errors[key] = `Bitte höchstens ${maxLength} Zeichen eingeben.`;
     }
+    const counterparty = String(draft.counterparty || "").trim().replace(/\s+/gu, " ");
+    if (counterparty.length > 160) errors.counterparty = "Bitte höchstens 160 Zeichen eingeben.";
+    const account = String(draft.account_id || "").trim();
+    const purpose = String(draft.purpose_contains || "").trim().replace(/\s+/gu, " ");
+    if (!account && !counterparty && !purpose) errors.conditions = "Eine Regel benötigt mindestens eine Bedingung.";
     const priority = Number(draft.priority);
     if (String(draft.priority).trim() === "" || !Number.isSafeInteger(priority) || priority < 0 || priority > 1000) errors.priority = "Bitte eine ganze Zahl von 0 bis 1000 eingeben.";
     if (draft.account_id && !this._accounts.some((account) => account.id === draft.account_id && account.active !== false)) errors.account_id = "Konto fehlt oder ist archiviert. Bitte ein aktives Konto oder alle Konten wählen.";
@@ -1248,6 +1258,8 @@ class FinanzplanerPanel extends HTMLElement {
     if (summary) summary.textContent = `Anteilssumme: ${Number.isFinite(total) ? new Intl.NumberFormat("de-DE", { maximumFractionDigits: 6 }).format(total) : "—"} % von 100 %`;
     const allocationError = form.querySelector("#rule-allocations-error");
     if (allocationError) allocationError.textContent = (this._ruleSubmitAttempted || this._ruleTouched.size) && errors.allocations ? `Fehler: ${errors.allocations}` : "";
+    const conditionsError = form.querySelector("[data-rule-conditions-error]");
+    if (conditionsError) conditionsError.textContent = (this._ruleSubmitAttempted || this._ruleTouched.size) && errors.conditions ? `Fehler: ${errors.conditions}` : "";
     const submit = form.querySelector("[type='submit']");
     if (submit) submit.disabled = this._ruleSubmitting || !this._ruleHasChanges();
     const state = form.querySelector("[data-rule-save-state]");
@@ -1303,7 +1315,7 @@ class FinanzplanerPanel extends HTMLElement {
       this._ruleMessage = "Fehlerhaft: Bitte prüfe die markierten Felder und die Anteilssumme.";
       const status = this.shadowRoot.querySelector("[data-rule-message]");
       if (status) status.textContent = this._ruleMessage;
-      (invalidInput || form.querySelector("[data-rule-add]"))?.focus();
+      (invalidInput || (errors.conditions ? form.querySelector('[data-rule-field="counterparty"]') : null) || form.querySelector("[data-rule-add]"))?.focus();
       return;
     }
     const payload = rulePayloadFromForm(this._ruleDraft);
@@ -3680,12 +3692,12 @@ class FinanzplanerPanel extends HTMLElement {
           ${field("label", "Regelname", { constraints: 'required maxlength="120"' })}
           ${this._ruleEditingId !== "new" ? field("active", "Status", { options: `<option value="true"${draft.active ? " selected" : ""}>Aktiv</option><option value="false"${draft.active ? "" : " selected"}>Deaktiviert</option>` }) : ""}
         </div></fieldset>
-        <fieldset class="rule-fieldset"${disabled}><legend>Bedingungen</legend><div class="rule-fields">
+        <fieldset class="rule-fieldset" aria-describedby="rule-conditions-error"${disabled}><legend>Bedingungen</legend><p class="rule-help">Der Zahlungsempfänger ist optional. Lege mindestens ein Konto oder einen Verwendungszweckfilter fest, wenn kein Zahlungsempfänger bekannt ist.</p><div class="rule-fields">
           ${field("account_id", "Konto", { options: this._ruleReferenceOptions(this._accounts, draft.account_id, "Alle Konten"), help: "Ein Konto begrenzt die Regel auf diese Zahlungsquelle." })}
-          ${field("counterparty", "Zahlungsempfänger", { constraints: 'required maxlength="160"', help: "Der vollständige Name wird ohne Beachtung der Groß- und Kleinschreibung verglichen." })}
+          ${field("counterparty", "Zahlungsempfänger (optional)", { constraints: 'maxlength="160"', help: "Wird der Zahlungsempfänger weggelassen, matcht die Regel über die übrigen Bedingungen." })}
           ${field("purpose_contains", "Verwendungszweck enthält (optional)", { constraints: 'maxlength="160"', help: "Leer lassen, wenn die Regel für jeden Verwendungszweck gelten soll." })}
           ${field("priority", "Priorität", { type: "number", constraints: 'required min="0" max="1000" step="1"', help: "0 bis 1000; eine höhere Zahl hat Vorrang. Gleiche Priorität kann einen Regelkonflikt ergeben." })}
-        </div></fieldset>
+        </div><p class="rule-error" data-rule-conditions-error id="rule-conditions-error" aria-live="polite"></p></fieldset>
         <fieldset class="rule-fieldset" aria-describedby="rule-share-summary rule-allocations-error"${disabled}><legend>Aufteilungsvorlage</legend>
           <p class="rule-help">Jedes Ziel einmal wählen. Alle Anteile müssen zusammen 100 % ergeben. Es stehen aktive Stammdaten und Tiere zur Auswahl.</p>
           ${allocations}
@@ -3805,7 +3817,11 @@ class FinanzplanerPanel extends HTMLElement {
       : this._reviewLoadFailed ? `<div class="empty-state"><p>Die Prüfliste konnte nicht geladen werden.</p><button class="table-edit-button" type="button" data-action="review">Erneut laden</button></div>`
         : this._bookings.length ? `<ul class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking, index) => {
       const total = Math.abs(Number(booking.amount) || 0);
-      return `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${escapeHtml(booking.purpose || booking.counterparty || "Ohne Verwendungszweck")}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
+      const counterparty = String(booking.counterparty || "").trim();
+      const purpose = String(booking.purpose || "").trim();
+      const counterpartyMarkup = counterparty ? `Zahlungsempfänger: ${escapeHtml(counterparty)}` : "Zahlungsempfänger nicht erkannt";
+      const purposeMarkup = purpose ? `<span class="booking-purpose-detail">Verwendungszweck: ${escapeHtml(purpose)}</span>` : "";
+      return `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose"><span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
     }).join("")}</ul>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
     const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
     return this._shellTemplate(content);

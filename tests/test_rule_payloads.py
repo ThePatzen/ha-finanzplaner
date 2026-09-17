@@ -417,6 +417,24 @@ class RuleViewTests(unittest.TestCase):
         self.assertEqual(self.coordinator.store.save_count, 0)
         self.assertEqual(self.coordinator.refresh_count, 0)
 
+    def test_from_resolved_booking_allows_missing_counterparty(self):
+        booking = next(
+            item for item in self.coordinator.store.data["bookings"]
+            if item["id"] == "booking-resolved"
+        )
+        booking["counterparty"] = ""
+        booking["purpose"] = "Sparenzu POS 166,90 AT K1"
+
+        result = asyncio.run(
+            self.http.RuleFromBookingView().post(
+                self._request({}),
+                "booking-resolved",
+            )
+        )
+
+        self.assertIsNone(result["rule"]["counterparty"])
+        self.assertEqual(result["rule"]["label"], "Sparenzu POS 166,90 AT K1")
+
     def test_rules_get_masks_account_references(self):
         result = asyncio.run(self.http.RulesView().get(self._request()))
 

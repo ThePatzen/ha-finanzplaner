@@ -10,7 +10,8 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
-Noch keine Änderungen.
+- Zahlungsempfänger in Regeln optional gemacht, damit importierte Buchungen ohne getrennt gelieferten Empfänger als Konto- oder Verwendungszweckregel gespeichert werden können
+- Prüfliste zeigt Zahlungsempfänger und Verwendungszweck getrennt und kennzeichnet fehlende Zahlungsempfänger ausdrücklich
 
 ## [0.4.0] – 2026-09-17
 
