@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import re
+from typing import TypedDict
 import xml.etree.ElementTree as ET
 
 
@@ -1496,6 +1497,177 @@ def _overview_booking_amount(booking: dict[str, object]) -> Decimal:
         return Decimal("0.00")
 
 
+class _OverviewComparisonGroup(TypedDict):
+    name: str
+    plan: Decimal
+    scheduled: Decimal
+    actual: Decimal
+
+
+def _overview_comparison_dimension(
+    values: dict[str, object],
+    kind: str,
+    labels: dict[str, str],
+) -> tuple[str, str]:
+    """Return the stable comparison key and display label for one dimension."""
+
+    field = CATALOG_VALUE_FIELDS[kind]
+    identifier = values.get(f"{field}_id")
+    if identifier in (None, ""):
+        return "__unassigned__", "Nicht zugeordnet"
+    key = str(identifier)
+    return key, _overview_dimension_label(values.get(field), identifier, labels)
+
+
+def _overview_comparison_values(
+    groups: dict[str, _OverviewComparisonGroup],
+    key: str,
+    name: str,
+) -> _OverviewComparisonGroup:
+    """Return a comparison group, creating it with its stable display name."""
+
+    return groups.setdefault(
+        key,
+        {
+            "name": name,
+            "plan": Decimal("0.00"),
+            "scheduled": Decimal("0.00"),
+            "actual": Decimal("0.00"),
+        },
+    )
+
+
+def _overview_comparison_entries(
+    groups: dict[str, _OverviewComparisonGroup],
+) -> list[dict[str, object]]:
+    """Serialize the twelve most material comparison groups."""
+
+    entries: list[dict[str, object]] = []
+    for key, values in groups.items():
+        plan = _money(values["plan"])
+        actual = _money(values["actual"])
+        forecast = _money(actual + values["scheduled"])
+        if plan == 0 and actual == 0 and forecast == 0:
+            continue
+        variance = _money(actual - plan)
+        forecast_variance = _money(forecast - plan)
+        variance_percent = (
+            None
+            if plan == 0
+            else float(
+                (variance / abs(plan) * Decimal("100")).quantize(
+                    MONEY_QUANT, rounding=ROUND_HALF_UP
+                )
+            )
+        )
+        name = values["name"]
+        entries.append(
+            {
+                "key": key,
+                "name": name,
+                "plan": float(plan),
+                "forecast": float(forecast),
+                "actual": float(actual),
+                "variance": float(variance),
+                "forecast_variance": float(forecast_variance),
+                "variance_percent": variance_percent,
+            }
+        )
+    entries.sort(
+        key=lambda entry: (
+            -max(abs(entry["plan"]), abs(entry["forecast"]), abs(entry["actual"])),
+            entry["name"].casefold(),
+            entry["key"],
+        )
+    )
+    return entries[:12]
+
+
+def overview_comparison(
+    data: dict[str, object],
+    month: str,
+    *,
+    today: date | None = None,
+) -> dict[str, list[dict[str, object]]]:
+    """Project monthly plan, forecast and actual values by catalog dimension."""
+
+    labels = {kind: _overview_catalog_labels(data, kind) for kind in CATALOG_KINDS}
+    groups: dict[str, dict[str, _OverviewComparisonGroup]] = {
+        kind: {} for kind in CATALOG_KINDS
+    }
+
+    plan_items = data.get("plan_items", [])
+    if isinstance(plan_items, list):
+        for item in plan_items:
+            if not isinstance(item, dict) or not item.get("active", True):
+                continue
+            plan, scheduled = plan_item_month_values(item, month)
+            for kind in CATALOG_KINDS:
+                key, name = _overview_comparison_dimension(item, kind, labels[kind])
+                values = _overview_comparison_values(groups[kind], key, name)
+                values["name"] = name
+                values["plan"] += _money(plan)
+                values["scheduled"] += _money(scheduled)
+
+    month_start, month_end = _month_window(month)
+    bookings = data.get("bookings", [])
+    if isinstance(bookings, list):
+        for booking in bookings:
+            if not isinstance(booking, dict):
+                continue
+            booking_date = _overview_booking_date(booking)
+            if booking_date is None or not month_start <= booking_date <= month_end:
+                continue
+            amount = _overview_booking_amount(booking)
+            allocated = Decimal("0.00")
+            allocations = booking.get("allocations")
+            if isinstance(allocations, list):
+                for allocation in allocations:
+                    if not isinstance(allocation, dict):
+                        continue
+                    try:
+                        share = abs(_money(allocation.get("amount", 0)))
+                    except (InvalidOperation, ValueError, TypeError):
+                        continue
+                    if share == 0:
+                        continue
+                    allocated += share
+                    signed_share = share if amount >= 0 else -share
+                    for kind in CATALOG_KINDS:
+                        key, name = _overview_comparison_dimension(
+                            allocation, kind, labels[kind]
+                        )
+                        values = _overview_comparison_values(groups[kind], key, name)
+                        values["name"] = name
+                        values["actual"] += signed_share
+            remainder = max(Decimal("0.00"), abs(amount) - allocated)
+            if remainder:
+                signed_remainder = remainder if amount >= 0 else -remainder
+                for kind in CATALOG_KINDS:
+                    values = _overview_comparison_values(
+                        groups[kind], "__unassigned__", "Nicht zugeordnet"
+                    )
+                    values["name"] = "Nicht zugeordnet"
+                    values["actual"] += signed_remainder
+
+    feed_profiles = data.get("feed_profiles", [])
+    if isinstance(feed_profiles, list):
+        for profile in feed_profiles:
+            if not isinstance(profile, dict):
+                continue
+            _, scheduled = feed_profile_month_values(profile, month, today=today)
+            if not scheduled:
+                continue
+            for kind in CATALOG_KINDS:
+                values = _overview_comparison_values(
+                    groups[kind], "__unassigned__", "Nicht zugeordnet"
+                )
+                values["name"] = "Nicht zugeordnet"
+                values["scheduled"] += _money(scheduled)
+
+    return {kind: _overview_comparison_entries(groups[kind]) for kind in CATALOG_KINDS}
+
+
 def _overview_breakdown(
     groups: dict[str, dict[str, Decimal]],
     *,
@@ -1724,6 +1896,7 @@ def overview_details(
         },
         "areas": _overview_breakdown(area_groups, limit=6),
         "categories": _overview_breakdown(category_groups, limit=6),
+        "comparison": overview_comparison(data, month, today=today),
         "trend": {
             "planned": planned_values,
             "forecast": forecast_values,

@@ -457,6 +457,7 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(overview["categories"][0]["name"], "Futter")
         self.assertEqual(overview["categories"][0]["actual"], -12.50)
         self.assertEqual(overview["areas"][0]["name"], "Haustiere")
+        self.assertIn("projects", overview["comparison"])
         self.assertEqual(overview["trend"]["actual"][-1], -12.50)
 
 
