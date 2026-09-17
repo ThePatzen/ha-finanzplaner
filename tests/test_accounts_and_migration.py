@@ -5,7 +5,11 @@ import unittest
 from unittest.mock import patch
 
 from custom_components.finanzplaner import core
-from custom_components.finanzplaner.storage import FinanceStore, migrate_store_data
+from custom_components.finanzplaner.storage import (
+    FinanceStore,
+    migrate_store_data,
+    normalize_current_store_data,
+)
 
 
 class AccountsAndMigrationTests(unittest.TestCase):
@@ -191,6 +195,36 @@ class AccountsAndMigrationTests(unittest.TestCase):
         self.assertEqual(loaded["bookings"][0]["account_id"], "configured-account")
         self.assertEqual(loaded["accounts"][0]["owner_targets"], ["person.alex"])
         self.assertFalse(loaded["accounts"][0]["active"])
+
+    def test_current_store_backfills_camt_sender_from_saved_source_data(self):
+        source = core.parse_camt053_records(
+            """<Document><BkToCstmrStmt><Stmt>
+              <Ntry><Amt Ccy="EUR">6.08</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+                <BookgDt><Dt>2026-08-17</Dt></BookgDt>
+                <NtryDtls><TxDtls><RltdPties>
+                  <Dbtr><Nm>Egger David</Nm></Dbtr>
+                  <Cdtr><Nm>Marktgemeinde Telfs</Nm></Cdtr>
+                </RltdPties></TxDtls></NtryDtls>
+              </Ntry>
+            </Stmt></BkToCstmrStmt></Document>"""
+        )[0].source_data
+        source["format"] = "CAMT.053"
+
+        normalized = normalize_current_store_data(
+            {
+                "version": 2,
+                "accounts": [],
+                "bookings": [{
+                    "id": "booking-1",
+                    "account": "",
+                    "source_data": source,
+                }],
+            },
+            "Testhaushalt",
+        )
+
+        self.assertEqual(normalized["bookings"][0]["sender"], "Egger David")
+        self.assertEqual(normalized["bookings"][0]["id"], "booking-1")
 
 
 if __name__ == "__main__":

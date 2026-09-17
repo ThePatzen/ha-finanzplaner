@@ -561,6 +561,33 @@ class ImportTests(unittest.TestCase):
             ["Marktgemeinde Telfs", "Solarwerk"],
         )
 
+    def test_camt053_keeps_sender_separate_from_counterparty(self):
+        core = load_core()
+        raw = """<Document>
+          <BkToCstmrStmt><Stmt><Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+            <Ntry><Amt Ccy="EUR">6.08</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+              <BookgDt><Dt>2026-08-17</Dt></BookgDt>
+              <NtryDtls><TxDtls><RltdPties>
+                <Dbtr><Nm>Egger David</Nm></Dbtr>
+                <Cdtr><Nm>Marktgemeinde Telfs</Nm></Cdtr>
+              </RltdPties></TxDtls></NtryDtls>
+            </Ntry>
+          </Stmt></BkToCstmrStmt>
+        </Document>"""
+
+        booking = core.parse_camt053(raw)[0]
+
+        self.assertEqual(booking.sender, "Egger David")
+        self.assertEqual(booking.counterparty, "Marktgemeinde Telfs")
+
+    def test_mt940_without_reliable_sender_keeps_sender_empty(self):
+        core = load_core()
+        raw = ":20:STATEMENT\n:25:ACCOUNT\n:61:2609020902D1,00NTRFREF\n"
+
+        booking = core.parse_mt940(raw)[0]
+
+        self.assertEqual(booking.sender, "")
+
     def test_camt053_uses_each_statement_account_and_ignores_counterparty_iban(self):
         core = load_core()
         raw = """<Document>

@@ -93,6 +93,7 @@ Weitere Produktfähigkeiten und Leitplanken:
 - Regeländerungen und deaktivierte Regeln verändern bestehende bestätigte Buchungsaufteilungen nicht rückwirkend.
 - Vollständige Kontoreferenzen bleiben im lokalen Speicher; Panel und API zeigen Kontodaten nur maskiert.
 - Die normalisierten Parserfelder bleiben für die Fachlogik erhalten; zusätzlich wird der vollständige buchungsbezogene MT940-/CAMT.053-Quellsatz lokal zur Prüfung aufbewahrt und in API sowie Panel maskiert dargestellt.
+- CAMT.053-Buchungen führen Absender und Zahlungsempfänger getrennt; bei fehlenden MT940-Absenderdaten wird dies ausdrücklich als nicht vorhanden angezeigt.
 - Es wird kein unverändertes Original der importierten Bankdatei als Downloadarchiv aufbewahrt.
 - keine direkte Open-Banking-Anbindung in der ersten Version
 - keine automatische Überwachung eines Dateiordners in der ersten Version

@@ -827,6 +827,20 @@ class RuleViewTests(unittest.TestCase):
         self.assertNotIn("source_data", unresolved["bookings"][0])
         self.assertNotIn("source_data", resolved["bookings"][0])
 
+    def test_booking_lists_and_details_expose_sender_separately(self):
+        self.coordinator.store.data["bookings"][0]["sender"] = "Absender resolved"
+        self.coordinator.store.data["bookings"][1]["sender"] = "Absender unresolved"
+
+        unresolved = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+        resolved = asyncio.run(self.http.ResolvedBookingsView().get(self._request()))
+        details = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "booking-unresolved")
+        )
+
+        self.assertEqual(unresolved["bookings"][0]["sender"], "Absender unresolved")
+        self.assertEqual(resolved["bookings"][0]["sender"], "Absender resolved")
+        self.assertEqual(details["booking"]["sender"], "Absender unresolved")
+
 
 class UnresolvedRuleProjectionTests(unittest.TestCase):
     setUp = RuleViewTests.setUp

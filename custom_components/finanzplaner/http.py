@@ -233,6 +233,7 @@ def _booking_payload(
         "purpose": booking.purpose,
         "reference": booking.reference,
         "counterparty": booking.counterparty,
+        "sender": booking.sender or None,
         "allocations": [],
         "status": "unresolved",
         "matched_rule": None,
@@ -242,11 +243,13 @@ def _booking_payload(
 def _booking_response_projection(booking: dict[str, Any]) -> dict[str, Any]:
     """Return booking data suitable for list and import-preview responses."""
 
-    return {
+    projected = {
         key: value
         for key, value in booking.items()
         if key != "source_data"
     }
+    projected.setdefault("sender", None)
+    return projected
 
 
 def _stored_booking_fingerprints(bookings: object) -> set[str]:
@@ -1979,7 +1982,10 @@ def _booking_details_payload(
     )
     return {
         "booking": {
-            key: value for key, value in booking.items() if key != "source_data"
+            **{
+                key: value for key, value in booking.items() if key != "source_data"
+            },
+            "sender": booking.get("sender"),
         },
         "account": account_payload(account) if isinstance(account, dict) else None,
         "details": {

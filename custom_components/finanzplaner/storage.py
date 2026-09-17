@@ -14,6 +14,7 @@ from .core import (
     account_id_for_reference,
     catalog_id_for_label,
     normalize_account_reference,
+    sender_from_camt_source,
 )
 
 
@@ -511,6 +512,8 @@ def migrate_store_data(
             booking["allocations"] = []
         if not isinstance(booking.get("matched_rule"), dict):
             booking["matched_rule"] = None
+        if not isinstance(booking.get("sender"), str) or not booking["sender"].strip():
+            booking["sender"] = sender_from_camt_source(booking.get("source_data"))
         if reference and reference not in account_by_reference:
             account = {
                 "id": account_id_for_reference(reference),
@@ -590,6 +593,8 @@ def normalize_current_store_data(
         booking.setdefault("allocations", [])
         if not isinstance(booking.get("matched_rule"), dict):
             booking["matched_rule"] = None
+        if not isinstance(booking.get("sender"), str) or not booking["sender"].strip():
+            booking["sender"] = sender_from_camt_source(booking.get("source_data"))
 
     data["version"] = STORAGE_VERSION
     _normalize_pets(data)

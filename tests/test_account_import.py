@@ -259,6 +259,36 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(booking["status"], "unresolved")
         self.assertNotIn("AT123456789012345678", str(result["preview"]))
 
+    def test_camt_import_persists_sender_separately_from_counterparty(self):
+        raw = """<Document><BkToCstmrStmt><Stmt>
+          <Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+          <Ntry><Amt Ccy="EUR">6.08</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+            <BookgDt><Dt>2026-08-17</Dt></BookgDt>
+            <NtryDtls><TxDtls><RltdPties>
+              <Dbtr><Nm>Egger David</Nm></Dbtr>
+              <Cdtr><Nm>Marktgemeinde Telfs</Nm></Cdtr>
+            </RltdPties><RmtInf><Ustrd>Gemeindeabgabe</Ustrd></RmtInf></TxDtls></NtryDtls>
+          </Ntry>
+        </Stmt></BkToCstmrStmt></Document>"""
+
+        result = self._import("statement.xml", raw)
+        booking = self.coordinator.store.data["bookings"][0]
+
+        self.assertEqual(booking["sender"], "Egger David")
+        self.assertEqual(booking["counterparty"], "Marktgemeinde Telfs")
+        self.assertEqual(result["preview"][0]["sender"], "Egger David")
+        self.assertEqual(
+            booking["id"], self.http.booking_fingerprint(self.http.parse_camt053(raw)[0])
+        )
+
+    def test_mt940_import_exposes_missing_sender_as_empty_optional_value(self):
+        self._import(
+            "statement.sta",
+            ":20:STATEMENT\n:25:ACCOUNT\n:61:2609020902D1,00NTRFREF\n",
+        )
+
+        self.assertIsNone(self.coordinator.store.data["bookings"][0]["sender"])
+
     def test_import_automatically_resolves_unique_rule_match_and_records_rule(self):
         self.coordinator.store.data.update({
             "accounts": [{

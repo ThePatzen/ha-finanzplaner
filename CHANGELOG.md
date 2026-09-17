@@ -8,6 +8,12 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.9.0] – 2026-09-17
+
+- CAMT.053-Absender werden separat vom Zahlungsempfänger gespeichert und in Buchungen, Prüfliste sowie Buchungsdetails angezeigt.
+- Bestehende CAMT-Buchungen werden beim Laden aus den gespeicherten Quelldaten nachangereichert; Duplikatfingerprints und Regelmatching bleiben unverändert.
+- Fehlende MT940-Absender werden ausdrücklich als „Nicht vorhanden“ dargestellt.
+
 ## [0.8.1] – 2026-09-17
 
 - CAMT.053-Lastschriften zeigen jetzt den Zahlungsempfänger statt des eigenen Kontoinhabers als Gegenpartei.
@@ -147,6 +153,7 @@ Erste vorbereitete vertikale Version:
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
 [0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
+[0.9.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.9.0
 [0.8.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.8.1
 [0.8.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.7.0

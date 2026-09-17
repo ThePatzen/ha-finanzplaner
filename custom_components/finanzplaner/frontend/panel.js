@@ -418,9 +418,9 @@ const styles = `
   .booking-row:has([data-booking-select]:checked) { border-color: var(--fp-cyan); background: rgb(223 244 247 / 0.45); }
   .booking-date { color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.75rem; }
   .booking-purpose { min-inline-size: 0; display: grid; gap: 0.2rem; }
-  .booking-counterparty, .booking-purpose-detail { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .booking-counterparty, .booking-sender, .booking-purpose-detail { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .booking-counterparty { font-weight: 700; }
-  .booking-purpose-detail { color: var(--fp-muted); font-size: 0.75rem; }
+  .booking-sender, .booking-purpose-detail { color: var(--fp-muted); font-size: 0.75rem; }
   .booking-account { min-inline-size: 0; max-inline-size: 16rem; display: grid; gap: 0.18rem; color: var(--fp-ink); font-size: 0.75rem; line-height: 1.3; }
   .booking-account strong { overflow-wrap: anywhere; font-size: 0.78rem; font-weight: 800; }
   .booking-account-reference { color: var(--fp-muted); overflow-wrap: anywhere; }
@@ -708,7 +708,8 @@ const styles = `
   .resolved-table tbody tr:has([data-booking-select]:checked) { background: rgb(223 244 247 / 0.45); }
   .resolved-table p, .resolved-table ul { margin: 0; }
   .resolved-table ul { display: grid; gap: 0.25rem; padding-inline-start: 1.1rem; }
-  .resolved-booking-date, .resolved-booking-purpose, .resolved-rule-reason { display: block; margin-block-start: 0.25rem; color: var(--fp-muted); font-size: 0.75rem; font-weight: 400; }
+  .resolved-booking-date, .resolved-booking-sender, .resolved-booking-counterparty, .resolved-booking-purpose, .resolved-rule-reason { display: block; margin-block-start: 0.25rem; color: var(--fp-muted); font-size: 0.75rem; font-weight: 400; }
+  .resolved-booking-counterparty { color: var(--fp-ink); font-size: 0.92rem; font-weight: 700; }
   .resolved-booking-purpose { overflow-wrap: anywhere; }
   .resolved-rule-source { color: var(--fp-ink); font-weight: 800; }
   .resolved-rule-source--manual { color: var(--fp-muted); }
@@ -1215,6 +1216,8 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _bookingDetailLabel(key) {
+    const labels = { sender: "Absender", counterparty: "Zahlungsempfänger" };
+    if (Object.hasOwn(labels, key)) return labels[key];
     return String(key).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
@@ -4523,6 +4526,7 @@ class FinanzplanerPanel extends HTMLElement {
       const bookingId = String(booking.id);
       const selectionId = `resolved-booking-select-${bookingId}`;
       const selected = this._selectedResolvedBookings.has(bookingId);
+      const sender = String(booking.sender || "").trim();
       const counterparty = String(booking.counterparty || "").trim();
       const purpose = String(booking.purpose || "").trim();
       const matchedRule = booking.matched_rule;
@@ -4533,7 +4537,7 @@ class FinanzplanerPanel extends HTMLElement {
         : "Keine Aufteilung gespeichert";
       return `<tr>
         <td class="selection-cell"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="resolved" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label></td>
-        <th scope="row"><span>${escapeHtml(counterparty || "Zahlungsempfänger nicht erkannt")}</span><span class="resolved-booking-date">${escapeHtml(formatDate(booking.booking_date))}</span></th>
+        <th scope="row"><span class="resolved-booking-sender">Absender: ${escapeHtml(sender || "Nicht vorhanden")}</span><span class="resolved-booking-counterparty">Zahlungsempfänger: ${escapeHtml(counterparty || "Nicht vorhanden")}</span><span class="resolved-booking-date">${escapeHtml(formatDate(booking.booking_date))}</span></th>
         <td><span class="resolved-booking-purpose">${escapeHtml(purpose || "Kein Verwendungszweck")}</span></td>
         <td class="table-number">${formatEuro(booking.amount)}</td>
         <td>${allocations}</td>
@@ -4560,16 +4564,18 @@ class FinanzplanerPanel extends HTMLElement {
       const bookingId = String(booking.id);
       const selectionId = `review-booking-select-${bookingId}`;
       const selected = this._selectedReviewBookings.has(bookingId);
+      const sender = String(booking.sender || "").trim();
       const counterparty = String(booking.counterparty || "").trim();
       const purpose = String(booking.purpose || "").trim();
       const accountLabel = String(booking.account_label || "").trim();
       const accountReference = String(booking.account_reference || booking.account || "").trim();
+      const senderMarkup = `<span class="booking-sender">Absender: ${escapeHtml(sender || "Nicht vorhanden")}</span>`;
       const counterpartyMarkup = counterparty ? `Zahlungsempfänger: ${escapeHtml(counterparty)}` : "Zahlungsempfänger nicht erkannt";
       const purposeMarkup = purpose ? `<span class="booking-purpose-detail">Verwendungszweck: ${escapeHtml(purpose)}</span>` : "";
       const accountMarkup = accountLabel
         ? `<strong>Erkanntes Konto: ${escapeHtml(accountLabel)}</strong>${accountReference ? `<span class="booking-account-reference">Kontoreferenz: ${escapeHtml(accountReference)}</span>` : ""}`
         : `<strong>Erkanntes Konto: ${escapeHtml(accountReference || "nicht zugeordnet")}</strong>`;
-      return `<li><form class="booking-row${selected ? " booking-row--selected" : ""}" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="review" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose"><span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${accountMarkup}</span><span class="booking-amount">${formatEuro(booking.amount)}</span><button class="table-edit-button" type="button" data-booking-details="${escapeHtml(bookingId)}" aria-label="Details für ${escapeHtml(counterparty || "Buchung")} anzeigen">Details</button>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
+      return `<li><form class="booking-row${selected ? " booking-row--selected" : ""}" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="review" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${senderMarkup}<span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${accountMarkup}</span><span class="booking-amount">${formatEuro(booking.amount)}</span><button class="table-edit-button" type="button" data-booking-details="${escapeHtml(bookingId)}" aria-label="Details für ${escapeHtml(counterparty || "Buchung")} anzeigen">Details</button>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
     }).join("")}</ul>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
     const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
     return this._shellTemplate(content);

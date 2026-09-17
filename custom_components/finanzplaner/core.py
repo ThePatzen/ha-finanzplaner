@@ -536,6 +536,7 @@ class Booking:
     reference: str = ""
     counterparty: str = ""
     currency: str = "EUR"
+    sender: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -2101,17 +2102,24 @@ def _descendant_text(element: ET.Element, name: str) -> str:
     return ""
 
 
+def _camt_related_party_name(entry: ET.Element, party_name: str) -> str:
+    for related_parties in entry.iter():
+        if _local_name(related_parties.tag) != "RltdPties":
+            continue
+        for party in related_parties:
+            if _local_name(party.tag) == party_name:
+                name = _descendant_text(party, "Nm")
+                if name:
+                    return name
+    return ""
+
+
 def _camt_counterparty(entry: ET.Element, direction: str) -> str:
     party_name = {"DBIT": "Cdtr", "CRDT": "Dbtr"}.get(direction.upper())
     if party_name:
-        for related_parties in entry.iter():
-            if _local_name(related_parties.tag) != "RltdPties":
-                continue
-            for party in related_parties:
-                if _local_name(party.tag) == party_name:
-                    name = _descendant_text(party, "Nm")
-                    if name:
-                        return name
+        name = _camt_related_party_name(entry, party_name)
+        if name:
+            return name
     return _descendant_text(entry, "Nm")
 
 
@@ -2157,6 +2165,7 @@ def parse_camt053_records(raw: str) -> list[ParsedBooking]:
                         reference=_descendant_text(entry, "EndToEndId"),
                         counterparty=_camt_counterparty(entry, direction),
                         currency=amount_node.attrib.get("Ccy", "EUR"),
+                        sender=_camt_related_party_name(entry, "Dbtr"),
                     ),
                     source_data={
                         "record": source_xml_node(entry),
@@ -2174,6 +2183,54 @@ def parse_camt053_records(raw: str) -> list[ParsedBooking]:
 
 def parse_camt053(raw: str) -> list[Booking]:
     return [record.booking for record in parse_camt053_records(raw)]
+
+
+def _source_node_text(node: object, name: str) -> str:
+    if not isinstance(node, dict):
+        return ""
+    if node.get("name") == name:
+        text = node.get("text")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+        if name in {"Dbtr", "Cdtr"}:
+            children = node.get("children")
+            if isinstance(children, list):
+                return _source_node_text_from_children(children, "Nm")
+    children = node.get("children")
+    if isinstance(children, list):
+        for child in children:
+            text = _source_node_text(child, name)
+            if text:
+                return text
+    return ""
+
+
+def _source_node_text_from_children(children: list[object], name: str) -> str:
+    for child in children:
+        text = _source_node_text(child, name)
+        if text:
+            return text
+    return ""
+
+
+def sender_from_camt_source(source_data: object) -> str | None:
+    """Extract a stored CAMT debtor name for non-destructive backfills."""
+
+    if not isinstance(source_data, dict) or source_data.get("format") != "CAMT.053":
+        return None
+    record = source_data.get("record")
+    if not isinstance(record, dict):
+        return None
+    children = record.get("children")
+    if not isinstance(children, list):
+        return None
+    for child in children:
+        if not isinstance(child, dict) or child.get("name") != "NtryDtls":
+            continue
+        sender = _source_node_text(child, "Dbtr")
+        if sender:
+            return sender
+    return None
 
 
 def booking_fingerprint(booking: Booking) -> str:

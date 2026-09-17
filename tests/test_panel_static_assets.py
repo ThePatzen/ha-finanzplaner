@@ -20,7 +20,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
             / "manifest.json"
         )
         version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-        self.assertEqual(version, "0.8.1")
+        self.assertEqual(version, "0.9.0")
         build_path = getattr(
             const, "panel_static_path", lambda _version: "/api/finanzplaner/static"
         )(version)
@@ -28,7 +28,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
 
         self.assertEqual(
             urljoin(panel_url, "panel-utils.mjs"),
-            "https://ha.example/api/finanzplaner/static/0.8.1/panel-utils.mjs",
+            "https://ha.example/api/finanzplaner/static/0.9.0/panel-utils.mjs",
         )
 
     def test_booking_lists_use_shared_detail_dialog_and_raw_data_action(self) -> None:
@@ -118,3 +118,19 @@ class PanelStaticAssetsTest(unittest.TestCase):
         self.assertIn("data-booking-detail-close", loading.group(1))
         self.assertIn("booking-detail-legacy", source)
         self.assertIn("alten Import", source)
+
+    def test_booking_surfaces_distinguish_sender_and_counterparty(self) -> None:
+        panel_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        )
+        source = panel_path.read_text(encoding="utf-8")
+
+        self.assertIn('sender: "Absender"', source)
+        self.assertIn('counterparty: "Zahlungsempfänger"', source)
+        self.assertIn('sender || "Nicht vorhanden"', source)
+        self.assertGreaterEqual(source.count("Absender:"), 2)
+        self.assertGreaterEqual(source.count("booking.sender"), 2)
