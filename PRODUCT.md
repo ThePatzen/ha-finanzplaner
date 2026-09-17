@@ -57,6 +57,12 @@ Zusätzlich enthalten:
 - bestätigte Futterkäufe verschieben das letzte Kaufdatum; erwartete Käufe werden einmalig in der Monatsprognose berücksichtigt
 - Futter-Erinnerungsstatus als automationstauglicher Binary-Sensor und HA-Service zur Kaufbestätigung
 - lokal verwaltete Stammdaten für Kategorien, Bereiche und Projekte mit stabilen IDs und historischen Namens-Snapshots
+- Regelverwaltung für Buchungsvorschläge mit aktiven und deaktivierten Regeln, Priorität und Aufteilungsvorlage
+- exaktes Matching des gewählten Kontos und des vollständigen Zahlungsempfängers ohne Beachtung der Groß- und Kleinschreibung
+- optionaler Verwendungszweckfilter, der nur Buchungen mit dem angegebenen Textabschnitt berücksichtigt
+- ein Vorschlag pro Buchung aus der Regel mit der höchsten Priorität; Regeln mit gleicher höchster Priorität erzeugen einen Konfliktstatus
+- ausdrückliche Übernahme eines Vorschlags in den Entwurf und anschließende Bestätigung der Aufteilung durch den Nutzer
+- Regelvorlage aus einer bestätigten Buchung über „Als Regel speichern“
 
 Weitere Produktfähigkeiten und Leitplanken:
 
@@ -77,10 +83,12 @@ Weitere Produktfähigkeiten und Leitplanken:
 - Installation und Updates über HACS
 - EUR als erste Währung
 - lokale Verarbeitung ohne Bankzugangsdaten
+- Regelvorschläge beziehen sich auf offene Buchungen. „Vorschlag übernehmen“ füllt nur den Entwurf; erst „Aufteilung speichern“ bestätigt die Buchung.
+- Regeländerungen und deaktivierte Regeln verändern bestehende bestätigte Buchungsaufteilungen nicht rückwirkend.
+- Vollständige Kontoreferenzen bleiben im lokalen Speicher; Panel und API zeigen Kontodaten nur maskiert.
 - keine direkte Open-Banking-Anbindung in der ersten Version
 - keine automatische Überwachung eines Dateiordners in der ersten Version
 - keine echten Finanzdaten im öffentlichen Repository
-- regelbasierte Vorschläge und automatische Zuordnung von Buchungen sind noch nicht geliefert
 
 Die Begriffe „Planposten“, „Buchung“, „Aufteilung“, „Bereich“, „Kategorie“, „Projekt“, „Person“ und „Haushalt“ bilden die zentrale Fachsprache der Anwendung.
 

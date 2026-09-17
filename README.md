@@ -27,6 +27,8 @@ mit den folgenden Erweiterungen und UI-Verbesserungen:
 - wiederkehrende und einmalige Planungen mit Betrag, Rhythmus, Fälligkeit und Gültigkeitszeitraum
 - centgenaue, bestätigungspflichtige Aufteilungen auf Personen oder `Haushalt`
 - gemeinsame Zuordnungen wie `Haushalt` mit dem Bereich `Hunde`
+- Regelverwaltung mit Konto-, Zahlungsempfänger- und optionalem Verwendungszweck-Matching
+- priorisierte Buchungsvorschläge mit Konfliktstatus und ausdrücklicher Bestätigung
 - lokale Versionierung über Home Assistants persistenten Store
 - ausgewählte Übersichtswerte als HA-Sensoren
 
@@ -84,9 +86,21 @@ Beim Import einer CAMT.053- oder MT940-Datei erkennt Finanzplaner das verwendete
 
 Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`person.*`-Entitäten; zusätzlich steht `Haushalt` für gemeinsame Konten und Ausgaben bereit. Kontoinhaber beschreiben nur die Zahlungsquelle. Sie werden nicht automatisch auf bestehende oder neue Buchungen übertragen.
 
+## Buchungsregeln
+
+Öffne `Regeln` und wähle `Regel anlegen`, um eine Vorlage für künftige Buchungsvorschläge zu speichern. Vergib einen Namen, wähle bei Bedarf ein Konto und trage den vollständigen Zahlungsempfänger ein. Das Konto grenzt die Regel auf genau diese Zahlungsquelle ein. Den Zahlungsempfänger vergleicht Finanzplaner vollständig und ohne Beachtung der Groß- und Kleinschreibung. Mit `Verwendungszweck enthält (optional)` kannst du die Regel zusätzlich auf Buchungen mit diesem Textabschnitt begrenzen. Eine Regelaufteilung enthält jedes Ziel höchstens einmal; ihre Anteile müssen zusammen 100 Prozent ergeben.
+
+Für eine offene Buchung prüft Finanzplaner nur aktive Regeln. Eine passende Regel muss das festgelegte Konto und den vollständigen Zahlungsempfänger treffen; der optionale Verwendungszweckfilter muss ebenfalls passen. Die Regel mit der höchsten Priorität liefert den Vorschlag. Treffen mehrere Regeln mit gleicher höchster Priorität zu, zeigt die Prüfliste `Regelkonflikt` an. Prüfe dann die Regeln oder teile die Buchung manuell auf.
+
+Bei `Regelvorschlag` zeigt die Prüfliste die vorgeschlagene Aufteilung. Klicke auf `Vorschlag übernehmen`, um sie in den Entwurf zu kopieren. Finanzplaner speichert die Buchung dabei nicht automatisch. Prüfe die Zeilen und klicke anschließend auf `Aufteilung speichern`, um die Buchung ausdrücklich zu bestätigen. Ohne passende Regel bleibt die Buchung ungeklärt und lässt sich manuell aufteilen.
+
+Nach einer bestätigten Aufteilung kannst du in der Prüfliste `Als Regel speichern` wählen. Finanzplaner öffnet daraus eine Regelvorlage mit Konto, Zahlungsempfänger und den bestätigten Anteilen. Prüfe die Vorlage, ergänze bei Bedarf den Verwendungszweckfilter und die Priorität und speichere sie mit `Regel speichern`. Regeländerungen wirken nur auf künftige Vorschläge für offene Buchungen. Bereits bestätigte Buchungsaufteilungen bleiben unverändert.
+
+Regeln und Vorschläge verarbeitet Finanzplaner lokal in Home Assistant. Vollständige Kontoreferenzen bleiben im lokalen Speicher; Oberfläche und API zeigen nur maskierte Kontodaten.
+
 ## Buchungen aufteilen
 
-Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Tier, Bereich, Kategorie und Projekt tragen; eine gemeinsame Futterausgabe wird beispielsweise als Ziel `Haushalt` mit Tier `Fio` und Bereich `Haustiere` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Automatische Regelvorschläge sind nicht Bestandteil dieser Version; Benachrichtigungen werden nicht ungefragt verschickt.
+Importierte Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Tier, Bereich, Kategorie und Projekt tragen; eine gemeinsame Futterausgabe wird beispielsweise als Ziel `Haushalt` mit Tier `Fio` und Bereich `Haustiere` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Regelvorschläge füllen nur den Entwurf und benötigen deine ausdrückliche Bestätigung; Benachrichtigungen werden nicht ungefragt verschickt.
 
 ## Excel-Plan übernehmen
 

@@ -10,6 +10,12 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+- Regelverwaltung für Buchungsvorschläge mit aktiven, deaktivierten und priorisierten Regeln ergänzt
+- exaktes Matching auf Konto und vollständigen Zahlungsempfänger sowie optionaler Verwendungszweckfilter ergänzt
+- Vorschläge mit höchster Priorität und ein sichtbarer Konfliktstatus bei gleicher Priorität ergänzt
+- `Vorschlag übernehmen` übernimmt die Aufteilung nur in den Entwurf; `Aufteilung speichern` verlangt die ausdrückliche Bestätigung
+- `Als Regel speichern` erstellt aus einer bestätigten Buchung eine prüfbare Regelvorlage; Regeländerungen wirken nicht rückwirkend auf bestätigte Aufteilungen
+- Regelverarbeitung bleibt lokal; Kontodaten erscheinen in Panel und API nur maskiert
 - Energie, Kalender, Aufgaben, Haushalt und Personen als nutzbare Übersichtsansichten ergänzt
 - Mehrere MT940- und CAMT.053-Buchungsdateien können gemeinsam als geprüftes ZIP importiert werden
 - ZIP-Bankimporte erlauben bis zu 500 Dateien für umfangreiche Jahresimporte
