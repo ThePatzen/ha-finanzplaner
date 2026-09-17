@@ -24,6 +24,7 @@ from .core import (
     ensure_account,
     feed_profile_forecast,
     normalize_account_reference,
+    overview_breakdown,
     overview_details,
     overview_values,
     parse_allocation_payload,
@@ -853,6 +854,49 @@ class OverviewView(HomeAssistantView):
         coordinator = _coordinator(request.app["hass"])
         data = coordinator.data if coordinator and coordinator.data else {}
         return self.json(_response_payload(_overview(data, request.query.get("month"))))
+
+
+class OverviewBreakdownView(HomeAssistantView):
+    """Return authenticated monthly source records for one comparison entry."""
+
+    url = "/api/finanzplaner/overview/breakdown"
+    name = "api:finanzplaner:overview:breakdown"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        month = request.query.get("month")
+        dimension = request.query.get("dimension")
+        key = request.query.get("key")
+        if not isinstance(month, str) or not month:
+            raise web.HTTPBadRequest(text="Bitte einen Monat im Format JJJJ-MM angeben.")
+        if not isinstance(dimension, str) or dimension.strip() not in CATALOG_KINDS:
+            raise web.HTTPBadRequest(text="Bitte eine gültige Dimension angeben.")
+        if not isinstance(key, str) or not key.strip():
+            raise web.HTTPBadRequest(text="Bitte einen Vergleichsschlüssel angeben.")
+
+        coordinator = _coordinator(request.app["hass"])
+        data = coordinator.data if coordinator and coordinator.data else {}
+        try:
+            breakdown = overview_breakdown(data, month, dimension, key)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+        return self.json(
+            _response_payload(
+                {
+                    **breakdown,
+                    "plan_items": [
+                        plan_item_payload(item)
+                        for item in breakdown["plan_items"]
+                        if isinstance(item, dict)
+                    ],
+                    "bookings": [
+                        dict(booking)
+                        for booking in breakdown["bookings"]
+                        if isinstance(booking, dict)
+                    ],
+                }
+            )
+        )
 
 
 class PersonsView(HomeAssistantView):

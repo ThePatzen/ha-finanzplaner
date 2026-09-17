@@ -1668,6 +1668,100 @@ def overview_comparison(
     return {kind: _overview_comparison_entries(groups[kind]) for kind in CATALOG_KINDS}
 
 
+def _overview_breakdown_dimension(dimension: str) -> str:
+    """Normalize one supported overview comparison dimension."""
+
+    normalized = dimension.strip() if isinstance(dimension, str) else ""
+    if normalized not in CATALOG_KINDS:
+        raise ValueError("Die Dimension muss Bereiche, Kategorien oder Projekte sein.")
+    return normalized
+
+
+def overview_breakdown(
+    data: dict[str, object],
+    month: str,
+    dimension: str,
+    key: str,
+) -> dict[str, object]:
+    """Return the records contributing to one monthly comparison entry."""
+
+    kind = _overview_breakdown_dimension(dimension)
+    normalized_key = key.strip() if isinstance(key, str) else ""
+    if not normalized_key:
+        raise ValueError("Bitte einen Vergleichsschlüssel angeben.")
+
+    comparison = overview_comparison(data, month)
+    entry = next(
+        (
+            value
+            for value in comparison[kind]
+            if value.get("key") == normalized_key
+        ),
+        None,
+    )
+    if entry is None:
+        raise ValueError("Der Vergleichseintrag ist nicht verfügbar.")
+
+    labels = _overview_catalog_labels(data, kind)
+    plan_items: list[dict[str, object]] = []
+    stored_plan_items = data.get("plan_items", [])
+    if isinstance(stored_plan_items, list):
+        for item in stored_plan_items:
+            if not isinstance(item, dict) or not item.get("active", True):
+                continue
+            item_key, _ = _overview_comparison_dimension(item, kind, labels)
+            plan, scheduled = plan_item_month_values(item, month)
+            if item_key == normalized_key and (plan or scheduled):
+                plan_items.append(dict(item))
+
+    month_start, month_end = _month_window(month)
+    bookings: list[dict[str, object]] = []
+    stored_bookings = data.get("bookings", [])
+    if isinstance(stored_bookings, list):
+        for booking in stored_bookings:
+            if not isinstance(booking, dict):
+                continue
+            booking_date = _overview_booking_date(booking)
+            if booking_date is None or not month_start <= booking_date <= month_end:
+                continue
+
+            amount = _overview_booking_amount(booking)
+            allocated = Decimal("0.00")
+            matched = Decimal("0.00")
+            allocations = booking.get("allocations")
+            if isinstance(allocations, list):
+                for allocation in allocations:
+                    if not isinstance(allocation, dict):
+                        continue
+                    try:
+                        share = abs(_money(allocation.get("amount", 0)))
+                    except (InvalidOperation, ValueError, TypeError):
+                        continue
+                    if share == 0:
+                        continue
+                    allocated += share
+                    allocation_key, _ = _overview_comparison_dimension(
+                        allocation, kind, labels
+                    )
+                    if allocation_key == normalized_key:
+                        matched += share if amount >= 0 else -share
+
+            if normalized_key == "__unassigned__":
+                remainder = max(Decimal("0.00"), abs(amount) - allocated)
+                matched += remainder if amount >= 0 else -remainder
+            if matched:
+                bookings.append({**dict(booking), "matched_amount": float(_money(matched))})
+
+    return {
+        "month": month,
+        "dimension": kind,
+        "key": normalized_key,
+        "name": entry["name"],
+        "plan_items": plan_items,
+        "bookings": bookings,
+    }
+
+
 def _overview_breakdown(
     groups: dict[str, dict[str, Decimal]],
     *,
