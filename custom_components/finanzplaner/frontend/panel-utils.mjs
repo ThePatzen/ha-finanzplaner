@@ -21,6 +21,14 @@ export function breakdownRequestUrl(baseUrl, month, dimension, key) {
   return `${baseUrl}?month=${encodeURIComponent(month)}&dimension=${encodeURIComponent(dimension)}&key=${encodeURIComponent(key)}`;
 }
 
+export function bookingDetailsRequestUrl(baseUrl, bookingId) {
+  return String(baseUrl).replace(/\/$/, "") + "/" + encodeURIComponent(String(bookingId)) + "/details";
+}
+
+export function bookingDetailRawJson(detail) {
+  return JSON.stringify(detail, null, 2);
+}
+
 export function trendSummary(trend) {
   const last = (key) => Number(trend?.[key]?.at(-1) || 0);
   const todayIndex = Number(trend?.today_index ?? 0);

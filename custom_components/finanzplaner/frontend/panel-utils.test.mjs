@@ -24,6 +24,19 @@ test("reads API responses according to their content type", async () => {
   assert.equal(await utils.readApiResponse(textResponse), "  Dienst nicht erreichbar\n");
 });
 
+test("bookingDetailsRequestUrl encodes the booking id", () => {
+  assert.equal(
+    utils.bookingDetailsRequestUrl("/api/finanzplaner/bookings", "booking/42"),
+    "/api/finanzplaner/bookings/booking%2F42/details",
+  );
+});
+
+test("bookingDetailRawJson creates readable JSON without HTML interpretation", () => {
+  const raw = utils.bookingDetailRawJson({ booking: { purpose: "<Bank> & Zusatz" } });
+  assert.match(raw, /\n  "booking":/);
+  assert.match(raw, /<Bank> & Zusatz/);
+});
+
 test("formats euro amounts with German separators and sign", () => {
   assert.equal(utils.formatEuro(3285.4), "3.285,40 €");
   assert.equal(utils.formatEuro(-278.64), "−278,64 €");
