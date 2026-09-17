@@ -29,6 +29,10 @@ Richte die Umsetzung an diesen Dokumenten aus und halte sie bei relevanten Ände
 - Verifiziere proportional zum Risiko: Bei Dokumentationsänderungen reichen Diff- und Formatprüfung; bei Codeänderungen kommen die passenden fokussierten Tests hinzu. Überspringe notwendige Prüfungen nicht allein wegen Tokenersparnis.
 - Halte Statusmeldungen und die abschließende Übergabe knapp. Verlinke betroffene Dateien, fasse Änderungen und Prüfergebnisse zusammen und kopiere keine großen Quelltext- oder Logblöcke.
 
+## GitHub- und Release-Befehle
+
+- GitHub-Befehle wie `gh`, `git push`, `git fetch`, `git pull`, `git ls-remote` und das Anlegen oder Veröffentlichen von Releases müssen immer außerhalb der Sandbox mit expliziter Freigabe ausgeführt werden.
+
 ## Verbindliche Frontend-Regel
 
 Bei jeder Arbeit an HTML, CSS, clientseitigem JavaScript, Layout, Navigation,
