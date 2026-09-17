@@ -16,6 +16,8 @@ Das Projekt verwendet Semantic Versioning:
 - `Vorschlag übernehmen` übernimmt die Aufteilung nur in den Entwurf; `Aufteilung speichern` verlangt die ausdrückliche Bestätigung
 - `Als Regel speichern` erstellt aus einer bestätigten Buchung eine prüfbare Regelvorlage; Regeländerungen wirken nicht rückwirkend auf bestätigte Aufteilungen
 - Regelverarbeitung bleibt lokal; Kontodaten erscheinen in Panel und API nur maskiert
+- Opaque IDs bleiben an der Maskierungsgrenze erhalten; lange Buchungstexte und ungültige Spitzenregeln werden beim Matching korrekt behandelt, mit Begründung der tatsächlich verwendeten Bedingungen
+- Regelgrenzen für Text, Priorität und Prozentgenauigkeit in API und Formular angeglichen; korrigierte Vorlagen aus bestätigten Buchungen lassen sich ausdrücklich speichern
 - Energie, Kalender, Aufgaben, Haushalt und Personen als nutzbare Übersichtsansichten ergänzt
 - Mehrere MT940- und CAMT.053-Buchungsdateien können gemeinsam als geprüftes ZIP importiert werden
 - ZIP-Bankimporte erlauben bis zu 500 Dateien für umfangreiche Jahresimporte

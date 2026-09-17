@@ -427,6 +427,168 @@ class RuleViewTests(unittest.TestCase):
         self.assertNotIn("AT123456789012345678", str(result))
         self.assertEqual(self.coordinator.store.save_count, 0)
 
+    def test_opaque_id_collision_round_trips_get_update_and_deactivation(self):
+        rule_id = "ab12cdef0123456789abcdef01234567"
+        self.assertEqual(len(rule_id), 32)
+        account_id = "account-cd34abcd01234567"
+        self.coordinator.store.data["accounts"][0]["id"] = account_id
+        payload = self._valid_rule_payload()
+        payload["account_id"] = account_id
+        with patch.object(self.http, "uuid4", return_value=types.SimpleNamespace(hex=rule_id)):
+            created = asyncio.run(self.http.RulesView().post(self._request(payload)))
+        self.assertEqual(created["rule"]["id"], rule_id)
+        before = deepcopy(self.coordinator.store.data)
+        result = asyncio.run(self.http.RulesView().get(self._request()))
+        listed = result["rules"][-1]
+        self.assertEqual(listed["id"], rule_id)
+        self.assertEqual(listed["account_id"], account_id)
+        self.assertEqual(listed["account"]["id"], account_id)
+        self.assertNotIn("AT123456789012345678", str(result))
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 1)
+        updated = asyncio.run(self.http.RuleView().post(
+            self._request({"label": "Edited", "account_id": listed["account_id"]}), listed["id"],
+        ))
+        deactivated = asyncio.run(self.http.RuleView().post(
+            self._request({"active": False}), updated["rule"]["id"],
+        ))
+        self.assertEqual(deactivated["rule"]["id"], rule_id)
+        self.assertFalse(self.coordinator.store.data["rules"][-1]["active"])
+        self.assertEqual(self.coordinator.store.save_count, 3)
+
+    def test_redaction_preserves_only_validated_opaque_identifier_fields(self):
+        opaque = "ab12cdef0123456789abcdef01234567"
+        iban = "DE89370400440532013000"
+        original = {
+            "id": opaque, "suggestion": {"rule_id": opaque}, "conflicts": [opaque],
+            "account_id": iban, "metadata": {"id": iban},
+            "iban": opaque, "account": opaque, "account_reference": opaque,
+            "note": opaque, "history": [iban, {"note": iban}],
+        }
+        before = deepcopy(original)
+        result = self.http._response_payload(original)
+        self.assertEqual(result["id"], opaque)
+        self.assertEqual(result["suggestion"]["rule_id"], opaque)
+        self.assertEqual(result["conflicts"], [opaque])
+        self.assertNotIn(iban, str(result))
+        for field in ("iban", "account", "account_reference", "note"):
+            self.assertNotEqual(result[field], opaque)
+        self.assertEqual(original, before)
+
+    def test_rule_text_limits_at_boundaries(self):
+        for field, limit in (("label", 120), ("counterparty", 160), ("purpose_contains", 160)):
+            for length in (limit - 1, limit, limit + 1):
+                with self.subTest(field=field, length=length):
+                    payload = self._valid_rule_payload()
+                    payload[field] = "x" * length
+                    before = deepcopy(self.coordinator.store.data)
+                    saves, refreshes = self.coordinator.store.save_count, self.coordinator.refresh_count
+                    if length <= limit:
+                        result = asyncio.run(self.http.RulesView().post(self._request(payload)))
+                        self.assertEqual(result["rule"][field], "x" * length)
+                    else:
+                        with self.assertRaises(self.bad_request):
+                            asyncio.run(self.http.RulesView().post(self._request(payload)))
+                        self.assertEqual(self.coordinator.store.data, before)
+                        self.assertEqual(self.coordinator.store.save_count, saves)
+                        self.assertEqual(self.coordinator.refresh_count, refreshes)
+
+    def test_priority_bounds_on_create_and_update(self):
+        for priority in (-1, 1001, 1.5, True, "100", None, 0, 1000):
+            for update in (False, True):
+                with self.subTest(priority=priority, update=update):
+                    payload = self._valid_rule_payload()
+                    payload["priority"] = priority
+                    before = deepcopy(self.coordinator.store.data)
+                    saves, refreshes = self.coordinator.store.save_count, self.coordinator.refresh_count
+                    request = self._request({"priority": priority} if update else payload)
+                    call = self.http.RuleView().post(request, "rule-1") if update else self.http.RulesView().post(request)
+                    if type(priority) is int and 0 <= priority <= 1000:
+                        self.assertEqual(asyncio.run(call)["rule"]["priority"], priority)
+                    else:
+                        with self.assertRaises(self.bad_request):
+                            asyncio.run(call)
+                        self.assertEqual(self.coordinator.store.data, before)
+                        self.assertEqual(self.coordinator.store.save_count, saves)
+                        self.assertEqual(self.coordinator.refresh_count, refreshes)
+
+    def test_percentages_reject_out_of_bounds_and_extra_precision_without_writes(self):
+        for shares in ((0.001, 99.999), (0.009, 99.991), (0.011, 99.989), (99.999, 0.001),
+                       (-0.01, 100.01), (0, 100),
+                       (True, 99), (float("inf"), 0), (float("nan"), 100)):
+            for update in (False, True):
+                with self.subTest(shares=shares, update=update):
+                    payload = self._valid_rule_payload()
+                    payload["allocations"] = [
+                        {"target": target, "share_percent": share}
+                        for target, share in zip(("household", "person.alex"), shares)
+                    ]
+                    before = deepcopy(self.coordinator.store.data)
+                    saves, refreshes = self.coordinator.store.save_count, self.coordinator.refresh_count
+                    with self.assertRaises(self.bad_request):
+                        if update:
+                            asyncio.run(self.http.RuleView().post(self._request(payload), "rule-1"))
+                        else:
+                            asyncio.run(self.http.RulesView().post(self._request(payload)))
+                    self.assertEqual(self.coordinator.store.data, before)
+                    self.assertEqual(self.coordinator.store.save_count, saves)
+                    self.assertEqual(self.coordinator.refresh_count, refreshes)
+
+    def test_percentages_accept_hundredths_at_boundaries(self):
+        for shares in ((0.01, 99.99), (33.33, 66.67), (100,)):
+            with self.subTest(shares=shares):
+                payload = self._valid_rule_payload()
+                payload["allocations"] = [
+                    {"target": target, "share_percent": share}
+                    for target, share in zip(("household", "person.alex"), shares)
+                ]
+                result = asyncio.run(self.http.RulesView().post(self._request(payload)))
+                self.assertEqual([row["share_percent"] for row in result["rule"]["allocations"]], list(shares))
+
+    def test_corrected_booking_draft_is_validated_and_saved_without_changing_source(self):
+        booking = self.coordinator.store.data["bookings"][0]
+        booking["amount"] = -1000
+        booking["account_id"] = "missing-account"
+        booking["allocations"][0].update(amount=0.01, target="person.missing", pet_id="missing-pet")
+        booking["allocations"][1]["amount"] = 999.99
+        self.coordinator.store.data["catalogs"]["categories"][0]["active"] = False
+        before = deepcopy(self.coordinator.store.data)
+        with self.assertRaises(self.bad_request):
+            asyncio.run(self.http.RuleFromBookingView().post(self._request({}), booking["id"]))
+        draft = self.http.rule_payload_from_booking(booking)
+        self.assertEqual(draft["allocations"][0]["share_percent"], 0)
+        with self.assertRaises(self.bad_request):
+            asyncio.run(self.http.RulesView().post(self._request(draft)))
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
+        draft["account_id"] = None
+        draft["allocations"][0].update(
+            target="household", share_percent=0.01, category_id=None, pet_id=None,
+        )
+        draft["allocations"][1]["share_percent"] = 99.99
+        result = asyncio.run(self.http.RulesView().post(self._request(draft)))
+        self.assertEqual(result["rule"]["allocations"][0]["share_percent"], 0.01)
+        self.assertEqual(self.coordinator.store.data["bookings"], before["bookings"])
+        self.assertEqual(self.coordinator.store.data["rules"][:-1], before["rules"])
+        self.assertEqual(self.coordinator.store.save_count, 1)
+        self.assertEqual(self.coordinator.refresh_count, 1)
+
+    def test_rule_writes_and_projection_require_authentication_without_mutation(self):
+        before = deepcopy(self.coordinator.store.data)
+        calls = (
+            self.http.RulesView().post(self._request(self._valid_rule_payload(), authenticated=False)),
+            self.http.RuleView().post(self._request({"active": False}, authenticated=False), "rule-1"),
+            self.http.RuleFromBookingView().post(self._request({}, authenticated=False), "booking-resolved"),
+            self.http.UnresolvedBookingsView().get(self._request(authenticated=False)),
+        )
+        for call in calls:
+            with self.assertRaises(self.unauthorized):
+                asyncio.run(call)
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
+
     def test_rules_get_does_not_repair_malformed_store(self):
         self.coordinator.store.data["rules"] = {"invalid": True}
         before = deepcopy(self.coordinator.store.data)
@@ -524,7 +686,49 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
 
         projected = body["bookings"][0]
         self.assertEqual(projected["status"], "unresolved")
-        self.assertIn("Keine aktive Regel", projected["reason"])
+        self.assertIn("Kategorie-ID", projected["reason"])
+        self.assertIn("Bestehende Regel", projected["reason"])
+        self.assertIsNone(projected["suggestion"])
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
+
+    def test_invalid_top_rule_does_not_fall_back_in_projection(self):
+        rule = self.coordinator.store.data["rules"][0]
+        fallback = deepcopy(rule)
+        fallback.update(id="rule-fallback", priority=10)
+        fallback["allocations"][0]["category_id"] = None
+        self.coordinator.store.data["rules"].append(fallback)
+        self.coordinator.store.data["catalogs"]["categories"][0]["active"] = False
+        self.coordinator.store.data["bookings"][1]["counterparty"] = "Supermarkt"
+        before = deepcopy(self.coordinator.store.data)
+        result = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+        projected = result["bookings"][0]
+        self.assertEqual(projected["status"], "unresolved")
+        self.assertIsNone(projected["suggestion"])
+        self.assertIn("Kategorie-ID", projected["reason"])
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
+
+    def test_projection_preserves_colliding_ids_and_redacts_matching_reason(self):
+        rule = self.coordinator.store.data["rules"][0]
+        rule["id"] = "ab12cdef0123456789abcdef01234567"
+        account = self.coordinator.store.data["accounts"][0]
+        account["id"] = "account-cd34abcd01234567"
+        account["label"] = "Giro DE89370400440532013000"
+        rule["account_id"] = account["id"]
+        rule["purpose_contains"] = "DE89370400440532013000"
+        booking = self.coordinator.store.data["bookings"][1]
+        booking.update(account_id=account["id"], counterparty="Supermarkt", purpose="Details " * 100 + rule["purpose_contains"])
+        before = deepcopy(self.coordinator.store.data)
+        result = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+        projected = result["bookings"][0]
+        self.assertEqual(projected["account_id"], account["id"])
+        self.assertEqual(projected["suggestion"]["rule_id"], rule["id"])
+        self.assertIn("Verwendungszweck", projected["suggestion"]["reason"])
+        self.assertIn("Giro", projected["suggestion"]["reason"])
+        self.assertNotIn("DE89370400440532013000", str(result))
         self.assertEqual(self.coordinator.store.data, before)
         self.assertEqual(self.coordinator.store.save_count, 0)
         self.assertEqual(self.coordinator.refresh_count, 0)

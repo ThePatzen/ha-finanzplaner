@@ -107,6 +107,92 @@ class RuleMatchingTests(unittest.TestCase):
         self.assertEqual(result["status"], "suggested")
         self.assertEqual(result["suggestion"]["rule_id"], "rule-high")
 
+    def test_long_booking_purpose_does_not_block_matching(self):
+        for purpose_filter in (None, "monatlicher einkauf"):
+            with self.subTest(purpose_filter=purpose_filter):
+                result = self._suggestion(
+                    [self._rule("rule-long", purpose_contains=purpose_filter)],
+                    purpose="Details " * 1000 + " MONATLICHER   EINKAUF ",
+                )
+                self.assertEqual(result["status"], "suggested")
+
+    def test_booking_counterparty_has_no_rule_payload_length_limit(self):
+        for length in (120, 121, 160, 161, 1000):
+            with self.subTest(length=length):
+                rule = self._rule("rule-long-counterparty")
+                rule["counterparty"] = "x" * min(length, 160)
+                result = load_core().rule_suggestion(
+                    {"account_id": "account-giro", "counterparty": "X" * length,
+                     "purpose": "", "amount": -10},
+                    [rule], accounts={"account-giro": {}}, valid_targets={"household"},
+                    catalogs={}, pets={},
+                )
+                self.assertEqual(result["status"], "suggested" if length <= 160 else "unresolved")
+                if length > 160:
+                    self.assertIn("Keine aktive Regel", result["reason"])
+
+    def test_invalid_winning_rules_block_fallback_and_explain_references(self):
+        for field, value, reason in (
+            ("target", "person.missing", "Person"),
+            ("category_id", "missing-category", "Kategorie-ID"),
+            ("area_id", "missing-area", "Bereichs-ID"),
+            ("project_id", "missing-project", "Projekt-ID"),
+            ("pet_id", "missing-pet", "Tier-ID"),
+        ):
+            for competing_priority in (10, 100):
+                with self.subTest(field=field, competing_priority=competing_priority):
+                    invalid = self._rule("rule-invalid", priority=100)
+                    invalid["allocations"][0][field] = value
+                    result = self._suggestion([
+                        self._rule("rule-valid", priority=competing_priority), invalid,
+                    ])
+                    self.assertEqual(result["status"], "unresolved")
+                    self.assertIsNone(result["suggestion"])
+                    self.assertEqual(result["conflicts"], [])
+                    self.assertIn("rule-invalid", result["reason"])
+                    self.assertIn(reason, result["reason"])
+
+    def test_all_invalid_top_rules_are_reported_in_stable_order(self):
+        first, second = self._rule("rule-a"), self._rule("rule-b")
+        first["allocations"][0]["pet_id"] = "missing-pet"
+        second["allocations"][0]["category_id"] = "missing-category"
+        result = self._suggestion([second, self._rule("rule-low", priority=10), first])
+        self.assertEqual(result["status"], "unresolved")
+        self.assertIsNone(result["suggestion"])
+        self.assertIn("Tier-ID", result["reason"])
+        self.assertIn("Kategorie-ID", result["reason"])
+        self.assertLess(result["reason"].index("rule-a"), result["reason"].index("rule-b"))
+
+    def test_invalid_lower_priority_or_nonmatching_rule_does_not_block_winner(self):
+        invalid = self._rule("rule-invalid", priority=10)
+        invalid["allocations"][0]["pet_id"] = "missing"
+        for priority, counterparty in ((10, "Supermarkt AG"), (1000, "Other")):
+            with self.subTest(priority=priority):
+                invalid.update(priority=priority, counterparty=counterparty)
+                result = self._suggestion([invalid, self._rule("rule-valid")])
+                self.assertEqual(result["suggestion"]["rule_id"], "rule-valid")
+
+    def test_reason_describes_only_the_conditions_used(self):
+        for account_id in (None, "account-giro"):
+            for purpose_filter in (None, "einkauf"):
+                with self.subTest(account_id=account_id, purpose_filter=purpose_filter):
+                    result = self._suggestion([self._rule(
+                        "rule-reason", account_id=account_id, purpose_contains=purpose_filter,
+                    )])
+                    reason = result["suggestion"]["reason"]
+                    self.assertIn("Supermarkt AG", reason)
+                    if account_id is None:
+                        self.assertIn("Alle Konten", reason)
+                        self.assertNotIn("Giro", reason)
+                    else:
+                        self.assertIn("Giro", reason)
+                        self.assertNotIn("Alle Konten", reason)
+                    if purpose_filter:
+                        self.assertIn("Verwendungszweck", reason)
+                        self.assertIn(purpose_filter, reason)
+                    else:
+                        self.assertNotIn("Verwendungszweck", reason)
+
     def test_equal_highest_priority_rules_create_conflict(self):
         result = self._suggestion([
             self._rule("rule-a", priority=20),

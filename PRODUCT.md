@@ -63,6 +63,8 @@ Zusätzlich enthalten:
 - ein Vorschlag pro Buchung aus der Regel mit der höchsten Priorität; Regeln mit gleicher höchster Priorität erzeugen einen Konfliktstatus
 - ausdrückliche Übernahme eines Vorschlags in den Entwurf und anschließende Bestätigung der Aufteilung durch den Nutzer
 - Regelvorlage aus einer bestätigten Buchung über „Als Regel speichern“
+- ungültige passende Regeln mit höchster Priorität halten die Buchung mit konkretem Prüfgrund ungeklärt; es erfolgt kein Rückgriff auf niedrigere Prioritäten
+- aus bestätigten Buchungen vorbelegte Regeln lassen sich vor der ausdrücklichen Speicherung korrigieren; der Server validiert den bearbeiteten Entwurf
 
 Weitere Produktfähigkeiten und Leitplanken:
 

@@ -92,9 +92,13 @@ Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`per
 
 Für eine offene Buchung prüft Finanzplaner nur aktive Regeln. Wenn die Regel ein Konto festlegt, muss die Buchung genau diesem Konto entsprechen. Der vollständige Zahlungsempfänger muss ebenfalls passen; der optionale Verwendungszweckfilter muss zusätzlich zutreffen. Die Regel mit der höchsten Priorität liefert den Vorschlag. Treffen mehrere Regeln mit gleicher höchster Priorität zu, zeigt die Prüfliste `Regelkonflikt` an. Prüfe dann die Regeln oder teile die Buchung manuell auf.
 
+Regelnamen dürfen bis zu 120 Zeichen enthalten, Zahlungsempfänger und Verwendungszweckfilter jeweils bis zu 160. Die Priorität ist eine ganze Zahl von 0 bis 1000. Jeder Anteil liegt zwischen 0,01 und 100,00 Prozent und hat höchstens zwei Nachkommastellen. Lange Verwendungszwecke einer Buchung verhindern das Matching nicht. Ist eine passende Regel mit höchster Priorität ungültig, bleibt die Buchung mit dem konkreten Prüfgrund ungeklärt; eine niedrigere Regel übernimmt nicht ersatzweise.
+
 Bei `Regelvorschlag` zeigt die Prüfliste die vorgeschlagene Aufteilung. Klicke auf `Vorschlag übernehmen`, um sie in den Entwurf zu kopieren. Finanzplaner speichert die Buchung dabei nicht automatisch. Prüfe die Zeilen und klicke anschließend auf `Aufteilung speichern`, um die Buchung ausdrücklich zu bestätigen. Ohne passende Regel bleibt die Buchung ungeklärt und lässt sich manuell aufteilen.
 
 Nach einer bestätigten Aufteilung kannst du in der Prüfliste `Als Regel speichern` wählen. Finanzplaner öffnet daraus eine Regelvorlage mit Konto, Zahlungsempfänger und den bestätigten Anteilen. Prüfe die Vorlage, ergänze bei Bedarf den Verwendungszweckfilter und die Priorität und speichere sie mit `Regel speichern`. Regeländerungen wirken nur auf künftige Vorschläge für offene Buchungen. Bereits bestätigte Buchungsaufteilungen bleiben unverändert.
+
+Fehlende oder archivierte Zuordnungen und durch Umrechnung ungültige Prozentanteile kannst du im Entwurf korrigieren. Erst `Regel speichern` sendet die bearbeiteten Angaben zur serverseitigen Prüfung und speichert die neue Regel. Die ursprüngliche Buchung bleibt dabei unverändert.
 
 Regeln und Vorschläge verarbeitet Finanzplaner lokal in Home Assistant. Vollständige Kontoreferenzen bleiben im lokalen Speicher; Oberfläche und API zeigen nur maskierte Kontodaten.
 

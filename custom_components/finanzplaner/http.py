@@ -58,6 +58,17 @@ _IBAN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Only generated opaque ID formats may bypass free-text IBAN detection, and
+# only in identifier fields. Account values and arbitrary text remain redacted.
+_OPAQUE_ID_PATTERN = re.compile(
+    r"(?:[0-9a-f]{32}|[0-9a-f]{64}|account-[0-9a-f]{16}|"
+    r"catalog-(?:category|area|project)-[0-9a-f]{16})"
+)
+_OPAQUE_ID_FIELDS = frozenset({
+    "id", "rule_id", "account_id", "booking_id", "category_id", "area_id",
+    "project_id", "pet_id", "feed_profile_id", "conflicts",
+})
+
 # ISO 13616 country lengths. Keeping this local avoids accepting a syntactically
 # valid checksum for an unknown country or for a country with the wrong BBAN size.
 _IBAN_LENGTHS = {
@@ -254,7 +265,7 @@ def _mask_iban_occurrences(value: str) -> str:
     return _IBAN_PATTERN.sub(replace, value)
 
 
-def _response_payload(value: object) -> object:
+def _response_payload(value: object, *, field: str | None = None) -> object:
     """Copy JSON data while redacting IBANs at every response boundary."""
 
     if isinstance(value, dict):
@@ -263,13 +274,15 @@ def _response_payload(value: object) -> object:
                 _redact_account_value(item)
                 if key in {"account", "account_reference"}
                 and isinstance(item, str)
-                else _response_payload(item)
+                else _response_payload(item, field=key)
             )
             for key, item in value.items()
         }
     if isinstance(value, list):
-        return [_response_payload(item) for item in value]
+        return [_response_payload(item, field=field) for item in value]
     if isinstance(value, str):
+        if field in _OPAQUE_ID_FIELDS and _OPAQUE_ID_PATTERN.fullmatch(value):
+            return value
         return _mask_iban_occurrences(value)
     return value
 

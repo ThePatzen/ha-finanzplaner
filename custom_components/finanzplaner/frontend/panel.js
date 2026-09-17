@@ -1196,12 +1196,13 @@ class FinanzplanerPanel extends HTMLElement {
 
   _ruleValidationErrors(draft) {
     const errors = {};
-    for (const [key, label] of [["label", "Regelname"], ["counterparty", "Zahlungsempfänger"], ["purpose_contains", "Verwendungszweckfilter"]]) {
-      const text = String(draft[key] || "").trim();
+    for (const [key, label, maxLength] of [["label", "Regelname", 120], ["counterparty", "Zahlungsempfänger", 160], ["purpose_contains", "Verwendungszweckfilter", 160]]) {
+      const text = String(draft[key] || "").trim().replace(/\s+/gu, " ");
       if (key !== "purpose_contains" && !text) errors[key] = `${label} fehlt.`;
-      else if (text.length > 120) errors[key] = "Bitte höchstens 120 Zeichen eingeben.";
+      else if (text.length > maxLength) errors[key] = `Bitte höchstens ${maxLength} Zeichen eingeben.`;
     }
-    if (String(draft.priority).trim() === "" || !Number.isSafeInteger(Number(draft.priority))) errors.priority = "Bitte eine ganze Zahl eingeben.";
+    const priority = Number(draft.priority);
+    if (String(draft.priority).trim() === "" || !Number.isSafeInteger(priority) || priority < 0 || priority > 1000) errors.priority = "Bitte eine ganze Zahl von 0 bis 1000 eingeben.";
     if (draft.account_id && !this._accounts.some((account) => account.id === draft.account_id && account.active !== false)) errors.account_id = "Konto fehlt oder ist archiviert. Bitte ein aktives Konto oder alle Konten wählen.";
     const targets = new Set(["household", ...this._persons.map((person) => person.entity_id)]);
     const seen = new Set();
@@ -1211,8 +1212,8 @@ class FinanzplanerPanel extends HTMLElement {
       else if (seen.has(row.target)) errors[`${index}-target`] = "Jedes Ziel darf nur einmal vorkommen.";
       seen.add(row.target);
       const share = Number(row.share_percent);
-      if (!Number.isFinite(share) || share <= 0 || share > 100) errors[`${index}-share_percent`] = "Bitte einen Anteil größer als 0 und höchstens 100 eingeben.";
-      total += share;
+      if (!Number.isFinite(share) || share < 0.01 || share > 100 || Number(share.toFixed(2)) !== share) errors[`${index}-share_percent`] = "Bitte einen Anteil von 0,01 bis 100,00 mit höchstens zwei Nachkommastellen eingeben.";
+      total += Math.round(share * 100);
       for (const [key, entries] of [
         ["area_id", this._catalogs.areas], ["category_id", this._catalogs.categories],
         ["project_id", this._catalogs.projects], ["pet_id", this._pets],
@@ -1222,7 +1223,7 @@ class FinanzplanerPanel extends HTMLElement {
         }
       }
     });
-    if (!draft.allocations.length || !Number.isFinite(total) || Math.abs(total - 100) > 1e-9) errors.allocations = "Die Anteile müssen zusammen 100 % ergeben.";
+    if (!draft.allocations.length || total !== 10000) errors.allocations = "Die Anteile müssen zusammen 100 % ergeben.";
     return errors;
   }
 
@@ -1316,8 +1317,8 @@ class FinanzplanerPanel extends HTMLElement {
     this._ruleMessage = "Regel wird gespeichert …";
     this._render();
     try {
-      // This endpoint validates a template; only the following /rules request persists it.
-      if (sourceBookingId) await this._postRule(`${RULES_URL}/from-booking/${encodeURIComponent(sourceBookingId)}`, { label: payload.label });
+      // The confirmed booking only prefills the draft. Validate the edited rule
+      // on the server so repaired percentages and references can be saved.
       await this._postRule(this._ruleEditingId === "new" ? RULES_URL : `${RULES_URL}/${encodeURIComponent(this._ruleEditingId)}`, payload);
     } catch (error) {
       this._ruleSubmitting = false;
@@ -3666,7 +3667,7 @@ class FinanzplanerPanel extends HTMLElement {
       const rowField = (key, label, options = {}) => this._ruleFieldTemplate(key, label, row[key], { index, ...options });
       return `<fieldset class="rule-fieldset rule-allocation"><legend>Aufteilung ${index + 1}</legend><div class="rule-fields">
         ${rowField("target", "Ziel", { options: this._allocationTargetOptions(row.target), constraints: "required" })}
-        ${rowField("share_percent", "Anteil in Prozent", { type: "number", constraints: 'required min="0" max="100" step="any" inputmode="decimal"' })}
+        ${rowField("share_percent", "Anteil in Prozent", { type: "number", constraints: 'required min="0.01" max="100" step="0.01" inputmode="decimal"', help: "0,01 bis 100,00 mit höchstens zwei Nachkommastellen." })}
         ${rowField("category_id", "Kategorie (optional)", { options: this._ruleReferenceOptions(this._catalogs.categories, row.category_id, "Keine Kategorie") })}
         ${rowField("area_id", "Bereich (optional)", { options: this._ruleReferenceOptions(this._catalogs.areas, row.area_id, "Kein Bereich") })}
         ${rowField("project_id", "Projekt (optional)", { options: this._ruleReferenceOptions(this._catalogs.projects, row.project_id, "Kein Projekt") })}
@@ -3681,9 +3682,9 @@ class FinanzplanerPanel extends HTMLElement {
         </div></fieldset>
         <fieldset class="rule-fieldset"${disabled}><legend>Bedingungen</legend><div class="rule-fields">
           ${field("account_id", "Konto", { options: this._ruleReferenceOptions(this._accounts, draft.account_id, "Alle Konten"), help: "Ein Konto begrenzt die Regel auf diese Zahlungsquelle." })}
-          ${field("counterparty", "Zahlungsempfänger", { constraints: 'required maxlength="120"', help: "Der vollständige Name wird ohne Beachtung der Groß- und Kleinschreibung verglichen." })}
-          ${field("purpose_contains", "Verwendungszweck enthält (optional)", { constraints: 'maxlength="120"', help: "Leer lassen, wenn die Regel für jeden Verwendungszweck gelten soll." })}
-          ${field("priority", "Priorität", { type: "number", constraints: 'required step="1"', help: "Eine höhere Zahl hat Vorrang. Gleiche Priorität kann einen Regelkonflikt ergeben." })}
+          ${field("counterparty", "Zahlungsempfänger", { constraints: 'required maxlength="160"', help: "Der vollständige Name wird ohne Beachtung der Groß- und Kleinschreibung verglichen." })}
+          ${field("purpose_contains", "Verwendungszweck enthält (optional)", { constraints: 'maxlength="160"', help: "Leer lassen, wenn die Regel für jeden Verwendungszweck gelten soll." })}
+          ${field("priority", "Priorität", { type: "number", constraints: 'required min="0" max="1000" step="1"', help: "0 bis 1000; eine höhere Zahl hat Vorrang. Gleiche Priorität kann einen Regelkonflikt ergeben." })}
         </div></fieldset>
         <fieldset class="rule-fieldset" aria-describedby="rule-share-summary rule-allocations-error"${disabled}><legend>Aufteilungsvorlage</legend>
           <p class="rule-help">Jedes Ziel einmal wählen. Alle Anteile müssen zusammen 100 % ergeben. Es stehen aktive Stammdaten und Tiere zur Auswahl.</p>

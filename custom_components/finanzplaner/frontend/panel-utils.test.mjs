@@ -552,7 +552,7 @@ test("confirmed booking opens a prefilled rule with no purpose filter and no POS
   assert.equal(panel._ruleSourceBookingId, "b1");
 });
 
-test("saving a booking rule validates the source then persists once and returns to the list", async () => {
+test("saving a booking rule validates the edited payload and persists once and returns to the list", async () => {
   const panel = ruleTestPanel();
   panel._ruleDraft = validRuleDraft();
   panel._ruleEditingId = "new";
@@ -573,13 +573,99 @@ test("saving a booking rule validates the source then persists once and returns 
   assert.equal(panel._ruleSubmitting, true);
   release();
   await first;
-  assert.deepEqual(writes.map((write) => write.url), ["/api/finanzplaner/rules/from-booking/b1", "/api/finanzplaner/rules"]);
-  assert.deepEqual(writes[0].body, { label: "Lebensmittel" });
-  assert.equal(writes[1].body.purpose_contains, null);
-  assert.equal(writes[1].body.allocations[0].share_percent, 100);
+  assert.deepEqual(writes.map((write) => write.url), ["/api/finanzplaner/rules"]);
+  assert.equal(writes[0].body.label, "Lebensmittel");
+  assert.equal(writes[0].body.purpose_contains, null);
+  assert.equal(writes[0].body.allocations[0].share_percent, 100);
   assert.equal(panel._ruleEditingId, null);
   assert.equal(panel._ruleSubmitting, false);
   assert.match(panel._ruleMessage, /gespeichert/);
+});
+
+test("rule validation enforces priority bounds", () => {
+  const panel = ruleTestPanel();
+  panel._persons = [{ entity_id: "person.anna" }];
+  for (const priority of ["-1", "1001", "0.1", "", "Infinity"]) {
+    const draft = { ...validRuleDraft(), priority };
+    assert.ok(panel._ruleValidationErrors(draft).priority, `priority ${priority}`);
+  }
+  for (const priority of ["0", "1000"]) {
+    assert.equal(panel._ruleValidationErrors({ ...validRuleDraft(), priority }).priority, undefined);
+  }
+});
+
+test("rule validation enforces percentage bounds without rounding", async () => {
+  const panel = ruleTestPanel();
+  panel._persons = [{ entity_id: "person.anna" }];
+  for (const shares of [["0.001", "99.999"], ["0.009", "99.991"], ["-0.01", "100.01"], ["0", "100"]]) {
+    panel._ruleDraft = validRuleDraft();
+    panel._ruleDraft.allocations = shares.map((share, index) => ({ target: index ? "person.anna" : "household", share_percent: share }));
+    const errors = panel._ruleValidationErrors(panel._ruleDraft);
+    assert.ok(errors["0-share_percent"], `shares ${shares}`);
+    panel._hass = { fetchWithAuth: () => assert.fail("Invalid shares must not POST") };
+    await panel._handleRuleSave({ preventDefault() {}, currentTarget: { querySelector: () => null, querySelectorAll: () => [] } });
+    assert.match(panel._ruleMessage, /Fehlerhaft/);
+  }
+  for (const shares of [["0.01", "99.99"], ["33.33", "66.67"], ["1.13", "98.87"]]) {
+    const draft = validRuleDraft();
+    draft.allocations = shares.map((share, index) => ({ target: index ? "person.anna" : "household", share_percent: share }));
+    assert.deepEqual(Object.keys(panel._ruleValidationErrors(draft)), []);
+  }
+});
+
+test("rule text validation uses 120 for labels and 160 for matching filters", () => {
+  const panel = ruleTestPanel();
+  for (const [field, limit] of [["label", 120], ["counterparty", 160], ["purpose_contains", 160]]) {
+    const draft = validRuleDraft();
+    draft[field] = "x".repeat(limit);
+    assert.equal(panel._ruleValidationErrors(draft)[field], undefined, `${field} boundary`);
+    draft[field] += "x";
+    assert.ok(panel._ruleValidationErrors(draft)[field], `${field} overflow`);
+  }
+});
+
+test("a booking template with invalid percentages and references can be repaired and explicitly saved", async () => {
+  const panel = ruleTestPanel();
+  const booking = {
+    id: "b-repair", status: "resolved", counterparty: "Laden", purpose: "Private details",
+    account_id: "archived-account", amount: -1000, allocations: [
+      { target: "person.missing", amount: 0.01, category_id: "archived-category", pet_id: "missing-pet" },
+      { target: "household", amount: 999.99 },
+    ],
+  };
+  const before = structuredClone(booking);
+  panel._confirmedBookings.set(booking.id, booking);
+  const writes = [];
+  panel._hass = { fetchWithAuth: async (url, options) => {
+    if (options.method === "POST") {
+      writes.push({ url, body: JSON.parse(options.body) });
+      if (url.includes("from-booking")) return new Response("Originalvorlage ungültig", { status: 400 });
+    }
+    return new Response(JSON.stringify({ rule: { id: "r-repaired" }, rules: [], accounts: [], persons: [{ entity_id: "person.anna" }], pets: [], catalogs: {} }), { headers: { "Content-Type": "application/json" } });
+  } };
+  await panel._openRuleFromBooking(booking.id);
+  assert.equal(writes.length, 0);
+  assert.equal(panel._ruleDraft.allocations[0].share_percent, "0");
+  assert.ok(panel._ruleValidationErrors(panel._ruleDraft).account_id);
+  assert.ok(panel._ruleValidationErrors(panel._ruleDraft)["0-target"]);
+  assert.ok(panel._ruleValidationErrors(panel._ruleDraft)["0-category_id"]);
+  panel._ruleDraft.account_id = "";
+  Object.assign(panel._ruleDraft.allocations[0], { target: "person.anna", share_percent: "0.01", category_id: "", pet_id: "" });
+  panel._ruleDraft.allocations[1].share_percent = "99.99";
+  panel._ruleDraft.purpose_contains = "Bewusst ergänzt";
+  assert.equal(writes.length, 0, "editing must not save automatically");
+  assert.deepEqual(Object.keys(panel._ruleValidationErrors(panel._ruleDraft)), []);
+  await panel._handleRuleSave({ preventDefault() {}, currentTarget: { querySelector: () => null, querySelectorAll: () => [] } });
+  assert.deepEqual(writes, [{ url: "/api/finanzplaner/rules", body: {
+    label: "Laden", active: true, priority: 100, account_id: null, counterparty: "Laden", purpose_contains: "Bewusst ergänzt",
+    allocations: [
+      { target: "person.anna", share_percent: 0.01, category_id: null, area_id: null, project_id: null, pet_id: null },
+      { target: "household", share_percent: 99.99, category_id: null, area_id: null, project_id: null, pet_id: null },
+    ],
+  } }]);
+  assert.equal(panel._ruleEditingId, null);
+  assert.match(panel._ruleMessage, /gespeichert/);
+  assert.deepEqual(booking, before);
 });
 
 test("failed rule save retains edits and exposes server feedback", async () => {

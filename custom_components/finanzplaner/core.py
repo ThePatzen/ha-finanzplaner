@@ -707,9 +707,22 @@ def _normalized_match_text(value: object, label: str, *, required: bool) -> str 
         if required:
             raise ValueError(f"{label} darf nicht leer sein.")
         return None
-    if len(normalized) > 120:
-        raise ValueError(f"{label} darf höchstens 120 Zeichen enthalten.")
     return normalized
+
+
+def _normalized_rule_text(
+    value: object, label: str, *, required: bool, max_length: int = 120,
+) -> str | None:
+    normalized = _normalized_match_text(value, label, required=required)
+    if normalized is not None and len(normalized) > max_length:
+        raise ValueError(f"{label} darf höchstens {max_length} Zeichen enthalten.")
+    return normalized
+
+
+def _rule_priority(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 1000:
+        raise ValueError("Die Regelpriorität muss eine ganze Zahl von 0 bis 1000 sein.")
+    return value
 
 
 def _active_reference(
@@ -742,8 +755,10 @@ def _rule_share_percent(value: object) -> Decimal:
         share = Decimal(str(value))
     except InvalidOperation as exc:
         raise ValueError("Der prozentuale Anteil muss als Zahl angegeben werden.") from exc
-    if not share.is_finite() or share <= 0:
-        raise ValueError("Der prozentuale Anteil muss positiv sein.")
+    if not share.is_finite() or not Decimal("0.01") <= share <= Decimal("100.00"):
+        raise ValueError("Der prozentuale Anteil muss zwischen 0,01 und 100,00 liegen.")
+    if share != share.quantize(Decimal("0.01")):
+        raise ValueError("Der prozentuale Anteil darf höchstens zwei Nachkommastellen haben.")
     return share
 
 
@@ -766,7 +781,7 @@ def validate_rule_payload(
 
     normalized: dict[str, object] = {}
     if not partial or "label" in payload:
-        normalized["label"] = _normalized_match_text(
+        normalized["label"] = _normalized_rule_text(
             payload.get("label"), "Die Regelbezeichnung", required=True
         )
     if not partial or "active" in payload:
@@ -775,24 +790,21 @@ def validate_rule_payload(
             raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
         normalized["active"] = active
     if not partial or "priority" in payload:
-        priority = payload.get("priority", 100)
-        if isinstance(priority, bool) or not isinstance(priority, int):
-            raise ValueError("Die Regelpriorität muss eine ganze Zahl sein.")
-        normalized["priority"] = priority
+        normalized["priority"] = _rule_priority(payload.get("priority", 100))
     if not partial or "account_id" in payload:
-        account_id = _normalized_match_text(
+        account_id = _normalized_rule_text(
             payload.get("account_id"), "Die Konto-ID", required=False
         )
         if account_id is not None:
             _active_reference(account_id, accounts, "Die Konto-ID")
         normalized["account_id"] = account_id
     if not partial or "counterparty" in payload:
-        normalized["counterparty"] = _normalized_match_text(
-            payload.get("counterparty"), "Der Zahlungsempfänger", required=True
+        normalized["counterparty"] = _normalized_rule_text(
+            payload.get("counterparty"), "Der Zahlungsempfänger", required=True, max_length=160
         )
     if not partial or "purpose_contains" in payload:
-        normalized["purpose_contains"] = _normalized_match_text(
-            payload.get("purpose_contains"), "Der Verwendungszweckfilter", required=False
+        normalized["purpose_contains"] = _normalized_rule_text(
+            payload.get("purpose_contains"), "Der Verwendungszweckfilter", required=False, max_length=160
         )
     if not partial or "allocations" in payload:
         allocations = payload.get("allocations")
@@ -810,7 +822,7 @@ def validate_rule_payload(
             unknown_allocation = set(allocation) - RULE_ALLOCATION_FIELDS
             if unknown_allocation:
                 raise ValueError("Ein Regelanteil enthält ein unbekanntes Feld.")
-            target = _normalized_match_text(
+            target = _normalized_rule_text(
                 allocation.get("target"), "Das Aufteilungsziel", required=True
             )
             if target not in valid_targets:
@@ -830,13 +842,13 @@ def validate_rule_payload(
                 ("category_id", "categories", "Die Kategorie-ID"),
                 ("project_id", "projects", "Die Projekt-ID"),
             ):
-                reference_id = _normalized_match_text(
+                reference_id = _normalized_rule_text(
                     allocation.get(field), label, required=False
                 )
                 if reference_id is not None:
                     _active_reference(reference_id, catalog_references[kind], label)
                 normalized_allocation[field] = reference_id
-            pet_id = _normalized_match_text(
+            pet_id = _normalized_rule_text(
                 allocation.get("pet_id"), "Die Tier-ID", required=False
             )
             if pet_id is not None:
@@ -958,13 +970,20 @@ def rule_suggestion(
         if not isinstance(rule, dict) or rule.get("active") is not True:
             continue
         try:
-            normalized = validate_rule_payload(
-                {field: rule.get(field) for field in RULE_FIELDS},
-                valid_targets=valid_targets,
-                accounts=accounts,
-                catalogs=catalogs,
-                pets=pets,
-            )
+            # Establish matches and priority before validating allocation references.
+            # A broken winning rule must stay visible instead of enabling fallback.
+            normalized = {
+                "priority": _rule_priority(rule.get("priority", 100)),
+                "account_id": _normalized_match_text(
+                    rule.get("account_id"), "Die Konto-ID", required=False
+                ),
+                "counterparty": _normalized_match_text(
+                    rule.get("counterparty"), "Der Zahlungsempfänger", required=True
+                ),
+                "purpose_contains": _normalized_match_text(
+                    rule.get("purpose_contains"), "Der Verwendungszweckfilter", required=False
+                ),
+            }
         except ValueError:
             continue
         if _rule_matches_booking(normalized, normalized_booking):
@@ -974,13 +993,27 @@ def rule_suggestion(
     matches.sort(key=lambda match: (-int(match[1]["priority"]), str(match[0].get("id", ""))))
     highest_priority = matches[0][1]["priority"]
     highest_matches = [match for match in matches if match[1]["priority"] == highest_priority]
+    validated_matches = []
+    errors = []
+    for rule, _ in highest_matches:
+        try:
+            normalized = validate_rule_payload(
+                {field: rule.get(field) for field in RULE_FIELDS},
+                valid_targets=valid_targets, accounts=accounts, catalogs=catalogs, pets=pets,
+            )
+        except ValueError as exc:
+            errors.append(f"Regel „{rule.get('label') or rule.get('id', '')}“: {exc}")
+        else:
+            validated_matches.append((rule, normalized))
+    if errors:
+        return _unresolved_rule_suggestion(" ".join(errors))
     if len(highest_matches) > 1:
         return {
             "status": "conflict",
             "suggestion": None,
             "conflicts": [str(match[0].get("id", "")) for match in highest_matches],
         }
-    rule, normalized = highest_matches[0]
+    rule, normalized = validated_matches[0]
     allocations = _materialize_rule_allocations(
         booking.get("amount"), normalized["allocations"]
     )
@@ -988,12 +1021,20 @@ def rule_suggestion(
         return _unresolved_rule_suggestion(
             "Die Regelaufteilung kann für diesen Buchungsbetrag nicht positiv in Cent materialisiert werden."
         )
+    account_id = normalized["account_id"]
+    account_condition = (
+        f"Konto „{accounts[account_id].get('label') or account_id}“"
+        if account_id is not None else "Alle Konten (keine Kontobedingung)"
+    )
+    reason = f"{account_condition}; Zahlungsempfänger „{normalized['counterparty']}“ stimmt überein."
+    if normalized["purpose_contains"]:
+        reason += f" Verwendungszweck enthält „{normalized['purpose_contains']}“."
     return {
         "status": "suggested",
         "suggestion": {
             "rule_id": str(rule.get("id", "")),
             "rule_label": normalized["label"],
-            "reason": "Zahlungsempfänger und Konto stimmen mit der Regel überein.",
+            "reason": reason,
             "allocations": allocations,
         },
         "conflicts": [],
