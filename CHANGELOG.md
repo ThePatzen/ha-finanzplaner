@@ -11,7 +11,7 @@ Das Projekt verwendet Semantic Versioning:
 ## Unreleased
 
 - Regelverwaltung für Buchungsvorschläge mit aktiven, deaktivierten und priorisierten Regeln ergänzt
-- exaktes Matching auf Konto und vollständigen Zahlungsempfänger sowie optionaler Verwendungszweckfilter ergänzt
+- Konto- und Zahlungsempfänger-Matching präzisiert: Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung; der Verwendungszweckfilter bleibt optional
 - Vorschläge mit höchster Priorität und ein sichtbarer Konfliktstatus bei gleicher Priorität ergänzt
 - `Vorschlag übernehmen` übernimmt die Aufteilung nur in den Entwurf; `Aufteilung speichern` verlangt die ausdrückliche Bestätigung
 - `Als Regel speichern` erstellt aus einer bestätigten Buchung eine prüfbare Regelvorlage; Regeländerungen wirken nicht rückwirkend auf bestätigte Aufteilungen

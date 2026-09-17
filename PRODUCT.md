@@ -58,7 +58,7 @@ Zusätzlich enthalten:
 - Futter-Erinnerungsstatus als automationstauglicher Binary-Sensor und HA-Service zur Kaufbestätigung
 - lokal verwaltete Stammdaten für Kategorien, Bereiche und Projekte mit stabilen IDs und historischen Namens-Snapshots
 - Regelverwaltung für Buchungsvorschläge mit aktiven und deaktivierten Regeln, Priorität und Aufteilungsvorlage
-- exaktes Matching des gewählten Kontos und des vollständigen Zahlungsempfängers ohne Beachtung der Groß- und Kleinschreibung
+- Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung.
 - optionaler Verwendungszweckfilter, der nur Buchungen mit dem angegebenen Textabschnitt berücksichtigt
 - ein Vorschlag pro Buchung aus der Regel mit der höchsten Priorität; Regeln mit gleicher höchster Priorität erzeugen einen Konfliktstatus
 - ausdrückliche Übernahme eines Vorschlags in den Entwurf und anschließende Bestätigung der Aufteilung durch den Nutzer
