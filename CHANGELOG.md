@@ -10,7 +10,8 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
-Noch keine Änderungen.
+- Monatsübersicht um einen Budget-Ist-Vergleich für Bereiche, Kategorien und Projekte erweitert; die Tabelle zeigt Plan, Prognose, Ist und Abweichung.
+- Vergleichszeilen öffnen eine Inline-Detailansicht mit den passenden Planposten und Buchungen; Buchungen zeigen den zugeordneten Teilbetrag.
 
 ## [0.5.0] – 2026-09-17
 

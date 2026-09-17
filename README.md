@@ -12,6 +12,7 @@ mit den folgenden Erweiterungen und UI-Verbesserungen:
 - HACS-fähige Custom Integration mit Config Flow
 - native Home-Assistant-Seitenleiste mit schneller Monatsübersicht
 - Plan · Prognose · Ist und offene Buchungen als zentrale Sicht
+- Budget-Ist-Vergleich für Bereiche, Kategorien und Projekte mit Plan, Prognose, Ist und Abweichung
 - Home-Assistant-`person.*`-Entitäten als Personenquelle
 - MT940- und CAMT.053-Upload mit Duplikatfingerprint
 - automatische Kontoerkennung aus CAMT.053-IBAN beziehungsweise MT940-Kontoangabe
@@ -32,6 +33,13 @@ mit den folgenden Erweiterungen und UI-Verbesserungen:
 - Prüfliste mit erneutem Regel-Lauf sowie separate Ansicht für sämtliche übernommene Buchungen
 - lokale Versionierung über Home Assistants persistenten Store
 - ausgewählte Übersichtswerte als HA-Sensoren
+
+In der Monatsübersicht zeigt der Budget-Ist-Vergleich die Werte des ausgewählten
+Monats je Bereich, Kategorie oder Projekt. Über die drei Schaltflächen wechselst
+du die Dimension. Mit `Details` öffnest du unter der Tabelle eine Inline-Ansicht
+mit den passenden Planposten und Buchungen. Planposten zeigen Betrag, Richtung
+und Rhythmus; Buchungen zeigen den zugeordneten Teilbetrag. In Demo-Daten sind
+Detailbuchungen nicht verfügbar.
 
 Die Integration zeigt bei einem leeren Workspace klar markierte synthetische Demo-Daten. Private Konten, Bankdateien und die ursprüngliche Excel-Datei gehören nicht in dieses öffentliche Repository.
 
