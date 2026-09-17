@@ -841,6 +841,46 @@ class RuleViewTests(unittest.TestCase):
         self.assertEqual(resolved["bookings"][0]["sender"], "Absender resolved")
         self.assertEqual(details["booking"]["sender"], "Absender unresolved")
 
+    def test_internal_camt_transfer_exposes_both_configured_accounts(self):
+        self.coordinator.store.data["accounts"].append({
+            "id": "account-savings",
+            "label": "Tagesgeldkonto",
+            "iban": "AT999999999999999999",
+            "account_reference": "AT999999999999999999",
+            "bank": "Testbank",
+            "owner_targets": [],
+            "active": True,
+        })
+        camt_source = self.http.parse_camt053_records(
+            """<Document><BkToCstmrStmt><Stmt>
+              <Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+              <Ntry><Amt Ccy="EUR">15.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+                <BookgDt><Dt>2026-09-17</Dt></BookgDt><NtryDtls><TxDtls>
+                  <RltdPties>
+                    <DbtrAcct><Id><IBAN>AT123456789012345678</IBAN></Id></DbtrAcct>
+                    <CdtrAcct><Id><IBAN>AT999999999999999999</IBAN></Id></CdtrAcct>
+                  </RltdPties>
+                </TxDtls></NtryDtls></Ntry>
+            </Stmt></BkToCstmrStmt></Document>"""
+        )[0].source_data
+        camt_source["format"] = "CAMT.053"
+        self.coordinator.store.data["bookings"][0]["source_data"] = camt_source
+        self.coordinator.store.data["bookings"][1]["source_data"] = camt_source
+
+        unresolved = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+        resolved = asyncio.run(self.http.ResolvedBookingsView().get(self._request()))
+        details = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "booking-unresolved")
+        )
+
+        for booking in (unresolved["bookings"][0], resolved["bookings"][0]):
+            self.assertEqual(booking["booking_accounts"]["sender"]["label"], "Gemeinsames Girokonto")
+            self.assertEqual(booking["booking_accounts"]["recipient"]["label"], "Tagesgeldkonto")
+        self.assertEqual(
+            details["booking"]["booking_accounts"]["recipient"]["label"],
+            "Tagesgeldkonto",
+        )
+
 
 class UnresolvedRuleProjectionTests(unittest.TestCase):
     setUp = RuleViewTests.setUp
@@ -1129,6 +1169,7 @@ class RuleRegistrationTests(unittest.TestCase):
             http.RuleFromBookingView,
             http.BookingDetailsView,
             http.BookingDeleteView,
+            http.BookingExportView,
         ):
             with self.subTest(view=view.__name__):
                 self.assertIn(view, registered)

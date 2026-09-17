@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+import base64
 import hashlib
 import io
 import re
@@ -21,6 +22,7 @@ from .core import (
     ParsedBooking,
     RULE_FIELDS,
     booking_fingerprint,
+    camt_account_references_from_source,
     catalog_id_for_label,
     ensure_account,
     feed_profile_forecast,
@@ -240,7 +242,68 @@ def _booking_payload(
     }
 
 
-def _booking_response_projection(booking: dict[str, Any]) -> dict[str, Any]:
+def _account_for_reference(
+    accounts: dict[str, dict[str, object]],
+    reference: object,
+) -> dict[str, object] | None:
+    normalized = normalize_account_reference(str(reference or ""))
+    if not normalized:
+        return None
+    return next(
+        (
+            account
+            for account in accounts.values()
+            if normalize_account_reference(account.get("iban", "")) == normalized
+            or normalize_account_reference(account.get("account_reference", ""))
+            == normalized
+        ),
+        None,
+    )
+
+
+def _booking_accounts_payload(
+    accounts: dict[str, dict[str, object]],
+    booking: dict[str, Any],
+) -> dict[str, dict[str, object]] | None:
+    """Return configured sender/recipient accounts for an internal CAMT transfer."""
+
+    account_id = booking.get("account_id")
+    statement_account = accounts.get(account_id) if isinstance(account_id, str) else None
+    if statement_account is None:
+        statement_account = _account_for_reference(
+            accounts,
+            booking.get("account_reference", booking.get("account")),
+        )
+    if statement_account is None:
+        return None
+
+    references = camt_account_references_from_source(booking.get("source_data"))
+    if not references:
+        return None
+    try:
+        is_debit = float(booking.get("amount", 0)) < 0
+    except (TypeError, ValueError):
+        return None
+    related_key = "Cdtr" if is_debit else "Dbtr"
+    related_account = _account_for_reference(accounts, references.get(related_key))
+    if related_account is None or related_account.get("id") == statement_account.get("id"):
+        return None
+
+    sender_account, recipient_account = (
+        (statement_account, related_account)
+        if is_debit
+        else (related_account, statement_account)
+    )
+    return {
+        "sender": account_payload(sender_account),
+        "recipient": account_payload(recipient_account),
+    }
+
+
+def _booking_response_projection(
+    booking: dict[str, Any],
+    accounts: dict[str, dict[str, object]] | None = None,
+) -> dict[str, Any]:
     """Return booking data suitable for list and import-preview responses."""
 
     projected = {
@@ -249,6 +312,10 @@ def _booking_response_projection(booking: dict[str, Any]) -> dict[str, Any]:
         if key != "source_data"
     }
     projected.setdefault("sender", None)
+    if accounts is not None:
+        booking_accounts = _booking_accounts_payload(accounts, booking)
+        if booking_accounts is not None:
+            projected["booking_accounts"] = booking_accounts
     return projected
 
 
@@ -1927,7 +1994,7 @@ class UnresolvedBookingsView(HomeAssistantView):
             account = accounts.get(account_id) if isinstance(account_id, str) else None
             account_label = account.get("label") if isinstance(account, dict) else None
             projected.append({
-                **_booking_response_projection(booking),
+                **_booking_response_projection(booking, accounts),
                 "account_label": account_label if isinstance(account_label, str) else None,
                 **suggestion,
             })
@@ -1980,12 +2047,14 @@ def _booking_details_payload(
         if isinstance(account_id, str)
         else None
     )
+    booking_accounts = _booking_accounts_payload(_rule_accounts(coordinator), booking)
     return {
         "booking": {
             **{
                 key: value for key, value in booking.items() if key != "source_data"
             },
             "sender": booking.get("sender"),
+            "booking_accounts": booking_accounts,
         },
         "account": account_payload(account) if isinstance(account, dict) else None,
         "details": {
@@ -2045,8 +2114,12 @@ class ResolvedBookingsView(HomeAssistantView):
             for booking in bookings
             if isinstance(booking, dict) and booking.get("status") == "resolved"
         ]
+        accounts = _rule_accounts(coordinator) if coordinator is not None else None
         return self.json(_response_payload({
-            "bookings": [_booking_response_projection(booking) for booking in resolved]
+            "bookings": [
+                _booking_response_projection(booking, accounts)
+                for booking in resolved
+            ]
         }))
 
 
@@ -2406,6 +2479,22 @@ class ImportView(HomeAssistantView):
         new_account_ids: set[str] = set()
         unconfigured_account_ids: set[str] = set()
         file_summaries = []
+        original_uploads = coordinator.store.data.setdefault("original_uploads", [])
+        if not isinstance(original_uploads, list):
+            original_uploads = []
+            coordinator.store.data["original_uploads"] = original_uploads
+        stored_upload_hashes = {
+            item.get("sha256")
+            for item in original_uploads
+            if isinstance(item, dict) and isinstance(item.get("sha256"), str)
+        }
+        existing_source_hashes = {
+            source_data.get("file_sha256")
+            for item in coordinator.store.data.get("bookings", [])
+            if isinstance(item, dict)
+            and isinstance(source_data := item.get("source_data"), dict)
+            and isinstance(source_data.get("file_sha256"), str)
+        }
         for source_filename, source_bytes, parsed, format_name in import_files:
             file_accepted = 0
             file_duplicates = 0
@@ -2440,6 +2529,18 @@ class ImportView(HomeAssistantView):
                 coordinator.store.data["bookings"].append(payload)
                 accepted.append(payload)
                 file_accepted += 1
+            if (
+                parsed
+                and source_hash not in stored_upload_hashes
+                and (file_accepted or source_hash in existing_source_hashes)
+            ):
+                original_uploads.append({
+                    "sha256": source_hash,
+                    "filename": source_filename,
+                    "format": format_name,
+                    "content_base64": base64.b64encode(source_bytes).decode("ascii"),
+                })
+                stored_upload_hashes.add(source_hash)
             if len(import_files) > 1:
                 file_summaries.append(
                     {
@@ -2485,6 +2586,116 @@ class ImportView(HomeAssistantView):
                     "preview": [_booking_response_projection(booking) for booking in accepted],
                 }
             )
+        )
+
+
+class BookingExportView(HomeAssistantView):
+    """Download the unchanged bank uploads belonging to selected bookings."""
+
+    url = "/api/finanzplaner/bookings/export"
+    name = "api:finanzplaner:bookings:export"
+    requires_auth = True
+
+    @staticmethod
+    def _safe_filename(filename: object, fallback: str) -> str:
+        value = str(filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+        value = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._")
+        return value or fallback
+
+    @staticmethod
+    def _uploads_by_hash(data: dict[str, object]) -> dict[str, dict[str, object]]:
+        uploads = data.get("original_uploads", [])
+        if not isinstance(uploads, list):
+            return {}
+        return {
+            item["sha256"]: item
+            for item in uploads
+            if isinstance(item, dict)
+            and isinstance(item.get("sha256"), str)
+            and isinstance(item.get("content_base64"), str)
+        }
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(
+                text="Der Export ist kein gültiges JSON."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Der Export muss als Objekt übermittelt werden.")
+        booking_ids = payload.get("booking_ids")
+        if not isinstance(booking_ids, list) or not booking_ids:
+            raise web.HTTPBadRequest(text="Bitte mindestens eine Buchung zum Export auswählen.")
+        if not all(isinstance(booking_id, str) and booking_id.strip() for booking_id in booking_ids):
+            raise web.HTTPBadRequest(text="Die Buchungs-IDs müssen gültige Texte sein.")
+        requested_ids = list(dict.fromkeys(booking_id.strip() for booking_id in booking_ids))
+
+        stored_bookings = coordinator.store.data.get("bookings", [])
+        if not isinstance(stored_bookings, list):
+            raise web.HTTPBadRequest(text="Die gespeicherten Buchungen sind ungültig.")
+        selected = {
+            booking.get("id"): booking
+            for booking in stored_bookings
+            if isinstance(booking, dict) and isinstance(booking.get("id"), str)
+        }
+        if any(booking_id not in selected for booking_id in requested_ids):
+            raise web.HTTPNotFound(text="Eine oder mehrere Buchungen wurden nicht gefunden.")
+
+        uploads = self._uploads_by_hash(coordinator.store.data)
+        originals: list[tuple[str, bytes]] = []
+        seen_hashes: set[str] = set()
+        for booking_id in requested_ids:
+            booking = selected[booking_id]
+            source_data = booking.get("source_data")
+            source_hash = source_data.get("file_sha256") if isinstance(source_data, dict) else None
+            upload = uploads.get(source_hash) if isinstance(source_hash, str) else None
+            if upload is None:
+                raise web.HTTPBadRequest(
+                    text="Für mindestens eine ausgewählte Buchung ist kein originaler Upload gespeichert."
+                )
+            if source_hash in seen_hashes:
+                continue
+            try:
+                content = base64.b64decode(upload["content_base64"], validate=True)
+            except (ValueError, TypeError):
+                raise web.HTTPBadRequest(
+                    text="Ein gespeicherter Original-Upload ist ungültig."
+                )
+            filename = self._safe_filename(upload.get("filename"), f"buchung-{len(originals) + 1}.dat")
+            originals.append((filename, content))
+            seen_hashes.add(source_hash)
+
+        if len(requested_ids) == 1:
+            filename, content = originals[0]
+            content_type = "application/xml" if filename.lower().endswith((".xml", ".camt", ".camt053")) else "text/plain"
+            return web.Response(
+                body=content,
+                content_type=content_type,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+        archive_buffer = io.BytesIO()
+        used_names: set[str] = set()
+        with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for filename, content in originals:
+                archive_name = filename
+                stem, separator, suffix = filename.rpartition(".")
+                stem = stem if separator else filename
+                suffix = f".{suffix}" if separator else ""
+                duplicate_index = 2
+                while archive_name in used_names:
+                    archive_name = f"{stem}-{duplicate_index}{suffix}"
+                    duplicate_index += 1
+                used_names.add(archive_name)
+                archive.writestr(archive_name, content)
+        return web.Response(
+            body=archive_buffer.getvalue(),
+            content_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="originale-buchungen.zip"'},
         )
 
 

@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.9.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
+Version 0.10.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -29,6 +29,7 @@ und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserung
 - gemeinsame Zuordnungen wie `Haushalt` mit dem Bereich `Hunde`
 - Regelverwaltung mit Konto-, Zahlungsempfänger- und optionalem Verwendungszweck-Matching
 - getrennte Anzeige von CAMT-Absender und Zahlungsempfänger in Buchungen, Prüfliste und Buchungsdetails
+- interne CAMT-Überweisungen zeigen bei passender Kontoreferenz beide konfigurierten Konten richtungsrichtig an
 - priorisierte Regelübernahmen nur bei eindeutigen Treffern, mit sichtbarer Zuordnungsquelle und Rückgängig-Funktion
 - Prüfliste mit erneutem Regel-Lauf sowie separate Ansicht für sämtliche übernommene Buchungen
 - Buchungen lassen sich in der Prüfliste und der Übernahmesicht per Checkbox einzeln oder vollständig auswählen und dauerhaft löschen
@@ -49,7 +50,7 @@ Die Integration zeigt bei einem leeren Workspace klar markierte synthetische Dem
 4. Einstellungen → Geräte & Dienste → Integration hinzufügen → Finanzplaner.
 5. Einen gemeinsamen Haushaltsnamen vergeben.
 
-Danach erscheint Finanzplaner in der Home-Assistant-Seitenleiste. MT940- und CAMT.053-Dateien werden bewusst manuell in der Prüfliste hochgeladen; Originaldateien werden nicht dauerhaft gespeichert.
+Danach erscheint Finanzplaner in der Home-Assistant-Seitenleiste. MT940- und CAMT.053-Dateien werden bewusst manuell in der Prüfliste hochgeladen; die unveränderten Bank-Uploads werden pro Datei lokal aufbewahrt und können später aus ausgewählten Buchungen exportiert werden.
 
 ## Planposten verwalten
 
@@ -91,9 +92,11 @@ neue Zuordnungen nicht angeboten, bleiben in alten Buchungen aber sichtbar.
 
 Beim Import einer CAMT.053- oder MT940-Datei erkennt Finanzplaner das verwendete Konto automatisch und verknüpft neue Buchungen mit diesem Konto. Eindeutige, gültige Regeltreffer mit höchster Priorität werden dabei automatisch übernommen; Konflikte und ungeklärte Treffer bleiben in `Buchungen prüfen`. Mehrere solche Buchungsdateien können auch gemeinsam als ZIP-Datei importiert werden; das Archiv wird vor dem Speichern vollständig geprüft und darf maximal 500 Dateien beziehungsweise 10 MB entpackte Daten enthalten. Damit lassen sich beispielsweise Jahresdaten von fünf Konten mit je zwölf Monatsdateien gemeinsam importieren. Vollständige IBANs bleiben ausschließlich im lokalen Speicher; die Oberfläche und API-Antworten zeigen nur maskierte Kontoangaben. Unbekannte Konten werden ohne automatische Zuordnung angelegt und können anschließend in der Ansicht `Konten` benannt, archiviert und mit mehreren Kontoinhabern gepflegt werden.
 
-Über das Detail-Popup lassen sich ungeklärte und übernommene Buchungen einschließlich ihrer normalisierten Felder und des vollständigen buchungsbezogenen MT940-/CAMT.053-Quellsatzes prüfen. Die Quelldaten werden lokal aufbewahrt, in Oberfläche und API jedoch maskiert dargestellt. Ein unverändertes Original der hochgeladenen Bankdatei wird nicht als Downloadarchiv gespeichert.
+Über das Detail-Popup lassen sich ungeklärte und übernommene Buchungen einschließlich ihrer normalisierten Felder und des vollständigen buchungsbezogenen MT940-/CAMT.053-Quellsatzes prüfen. Die Quelldaten werden lokal aufbewahrt, in Oberfläche und API jedoch maskiert dargestellt. Der unveränderte Upload wird pro Datei bytegenau lokal gespeichert und kann über `Originaldaten exportieren` für eine oder mehrere ausgewählte Buchungen heruntergeladen werden; mehrere Dateien werden einmalig als ZIP gebündelt.
 
 CAMT.053-Buchungen zeigen `Dbtr/Nm` als separaten Absender und `Cdtr/Nm` als Zahlungsempfänger. Das bestehende Zahlungsempfängerfeld bleibt für Fingerprints und Regelmatching unverändert. Ältere CAMT-Buchungen werden beim Laden aus den gespeicherten Quelldaten nachgezogen; fehlt bei MT940 ein verlässlicher Absender, zeigt die Oberfläche „Nicht vorhanden“.
+
+Wenn die CAMT-Kontoreferenz des Absenders oder Empfängers zu einem konfigurierten Konto passt, zeigen `Buchungen`, `Buchungen prüfen` und das Detail-Popup beide Konten als richtungsrichtiges Paar. Die Kontoreferenzen bleiben in Oberfläche und API maskiert; externe Gegenparteien werden weiterhin nur als Absender beziehungsweise Zahlungsempfänger angezeigt.
 
 Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`person.*`-Entitäten; zusätzlich steht `Haushalt` für gemeinsame Konten und Ausgaben bereit. Kontoinhaber beschreiben nur die Zahlungsquelle. Sie werden nicht automatisch auf bestehende oder neue Buchungen übertragen.
 

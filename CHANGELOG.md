@@ -8,6 +8,12 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.10.0] – 2026-09-17
+
+- CAMT-Kontoreferenzen werden gegen konfigurierte Konten abgeglichen und interne Überweisungen in Buchungen, Prüfliste sowie Buchungsdetails als Absenderkonto → Empfängerkonto angezeigt.
+- Die Kontoreferenzen bleiben maskiert; Fingerprints und Regelmatching bleiben unverändert.
+- Unveränderte Bank-Uploads werden pro Datei lokal aufbewahrt und können für ausgewählte Buchungen einzeln oder gesammelt als ZIP exportiert werden.
+
 ## [0.9.0] – 2026-09-17
 
 - CAMT.053-Absender werden separat vom Zahlungsempfänger gespeichert und in Buchungen, Prüfliste sowie Buchungsdetails angezeigt.
@@ -153,6 +159,7 @@ Erste vorbereitete vertikale Version:
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
 [0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
+[0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0
 [0.9.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.9.0
 [0.8.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.8.1
 [0.8.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.8.0

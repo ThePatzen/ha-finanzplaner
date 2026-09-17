@@ -94,7 +94,8 @@ Weitere Produktfähigkeiten und Leitplanken:
 - Vollständige Kontoreferenzen bleiben im lokalen Speicher; Panel und API zeigen Kontodaten nur maskiert.
 - Die normalisierten Parserfelder bleiben für die Fachlogik erhalten; zusätzlich wird der vollständige buchungsbezogene MT940-/CAMT.053-Quellsatz lokal zur Prüfung aufbewahrt und in API sowie Panel maskiert dargestellt.
 - CAMT.053-Buchungen führen Absender und Zahlungsempfänger getrennt; bei fehlenden MT940-Absenderdaten wird dies ausdrücklich als nicht vorhanden angezeigt.
-- Es wird kein unverändertes Original der importierten Bankdatei als Downloadarchiv aufbewahrt.
+- Wenn eine CAMT-Absender- oder Empfängerkontoreferenz einem konfigurierten Konto entspricht, zeigen Buchungen, Prüfliste und Buchungsdetails beide Konten richtungsrichtig an.
+- Unveränderte Uploads von Bankdateien werden pro Datei lokal aufbewahrt und können aus Buchungen einzeln oder als ZIP exportiert werden; Excel-Originaldateien bleiben ausgeschlossen.
 - keine direkte Open-Banking-Anbindung in der ersten Version
 - keine automatische Überwachung eines Dateiordners in der ersten Version
 - keine echten Finanzdaten im öffentlichen Repository

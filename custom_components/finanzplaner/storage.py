@@ -28,6 +28,7 @@ def empty_data(household_name: str = DEFAULT_HOUSEHOLD_NAME) -> dict[str, Any]:
         "catalogs": {kind: [] for kind in CATALOG_KINDS},
         "plan_items": [],
         "bookings": [],
+        "original_uploads": [],
         "imports": [],
         "rules": [],
     }
@@ -57,6 +58,13 @@ def _normalize_pets(data: dict[str, Any]) -> None:
         pet.setdefault("active", True)
         pet.setdefault("created_at", None)
         pet.setdefault("updated_at", None)
+
+
+def _normalize_original_uploads(data: dict[str, Any]) -> None:
+    """Keep the optional byte-preserving upload archive structurally valid."""
+
+    if not isinstance(data.get("original_uploads"), list):
+        data["original_uploads"] = []
 
 
 def _pet_by_id(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -529,6 +537,7 @@ def migrate_store_data(
             account_by_reference[reference] = account
 
     data["version"] = STORAGE_VERSION
+    _normalize_original_uploads(data)
     _normalize_pets(data)
     pets = _pet_by_id(data)
     _normalize_feed_profiles(data, pets)
@@ -597,6 +606,7 @@ def normalize_current_store_data(
             booking["sender"] = sender_from_camt_source(booking.get("source_data"))
 
     data["version"] = STORAGE_VERSION
+    _normalize_original_uploads(data)
     _normalize_pets(data)
     pets = _pet_by_id(data)
     _normalize_feed_profiles(data, pets)

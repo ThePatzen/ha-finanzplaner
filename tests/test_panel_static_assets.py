@@ -20,7 +20,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
             / "manifest.json"
         )
         version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-        self.assertEqual(version, "0.9.0")
+        self.assertEqual(version, "0.10.0")
         build_path = getattr(
             const, "panel_static_path", lambda _version: "/api/finanzplaner/static"
         )(version)
@@ -28,7 +28,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
 
         self.assertEqual(
             urljoin(panel_url, "panel-utils.mjs"),
-            "https://ha.example/api/finanzplaner/static/0.9.0/panel-utils.mjs",
+            "https://ha.example/api/finanzplaner/static/0.10.0/panel-utils.mjs",
         )
 
     def test_booking_lists_use_shared_detail_dialog_and_raw_data_action(self) -> None:
@@ -134,3 +134,32 @@ class PanelStaticAssetsTest(unittest.TestCase):
         self.assertIn('sender || "Nicht vorhanden"', source)
         self.assertGreaterEqual(source.count("Absender:"), 2)
         self.assertGreaterEqual(source.count("booking.sender"), 2)
+
+    def test_booking_surfaces_show_configured_internal_account_pair(self) -> None:
+        panel_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        )
+        source = panel_path.read_text(encoding="utf-8")
+
+        self.assertIn("booking_accounts", source)
+        self.assertIn("Konten:", source)
+        self.assertIn("booking?.booking_accounts", source)
+        self.assertIn("booking.booking_accounts", source)
+
+    def test_booking_selection_toolbar_offers_original_upload_export(self) -> None:
+        panel_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        )
+        source = panel_path.read_text(encoding="utf-8")
+
+        self.assertIn("data-export-bookings", source)
+        self.assertIn("Originaldaten exportieren", source)
+        self.assertIn("BOOKING_EXPORT_URL", source)

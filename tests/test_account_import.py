@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import importlib
 import io
 import sys
@@ -118,6 +119,14 @@ def _load_http_module():
     fake_web.FileField = FakeFileField
     fake_web.HTTPBadRequest = HTTPBadRequest
     fake_web.HTTPNotFound = HTTPBadRequest
+
+    class FakeResponse:
+        def __init__(self, *, body=b"", content_type=None, headers=None):
+            self.body = body
+            self.content_type = content_type
+            self.headers = headers or {}
+
+    fake_web.Response = FakeResponse
     fake_aiohttp = types.ModuleType("aiohttp")
     fake_aiohttp.web = fake_web
 
@@ -377,6 +386,35 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(booking["source_data"]["record_index"], 0)
         self.assertEqual(booking["source_data"]["record"]["lines"][-1], ":99:Zusatzfeld")
         self.assertEqual(len(booking["source_data"]["file_sha256"]), 64)
+
+        uploads = self.coordinator.store.data["original_uploads"]
+        self.assertEqual(len(uploads), 1)
+        self.assertEqual(uploads[0]["filename"], "statement.sta")
+        self.assertEqual(
+            base64.b64decode(uploads[0]["content_base64"]),
+            raw.encode("utf-8"),
+        )
+
+    def test_selected_bookings_export_original_uploads_as_zip(self):
+        first_raw = ":20:FIRST\n:25:FIRST-ACCOUNT\n:61:2609020902D1,00NTRFFIRST\n"
+        second_raw = ":20:SECOND\n:25:SECOND-ACCOUNT\n:61:2609030903C2,00NTRFSECOND\n"
+
+        self._import("first.sta", first_raw)
+        self._import("second.sta", second_raw)
+        booking_ids = [booking["id"] for booking in self.coordinator.store.data["bookings"]]
+
+        response = asyncio.run(
+            self.http.BookingExportView().post(
+                self._json_request({"booking_ids": booking_ids})
+            )
+        )
+
+        self.assertEqual(response.content_type, "application/zip")
+        self.assertIn("originale-buchungen.zip", response.headers["Content-Disposition"])
+        with ZipFile(io.BytesIO(response.body)) as archive:
+            self.assertEqual(set(archive.namelist()), {"first.sta", "second.sta"})
+            self.assertEqual(archive.read("first.sta"), first_raw.encode("utf-8"))
+            self.assertEqual(archive.read("second.sta"), second_raw.encode("utf-8"))
 
     def test_duplicate_import_does_not_replace_existing_source_data(self):
         first_raw = ":20:FIRST\n:25:ACCOUNT\n:61:2609020902D1,00NTRFFIRST\n"

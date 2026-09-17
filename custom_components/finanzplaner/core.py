@@ -2233,6 +2233,34 @@ def sender_from_camt_source(source_data: object) -> str | None:
     return None
 
 
+def camt_account_references_from_source(source_data: object) -> dict[str, str]:
+    """Extract related debtor and creditor account references from CAMT data."""
+
+    if not isinstance(source_data, dict) or source_data.get("format") != "CAMT.053":
+        return {}
+    record = source_data.get("record")
+    if not isinstance(record, dict):
+        return {}
+
+    references: dict[str, str] = {}
+
+    def visit(node: object) -> None:
+        if not isinstance(node, dict):
+            return
+        name = node.get("name")
+        if name in {"DbtrAcct", "CdtrAcct"}:
+            reference = _source_node_text(node, "IBAN") or _source_node_text(node, "Id")
+            if reference and name[:-4] not in references:
+                references[name[:-4]] = reference
+        children = node.get("children")
+        if isinstance(children, list):
+            for child in children:
+                visit(child)
+
+    visit(record)
+    return references
+
+
 def booking_fingerprint(booking: Booking) -> str:
     """Generate a stable deduplication key from normalized booking fields."""
 

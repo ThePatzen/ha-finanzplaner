@@ -13,6 +13,7 @@ const RESOLVED_URL = "/api/finanzplaner/bookings/resolved";
 const APPLY_RULES_URL = "/api/finanzplaner/bookings/apply-rules";
 const RULES_URL = "/api/finanzplaner/rules";
 const BOOKINGS_URL = "/api/finanzplaner/bookings";
+const BOOKING_EXPORT_URL = "/api/finanzplaner/bookings/export";
 const IMPORT_URL = "/api/finanzplaner/import";
 const EXCEL_PREVIEW_URL = "/api/finanzplaner/excel/preview";
 const EXCEL_CONFIRM_URL = "/api/finanzplaner/excel/confirm";
@@ -414,6 +415,9 @@ const styles = `
   .bulk-delete-button { min-block-size: 3rem; padding: 0.5rem 0.8rem; border: 1px solid var(--fp-coral); border-radius: 0.45rem; color: var(--fp-coral); background: var(--fp-paper-strong); font-size: 0.78rem; font-weight: 800; }
   .bulk-delete-button:hover:not(:disabled) { background: var(--fp-coral-soft); }
   .bulk-delete-button:disabled { cursor: not-allowed; opacity: 0.55; }
+  .bulk-export-button { min-block-size: 3rem; padding: 0.5rem 0.8rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-navy); background: var(--fp-paper-strong); font-size: 0.78rem; font-weight: 800; }
+  .bulk-export-button:hover:not(:disabled) { background: var(--fp-cyan-soft); }
+  .bulk-export-button:disabled { cursor: not-allowed; opacity: 0.55; }
   .booking-row { display: grid; grid-template-columns: 3rem 7rem minmax(0, 1fr) auto auto; align-items: center; gap: 1rem; padding: 0.85rem 1rem; border: 1px solid var(--fp-line); border-radius: 0.65rem; background: rgb(255 254 249 / 0.86); }
   .booking-row:has([data-booking-select]:checked) { border-color: var(--fp-cyan); background: rgb(223 244 247 / 0.45); }
   .booking-date { color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.75rem; }
@@ -421,6 +425,7 @@ const styles = `
   .booking-counterparty, .booking-sender, .booking-purpose-detail { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .booking-counterparty { font-weight: 700; }
   .booking-sender, .booking-purpose-detail { color: var(--fp-muted); font-size: 0.75rem; }
+  .booking-account-pair { display: block; min-inline-size: 0; overflow: hidden; color: var(--fp-ink); font-size: 0.78rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
   .booking-account { min-inline-size: 0; max-inline-size: 16rem; display: grid; gap: 0.18rem; color: var(--fp-ink); font-size: 0.75rem; line-height: 1.3; }
   .booking-account strong { overflow-wrap: anywhere; font-size: 0.78rem; font-weight: 800; }
   .booking-account-reference { color: var(--fp-muted); overflow-wrap: anywhere; }
@@ -710,6 +715,7 @@ const styles = `
   .resolved-table ul { display: grid; gap: 0.25rem; padding-inline-start: 1.1rem; }
   .resolved-booking-date, .resolved-booking-sender, .resolved-booking-counterparty, .resolved-booking-purpose, .resolved-rule-reason { display: block; margin-block-start: 0.25rem; color: var(--fp-muted); font-size: 0.75rem; font-weight: 400; }
   .resolved-booking-counterparty { color: var(--fp-ink); font-size: 0.92rem; font-weight: 700; }
+  .resolved-booking-account-pair { display: block; color: var(--fp-ink); font-size: 0.82rem; font-weight: 800; }
   .resolved-booking-purpose { overflow-wrap: anywhere; }
   .resolved-rule-source { color: var(--fp-ink); font-weight: 800; }
   .resolved-rule-source--manual { color: var(--fp-muted); }
@@ -1082,6 +1088,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._selectedReviewBookings = new Set();
     this._selectedResolvedBookings = new Set();
     this._deletingBookings = false;
+    this._exportingBookings = false;
     this._ruleApplying = false;
     this._unresolvingBookings = new Set();
     this._rules = [];
@@ -1216,9 +1223,28 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _bookingDetailLabel(key) {
-    const labels = { sender: "Absender", counterparty: "Zahlungsempfänger" };
+    const labels = { sender: "Absender", counterparty: "Zahlungsempfänger", recipient: "Empfänger", booking_accounts: "Konten der Buchung" };
     if (Object.hasOwn(labels, key)) return labels[key];
     return String(key).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  _bookingAccountPairTemplate(accounts, className = "booking-account-pair") {
+    const sender = String(accounts?.sender?.label || accounts?.sender?.account_reference || "").trim();
+    const recipient = String(accounts?.recipient?.label || accounts?.recipient?.account_reference || "").trim();
+    if (!sender || !recipient) return "";
+    return `<span class="${className}">Konten: ${escapeHtml(sender)} → ${escapeHtml(recipient)}</span>`;
+  }
+
+  _bookingAccountPairDetailsTemplate(accounts) {
+    const sender = accounts?.sender;
+    const recipient = accounts?.recipient;
+    if (!sender || !recipient) return '<span class="booking-detail-empty">Nicht vorhanden</span>';
+    const value = (account) => {
+      const label = String(account.label || account.account_reference || "Nicht vorhanden");
+      const reference = String(account.account_reference || "").trim();
+      return `<strong>${escapeHtml(label)}</strong>${reference ? `<span class="booking-account-reference">Kontoreferenz: ${escapeHtml(reference)}</span>` : ""}`;
+    };
+    return `<dl class="booking-detail-fields"><div><dt>Absenderkonto</dt><dd>${value(sender)}</dd></div><div><dt>Empfängerkonto</dt><dd>${value(recipient)}</dd></div></dl>`;
   }
 
   _bookingDetailStatusLabel(status) {
@@ -1245,12 +1271,13 @@ class FinanzplanerPanel extends HTMLElement {
     if (this._bookingDetailError) return '<section class="booking-detail-section" aria-live="assertive"><div><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-error">' + escapeHtml(this._bookingDetailError) + '</p></div><div class="booking-detail-actions"><button type="button" data-booking-detail-close>Schließen</button></div></section>';
     if (!this._bookingDetail) return '<section class="booking-detail-section"><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-status">Keine Buchungsdetails vorhanden.</p><div class="booking-detail-actions"><button type="button" data-booking-detail-close>Schließen</button></div></section>';
     const { booking, account, details } = this._bookingDetail;
+    const bookingFields = Object.fromEntries(Object.entries(booking || {}).filter(([key]) => key !== "booking_accounts"));
     const status = details?.status || booking?.status;
     const rawMarkup = this._bookingDetailRawVisible ? '<section class="booking-detail-section"><h3>Rohdaten</h3><pre class="booking-detail-raw" data-booking-raw></pre></section>' : '';
     const legacyNotice = this._bookingDetail.source_data == null
       ? '<p class="booking-detail-legacy" role="note">Für diese Buchung fehlen Quelldaten, weil sie aus einem alten Import stammt.</p>'
       : '';
-    return `<header class="booking-detail-header"><div><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-description">${escapeHtml(String(booking?.counterparty || booking?.purpose || "Buchung"))}</p></div><button type="button" class="icon-button" data-booking-detail-close aria-label="Buchungsdetails schließen">Schließen</button></header>${legacyNotice}<section class="booking-detail-section"><h3>Buchung</h3>${this._bookingDetailFieldsTemplate(booking)}</section><section class="booking-detail-section"><h3>Konto</h3>${this._bookingDetailFieldsTemplate(account)}</section><section class="booking-detail-section"><h3>Status und Zuordnung</h3><p class="booking-detail-status">${escapeHtml(this._bookingDetailStatusLabel(status))}</p>${this._bookingDetailFieldsTemplate(details)}</section>${rawMarkup}<div class="booking-detail-actions"><button type="button" data-booking-raw-toggle aria-pressed="${this._bookingDetailRawVisible ? "true" : "false"}">${this._bookingDetailRawVisible ? "Rohdaten ausblenden" : "Rohdaten anzeigen"}</button><button type="button" data-booking-detail-close>Schließen</button></div>`;
+    return `<header class="booking-detail-header"><div><h2 id="booking-detail-title">Buchungsdetails</h2><p id="booking-detail-description" class="booking-detail-description">${escapeHtml(String(booking?.counterparty || booking?.purpose || "Buchung"))}</p></div><button type="button" class="icon-button" data-booking-detail-close aria-label="Buchungsdetails schließen">Schließen</button></header>${legacyNotice}<section class="booking-detail-section"><h3>Buchung</h3>${this._bookingDetailFieldsTemplate(bookingFields)}</section>${booking?.booking_accounts ? `<section class="booking-detail-section"><h3>Konten der Buchung</h3>${this._bookingAccountPairDetailsTemplate(booking.booking_accounts)}</section>` : ""}<section class="booking-detail-section"><h3>Konto</h3>${this._bookingDetailFieldsTemplate(account)}</section><section class="booking-detail-section"><h3>Status und Zuordnung</h3><p class="booking-detail-status">${escapeHtml(this._bookingDetailStatusLabel(status))}</p>${this._bookingDetailFieldsTemplate(details)}</section>${rawMarkup}<div class="booking-detail-actions"><button type="button" data-booking-raw-toggle aria-pressed="${this._bookingDetailRawVisible ? "true" : "false"}">${this._bookingDetailRawVisible ? "Rohdaten ausblenden" : "Rohdaten anzeigen"}</button><button type="button" data-booking-detail-close>Schließen</button></div>`;
   }
 
   _renderBookingDetailDialog({ focusRawToggle = false } = {}) {
@@ -1850,6 +1877,11 @@ class FinanzplanerPanel extends HTMLElement {
       deleteButton.disabled = state.selectedCount === 0 || this._deletingBookings;
       deleteButton.textContent = this._deletingBookings ? "Buchungen werden gelöscht …" : "Auswahl löschen";
     }
+    const exportButton = this.shadowRoot.querySelector(`[data-export-bookings][data-booking-view="${view}"]`);
+    if (exportButton) {
+      exportButton.disabled = state.selectedCount === 0 || this._exportingBookings;
+      exportButton.textContent = this._exportingBookings ? "Originaldaten werden exportiert …" : "Originaldaten exportieren";
+    }
   }
 
   _updateBookingSelection(event) {
@@ -1911,6 +1943,48 @@ class FinanzplanerPanel extends HTMLElement {
       this._message = error.message || "Die Buchungen konnten nicht gelöscht werden.";
     } finally {
       this._deletingBookings = false;
+      this._render();
+      this._focusContent();
+    }
+  }
+
+  async _exportSelectedBookings(view) {
+    if (this._exportingBookings) return;
+    const selection = this._bookingSelectionForView(view);
+    const bookingIds = [...selection].filter((bookingId) =>
+      this._bookingListForView(view).some((booking) => String(booking.id) === bookingId),
+    );
+    if (!bookingIds.length) return;
+
+    this._exportingBookings = true;
+    this._message = `${bookingIds.length === 1 ? "Originaldatei wird" : "Originaldateien werden"} exportiert …`;
+    this._render();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, BOOKING_EXPORT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking_ids: bookingIds }),
+      });
+      if (!response.ok) {
+        const result = await readApiResponse(response);
+        throw new Error(apiErrorMessage(result, "Die Originaldaten konnten nicht exportiert werden."));
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || "originale-buchungen";
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = filename;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(downloadUrl);
+      this._message = `${bookingIds.length} ${bookingIds.length === 1 ? "Originaldatei" : "Originaldateien"} exportiert.`;
+    } catch (error) {
+      this._message = error.message || "Die Originaldaten konnten nicht exportiert werden.";
+    } finally {
+      this._exportingBookings = false;
       this._render();
       this._focusContent();
     }
@@ -3603,6 +3677,7 @@ class FinanzplanerPanel extends HTMLElement {
       if (this._bookingDetailRequest || this._bookingDetail || this._bookingDetailLoading || this._bookingDetailError || this._bookingDetailTrigger) this._closeBookingDetails();
     });
     this.shadowRoot.querySelectorAll("[data-booking-select], [data-booking-select-all]").forEach((input) => input.addEventListener("change", (event) => this._updateBookingSelection(event)));
+    this.shadowRoot.querySelectorAll("[data-export-bookings]").forEach((button) => button.addEventListener("click", () => this._exportSelectedBookings(button.dataset.bookingView)));
     this.shadowRoot.querySelectorAll("[data-delete-bookings]").forEach((button) => button.addEventListener("click", () => this._deleteSelectedBookings(button.dataset.bookingView)));
     const ruleForm = this.shadowRoot.querySelector("[data-rule-form]");
     ruleForm?.addEventListener("submit", (event) => this._handleRuleSave(event));
@@ -4516,6 +4591,7 @@ class FinanzplanerPanel extends HTMLElement {
     return `<div class="booking-selection-toolbar" data-booking-selection-toolbar data-booking-view="${view}">
       <label class="booking-selection-all" for="${view}-select-all"><input id="${view}-select-all" name="select_all_${view}_bookings" type="checkbox" data-booking-select-all data-booking-view="${view}" aria-controls="${listId}"${state.allSelected ? " checked" : ""}><span>Alle auswählen</span></label>
       <p class="booking-selection-summary" data-booking-selection-summary data-booking-view="${view}" aria-live="polite">${state.selectedCount} von ${bookings.length} ausgewählt</p>
+      <button class="bulk-export-button" type="button" data-export-bookings data-booking-view="${view}"${state.selectedCount ? "" : " disabled"}>Originaldaten exportieren</button>
       <button class="bulk-delete-button" type="button" data-delete-bookings data-booking-view="${view}"${state.selectedCount ? "" : " disabled"}>Auswahl löschen</button>
       <span class="visually-hidden">in ${label}</span>
     </div>`;
@@ -4529,6 +4605,7 @@ class FinanzplanerPanel extends HTMLElement {
       const sender = String(booking.sender || "").trim();
       const counterparty = String(booking.counterparty || "").trim();
       const purpose = String(booking.purpose || "").trim();
+      const accountPairMarkup = this._bookingAccountPairTemplate(booking.booking_accounts, "resolved-booking-account-pair");
       const matchedRule = booking.matched_rule;
       const source = resolvedBookingSourceLabel(booking);
       const sourceClass = matchedRule ? "" : " resolved-rule-source--manual";
@@ -4537,7 +4614,7 @@ class FinanzplanerPanel extends HTMLElement {
         : "Keine Aufteilung gespeichert";
       return `<tr>
         <td class="selection-cell"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="resolved" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label></td>
-        <th scope="row"><span class="resolved-booking-sender">Absender: ${escapeHtml(sender || "Nicht vorhanden")}</span><span class="resolved-booking-counterparty">Zahlungsempfänger: ${escapeHtml(counterparty || "Nicht vorhanden")}</span><span class="resolved-booking-date">${escapeHtml(formatDate(booking.booking_date))}</span></th>
+        <th scope="row">${accountPairMarkup}<span class="resolved-booking-sender">Absender: ${escapeHtml(sender || "Nicht vorhanden")}</span><span class="resolved-booking-counterparty">Zahlungsempfänger: ${escapeHtml(counterparty || "Nicht vorhanden")}</span><span class="resolved-booking-date">${escapeHtml(formatDate(booking.booking_date))}</span></th>
         <td><span class="resolved-booking-purpose">${escapeHtml(purpose || "Kein Verwendungszweck")}</span></td>
         <td class="table-number">${formatEuro(booking.amount)}</td>
         <td>${allocations}</td>
@@ -4569,12 +4646,15 @@ class FinanzplanerPanel extends HTMLElement {
       const purpose = String(booking.purpose || "").trim();
       const accountLabel = String(booking.account_label || "").trim();
       const accountReference = String(booking.account_reference || booking.account || "").trim();
+      const accountPairMarkup = this._bookingAccountPairTemplate(booking.booking_accounts);
       const senderMarkup = `<span class="booking-sender">Absender: ${escapeHtml(sender || "Nicht vorhanden")}</span>`;
       const counterpartyMarkup = counterparty ? `Zahlungsempfänger: ${escapeHtml(counterparty)}` : "Zahlungsempfänger nicht erkannt";
       const purposeMarkup = purpose ? `<span class="booking-purpose-detail">Verwendungszweck: ${escapeHtml(purpose)}</span>` : "";
-      const accountMarkup = accountLabel
-        ? `<strong>Erkanntes Konto: ${escapeHtml(accountLabel)}</strong>${accountReference ? `<span class="booking-account-reference">Kontoreferenz: ${escapeHtml(accountReference)}</span>` : ""}`
-        : `<strong>Erkanntes Konto: ${escapeHtml(accountReference || "nicht zugeordnet")}</strong>`;
+      const accountMarkup = accountPairMarkup
+        ? `${accountPairMarkup}${accountLabel ? `<span class="booking-account-reference">Erkanntes Konto: ${escapeHtml(accountLabel)}</span>` : ""}`
+        : accountLabel
+          ? `<strong>Erkanntes Konto: ${escapeHtml(accountLabel)}</strong>${accountReference ? `<span class="booking-account-reference">Kontoreferenz: ${escapeHtml(accountReference)}</span>` : ""}`
+          : `<strong>Erkanntes Konto: ${escapeHtml(accountReference || "nicht zugeordnet")}</strong>`;
       return `<li><form class="booking-row${selected ? " booking-row--selected" : ""}" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="review" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${senderMarkup}<span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${accountMarkup}</span><span class="booking-amount">${formatEuro(booking.amount)}</span><button class="table-edit-button" type="button" data-booking-details="${escapeHtml(bookingId)}" aria-label="Details für ${escapeHtml(counterparty || "Buchung")} anzeigen">Details</button>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
     }).join("")}</ul>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
     const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;

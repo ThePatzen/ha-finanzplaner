@@ -580,6 +580,28 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(booking.sender, "Egger David")
         self.assertEqual(booking.counterparty, "Marktgemeinde Telfs")
 
+    def test_camt_source_exposes_related_party_account_references(self):
+        core = load_core()
+
+        record = core.parse_camt053_records(
+            """<Document><BkToCstmrStmt><Stmt>
+              <Acct><Id><IBAN>AT111111111111111111</IBAN></Id></Acct>
+              <Ntry><Amt Ccy="EUR">20.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+                <BookgDt><Dt>2026-09-17</Dt></BookgDt><NtryDtls><TxDtls>
+                  <RltdPties>
+                    <DbtrAcct><Id><IBAN>AT111111111111111111</IBAN></Id></DbtrAcct>
+                    <CdtrAcct><Id><Othr><Id>SECOND-ACCOUNT-42</Id></Othr></Id></CdtrAcct>
+                  </RltdPties>
+                </TxDtls></NtryDtls></Ntry>
+            </Stmt></BkToCstmrStmt></Document>"""
+        )[0]
+        source_data = {**record.source_data, "format": "CAMT.053"}
+
+        self.assertEqual(
+            core.camt_account_references_from_source(source_data),
+            {"Dbtr": "AT111111111111111111", "Cdtr": "SECOND-ACCOUNT-42"},
+        )
+
     def test_mt940_without_reliable_sender_keeps_sender_empty(self):
         core = load_core()
         raw = ":20:STATEMENT\n:25:ACCOUNT\n:61:2609020902D1,00NTRFREF\n"
