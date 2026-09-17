@@ -10,8 +10,16 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+Noch keine Änderungen.
+
+## [0.4.1] – 2026-09-17
+
 - Zahlungsempfänger in Regeln optional gemacht, damit importierte Buchungen ohne getrennt gelieferten Empfänger als Konto- oder Verwendungszweckregel gespeichert werden können
 - Prüfliste zeigt Zahlungsempfänger und Verwendungszweck getrennt und kennzeichnet fehlende Zahlungsempfänger ausdrücklich
+- Globale Feedbackmeldungen erscheinen in allen Ansichten als kurzlebiger, zugänglicher Popup-Presenter mit explizitem Schließen und Browser-Fallback.
+- Der interne Zielwert `household` wird in der Oberfläche überall als „Haushalt“ angezeigt; API- und Speicherwerte bleiben unverändert.
+- Excel-Bestätigungsfeedback bleibt nach dem Aktualisieren der Monatsübersicht erhalten.
+- Monatsverlaufsdiagramm erhält auf großen und kleinen Ansichten mehr vertikalen Raum.
 
 ## [0.4.0] – 2026-09-17
 
@@ -115,4 +123,5 @@ Erste vorbereitete vertikale Version:
 [0.3.2]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.2
 [0.3.3]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.3
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
+[0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0

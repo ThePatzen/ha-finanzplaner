@@ -253,12 +253,12 @@ const styles = `
 
   .workspace { display: grid; grid-template-columns: minmax(0, 3fr) minmax(16rem, 1fr); gap: 1rem; }
   .surface { border: 1px solid var(--fp-line); border-radius: var(--fp-radius); background: rgb(255 254 249 / 0.72); box-shadow: var(--fp-shadow); }
-  .trend-card { min-inline-size: 0; padding: 1.15rem 1.25rem 0.95rem; }
+  .trend-card { --chart-block-size: 20rem; min-inline-size: 0; padding: 1.15rem 1.25rem 0.95rem; }
   .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
   .section-heading h3 { margin: 0; font-family: var(--fp-display); font-size: 1.4rem; line-height: 1; letter-spacing: -0.025em; }
   .section-heading p { margin: 0; color: var(--fp-muted); font-size: 0.78rem; }
-  .chart-wrap { position: relative; margin-block-start: 0.8rem; min-block-size: 15.5rem; }
-  .chart-wrap svg { inline-size: 100%; block-size: 15.5rem; overflow: visible; }
+  .chart-wrap { position: relative; margin-block-start: 0.8rem; min-block-size: var(--chart-block-size); }
+  .chart-wrap svg { inline-size: 100%; block-size: var(--chart-block-size); overflow: visible; }
   .chart-grid-line { stroke: #d7dddf; stroke-width: 1; }
   .chart-axis-label { fill: #647487; font-family: var(--fp-data); font-size: 10px; }
   .chart-plan { fill: none; stroke: #9daab6; stroke-width: 2; stroke-dasharray: 7 6; }
@@ -322,6 +322,11 @@ const styles = `
   .statusbar { display: flex; justify-content: space-between; gap: 1rem; margin-block-start: 1rem; color: var(--fp-muted); font-size: 0.7rem; }
   .statusbar span:last-child { text-align: end; }
   .statusbar strong { color: var(--fp-ink); font-weight: 700; }
+  .feedback-presenter { position: fixed; inset: auto 1rem 1rem auto; z-index: 20; inline-size: min(28rem, calc(100vw - 2rem)); display: none; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 0.85rem; margin: 0; padding: 0.85rem 0.9rem 0.85rem 1rem; border: 1px solid var(--fp-navy); border-radius: 0.65rem; color: var(--fp-paper); background: var(--fp-navy); box-shadow: 0 0.9rem 2.4rem rgb(11 30 63 / 0.2); opacity: 0; transform: translateY(0.35rem); transition: opacity 180ms ease, transform 180ms ease, display 180ms allow-discrete; transition-behavior: allow-discrete; }
+  .feedback-presenter--visible { display: grid; opacity: 1; transform: translateY(0); }
+  .feedback-presenter-message { min-inline-size: 0; margin: 0; font-size: 0.82rem; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+  .feedback-presenter-close { min-inline-size: 2.25rem; min-block-size: 2.25rem; padding: 0.35rem 0.5rem; border: 1px solid rgb(247 247 244 / 0.42); border-radius: 0.4rem; color: var(--fp-paper); background: transparent; font-size: 0.72rem; font-weight: 800; white-space: nowrap; }
+  .feedback-presenter-close:hover { border-color: var(--fp-paper); background: rgb(247 247 244 / 0.12); }
 
   .review-view, .accounts-view, .plan-items-view, .pets-view, .feed-profiles-view, .catalogs-view { inline-size: 100%; padding-block: 1.8rem; }
   .review-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
@@ -636,7 +641,7 @@ const styles = `
   * { scrollbar-color: var(--fp-muted) var(--fp-paper); scrollbar-width: thin; }
   [data-reveal] { animation: reveal 700ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: calc(var(--reveal-order, 0) * 70ms); }
   @keyframes reveal { from { opacity: 0; transform: translateY(0.75rem); filter: blur(0.25rem); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
-  @media (prefers-reduced-motion: reduce) { [data-reveal] { animation: none; } .nav-item, .month-control button, .icon-button { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { [data-reveal] { animation: none; } .nav-item, .month-control button, .icon-button, .feedback-presenter { transition: none; } }
 
   @media (max-width: 75rem) {
     .product-lockup p { display: none; }
@@ -682,10 +687,10 @@ const styles = `
     .metric { padding-inline: 0.6rem; }
     .metric-value { font-size: 1.35rem; }
     .metric-caption { font-size: 0.73rem; }
-    .trend-card { padding-inline: 0.75rem; }
+    .trend-card { --chart-block-size: 16rem; padding-inline: 0.75rem; }
     .section-heading { display: block; }
     .section-heading p { margin-block-start: 0.35rem; }
-    .chart-wrap, .chart-wrap svg { min-block-size: 13rem; block-size: 13rem; }
+    .chart-wrap, .chart-wrap svg { min-block-size: var(--chart-block-size); block-size: var(--chart-block-size); }
     .chart-legend { gap: 0.45rem 0.7rem; font-size: 0.68rem; }
     .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1rem; }
     .statusbar { display: block; }
@@ -728,10 +733,13 @@ const styles = `
     .allocation-row { grid-template-columns: 1fr; }
     .allocation-actions { align-items: stretch; flex-direction: column; }
     .allocation-status, .allocation-add, .assign-button { inline-size: 100%; }
+    .feedback-presenter { inset: auto 0.85rem 0.85rem; inline-size: auto; }
   }
 
   @media (forced-colors: active) {
-    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .catalog-section, .catalog-entry-form, .section-card, .section-note, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select, .catalog-field input { border: 1px solid CanvasText; box-shadow: none; }
+    .surface, .month-control, .import-strip, .booking-row, .excel-suggestion-row, .account-card, .plan-item-card, .pet-card, .feed-profile-card, .feed-profile-forecast, .catalog-section, .catalog-entry-form, .section-card, .section-note, .allocation-field input, .allocation-field select, .allocation-remove, .plan-item-field input, .plan-item-field select, .pet-field input, .feed-profile-field input, .feed-profile-field select, .catalog-field input, .feedback-presenter { border: 1px solid CanvasText; box-shadow: none; }
+    .feedback-presenter { color: CanvasText; background: Canvas; }
+    .feedback-presenter-close { border-color: ButtonText; color: ButtonText; }
     .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
@@ -990,6 +998,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._sectionLoading = false;
     this._sectionLoadFailed = false;
     this._message = "";
+    this._feedbackTimer = null;
     this._loading = false;
     this._handleBeforeUnload = (event) => {
       if (!this._hasUnsavedChanges()) return;
@@ -1009,6 +1018,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener("beforeunload", this._handleBeforeUnload);
+    this._clearFeedbackTimer();
   }
 
   set hass(value) {
@@ -1278,8 +1288,7 @@ class FinanzplanerPanel extends HTMLElement {
     if (event.type !== "input" || this._ruleSubmitAttempted) this._ruleTouched.add(key);
     if (event.type !== "focusout") {
       this._ruleMessage = "";
-      const status = this.shadowRoot.querySelector("[data-rule-message]");
-      if (status) status.textContent = "";
+      this._syncFeedbackPresenter();
     }
     this._syncRuleFormState();
   }
@@ -1313,8 +1322,7 @@ class FinanzplanerPanel extends HTMLElement {
     const invalidInput = [...form.querySelectorAll("[data-rule-field]")].find((input) => !input.validity.valid);
     if (Object.keys(errors).length || invalidInput) {
       this._ruleMessage = "Fehlerhaft: Bitte prüfe die markierten Felder und die Anteilssumme.";
-      const status = this.shadowRoot.querySelector("[data-rule-message]");
-      if (status) status.textContent = this._ruleMessage;
+      this._syncFeedbackPresenter();
       (invalidInput || (errors.conditions ? form.querySelector('[data-rule-field="counterparty"]') : null) || form.querySelector("[data-rule-add]"))?.focus();
       return;
     }
@@ -2381,8 +2389,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._accountSubmissions.add(accountId);
     this._accountDrafts.set(accountId, draft);
     this._message = "";
-    const globalStatus = this.shadowRoot.querySelector(".status-message");
-    if (globalStatus) globalStatus.textContent = "";
+    this._syncFeedbackPresenter();
     if (button) button.disabled = true;
     if (status) status.textContent = "Änderungen werden gespeichert …";
     try {
@@ -2927,8 +2934,8 @@ class FinanzplanerPanel extends HTMLElement {
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Excel-Import konnte nicht bestätigt werden"));
       this._excelPreview = null;
-      this._message = `${result.accepted} Planposten übernommen, ${result.skipped} abgewählt.`;
       await this._loadOverview();
+      this._message = `${result.accepted} Planposten übernommen, ${result.skipped} abgewählt.`;
       this._render();
     } catch (error) {
       this._message = error.message || "Excel-Import konnte nicht bestätigt werden.";
@@ -2940,6 +2947,50 @@ class FinanzplanerPanel extends HTMLElement {
     this._excelPreview = null;
     this._message = "Excel-Vorschau verworfen. Es wurden keine Planposten gespeichert.";
     this._render();
+  }
+
+  _clearFeedbackTimer() {
+    if (this._feedbackTimer !== null) {
+      window.clearTimeout(this._feedbackTimer);
+      this._feedbackTimer = null;
+    }
+  }
+
+  _activeFeedbackMessage() {
+    return this._view === "rules" ? this._ruleMessage : this._message;
+  }
+
+  _supportsPopover(presenter) {
+    return "popover" in HTMLElement.prototype && typeof presenter?.showPopover === "function";
+  }
+
+  _hideFeedbackPresenter(presenter) {
+    if (!presenter) return;
+    if (this._supportsPopover(presenter) && presenter.matches(":popover-open")) presenter.hidePopover();
+    presenter.classList.remove("feedback-presenter--visible");
+  }
+
+  _dismissFeedback() {
+    this._clearFeedbackTimer();
+    const source = this._view === "rules" ? "_ruleMessage" : "_message";
+    this[source] = "";
+    this._hideFeedbackPresenter(this.shadowRoot.querySelector("[data-feedback-presenter]"));
+  }
+
+  _syncFeedbackPresenter() {
+    this._clearFeedbackTimer();
+    const presenter = this.shadowRoot.querySelector("[data-feedback-presenter]");
+    if (!presenter) return;
+    const message = this._activeFeedbackMessage();
+    const messageNode = presenter.querySelector("[data-feedback-message]");
+    if (messageNode) messageNode.textContent = message;
+    if (!message) {
+      this._hideFeedbackPresenter(presenter);
+      return;
+    }
+    presenter.classList.add("feedback-presenter--visible");
+    if (this._supportsPopover(presenter) && !presenter.matches(":popover-open")) presenter.showPopover();
+    this._feedbackTimer = window.setTimeout(() => this._dismissFeedback(), 4200);
   }
 
   _shiftMonth(delta) {
@@ -2969,6 +3020,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._bindEvents();
     if (this._view === "rules" && this._ruleEditingId) this._syncRuleFormState();
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => this._updateAllocationSummary(form));
+    this._syncFeedbackPresenter();
   }
 
   _bindEvents() {
@@ -2976,6 +3028,7 @@ class FinanzplanerPanel extends HTMLElement {
       event.preventDefault();
       this.shadowRoot.querySelector("#content")?.focus();
     });
+    this.shadowRoot.querySelector("[data-feedback-close]")?.addEventListener("click", () => this._dismissFeedback());
     this.shadowRoot.querySelector("[data-action='previous-month']")?.addEventListener("click", () => this._shiftMonth(-1));
     this.shadowRoot.querySelector("[data-action='next-month']")?.addEventListener("click", () => this._shiftMonth(1));
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
@@ -3100,6 +3153,10 @@ class FinanzplanerPanel extends HTMLElement {
         <div class="rail-footer"><button class="household-switcher" type="button">${icon("household", 21)}<span>Gemeinsamer Haushalt</span>${icon("chevronRight", 16)}</button><p>Zu Hause leben. Besser planen.</p></div>
       </aside>
       ${content}
+      <div id="feedback-presenter" class="feedback-presenter" data-feedback-presenter popover="manual" role="status" aria-live="polite" aria-atomic="true">
+        <p class="feedback-presenter-message" data-feedback-message></p>
+        <button class="feedback-presenter-close" type="button" data-feedback-close popovertarget="feedback-presenter" popovertargetaction="hide" aria-label="Meldung schließen">Schließen</button>
+      </div>
     </div>`;
   }
 
@@ -3137,7 +3194,6 @@ class FinanzplanerPanel extends HTMLElement {
     }).join("");
     const content = `<main class="main" id="content" tabindex="-1">
       ${this._toolbarTemplate()}
-      <div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>
       <section class="hero" id="overview" aria-labelledby="overview-title">
         <div class="heading-line"><h2 id="overview-title">Planung · Prognose · Ist</h2><p>${monthLabel(this._month)} · Alle Beträge in Euro</p></div>
         <div class="metric-grid">
@@ -3237,8 +3293,14 @@ class FinanzplanerPanel extends HTMLElement {
       </div>`;
     }
 
-    const content = `<main class="main" id="content" tabindex="-1"><div class="section-view"><div class="section-view-header"><div><p class="section-kicker">${escapeHtml(meta.kicker)}</p><h2>${escapeHtml(meta.title)}</h2><p>${escapeHtml(meta.description)} · ${monthLabel(this._month)}</p></div><div class="section-view-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>${body}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="section-view"><div class="section-view-header"><div><p class="section-kicker">${escapeHtml(meta.kicker)}</p><h2>${escapeHtml(meta.title)}</h2><p>${escapeHtml(meta.description)} · ${monthLabel(this._month)}</p></div><div class="section-view-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${body}</div></main>`;
     return this._shellTemplate(content);
+  }
+
+  _targetLabel(target, missingSuffix = "") {
+    if (target === "household") return "Haushalt";
+    const person = this._persons.find((entry) => entry.entity_id === target);
+    return person ? person.name || person.entity_id : `${target || "Ziel"}${missingSuffix}`;
   }
 
   _personOptions(selectedTargets = []) {
@@ -3334,8 +3396,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   _planItemTargetLabel(target) {
     if (!target) return "Kein festes Ziel";
-    if (target === "household") return "Haushalt";
-    return this._persons.find((person) => person.entity_id === target)?.name || target;
+    return this._targetLabel(target);
   }
 
   _planItemOverviewTemplate() {
@@ -3371,7 +3432,7 @@ class FinanzplanerPanel extends HTMLElement {
           })()
           : this._planItemOverviewTemplate();
     const activeCount = this._planItems.filter((item) => item.active !== false).length;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="plan-items-view"><div class="plan-items-view-header"><div><h2>Planposten verwalten</h2><p>Ersetze deine Excel-Planung Schritt für Schritt: Betrag, Richtung, Rhythmus, Fälligkeit und fachliche Zuordnung bleiben direkt bearbeitbar.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Planposten</strong> · Einnahmen werden positiv, Ausgaben und Rücklagen negativ in der Übersicht berücksichtigt. Archivierte Einträge bleiben erhalten und können wieder aktiviert werden.</p>${overview}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="plan-items-view"><div class="plan-items-view-header"><div><h2>Planposten verwalten</h2><p>Ersetze deine Excel-Planung Schritt für Schritt: Betrag, Richtung, Rhythmus, Fälligkeit und fachliche Zuordnung bleiben direkt bearbeitbar.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><p class="plan-item-help"><strong>${activeCount} aktive Planposten</strong> · Einnahmen werden positiv, Ausgaben und Rücklagen negativ in der Übersicht berücksichtigt. Archivierte Einträge bleiben erhalten und können wieder aktiviert werden.</p>${overview}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -3399,7 +3460,7 @@ class FinanzplanerPanel extends HTMLElement {
           })()
           : this._petOverviewTemplate();
     const activeCount = this._pets.filter((pet) => pet.active !== false).length;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="pets-view"><div class="pets-view-header"><div><h2>Tiere verwalten</h2><p>Verwalte eigene Tierprofile für Futter und andere Zuordnungen. Tiere sind keine Home-Assistant-Personen; historische Buchungen behalten ihren damaligen Namen.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Tiere</strong> · Archivierte Profile bleiben für historische Zuordnungen auswählbar, aber nicht für neue Planposten.</p>${overview}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="pets-view"><div class="pets-view-header"><div><h2>Tiere verwalten</h2><p>Verwalte eigene Tierprofile für Futter und andere Zuordnungen. Tiere sind keine Home-Assistant-Personen; historische Buchungen behalten ihren damaligen Namen.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><p class="plan-item-help"><strong>${activeCount} aktive Tiere</strong> · Archivierte Profile bleiben für historische Zuordnungen auswählbar, aber nicht für neue Planposten.</p>${overview}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -3473,7 +3534,7 @@ class FinanzplanerPanel extends HTMLElement {
           })()
           : this._feedProfileOverviewTemplate();
     const activeCount = this._feedProfiles.filter((profile) => profile.active !== false).length;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="feed-profiles-view"><div class="feed-profiles-view-header"><div><h2>Futter planen</h2><p>Hinterlege Verpackung, Kosten und Verbrauch pro Tier. Bestätigte Käufe verschieben die nächste Schätzung; es wird keine Buchung automatisch angelegt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="plan-item-help"><strong>${activeCount} aktive Futterprofile</strong> · Ein manuelles Intervall überschreibt den Durchschnitt aus bestätigten Käufen. Das voraussichtliche Kaufdatum wird als einzelnes Ereignis in der Prognose berücksichtigt.</p>${overview}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="feed-profiles-view"><div class="feed-profiles-view-header"><div><h2>Futter planen</h2><p>Hinterlege Verpackung, Kosten und Verbrauch pro Tier. Bestätigte Käufe verschieben die nächste Schätzung; es wird keine Buchung automatisch angelegt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><p class="plan-item-help"><strong>${activeCount} aktive Futterprofile</strong> · Ein manuelles Intervall überschreibt den Durchschnitt aus bestätigten Käufen. Das voraussichtliche Kaufdatum wird als einzelnes Ereignis in der Prognose berücksichtigt.</p>${overview}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -3524,8 +3585,8 @@ class FinanzplanerPanel extends HTMLElement {
     const content = this._catalogsLoading
       ? `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="empty-state">Stammdaten werden geladen …</div></div></main>`
       : this._catalogsLoadFailed
-        ? `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><div class="empty-state">Stammdaten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div></div></main>`
-        : `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="catalogs-view-header"><div><h2>Stammdaten</h2><p>Verwalte die Begriffe, mit denen du Planposten und Buchungen einheitlich ordnest. Beim Umbenennen werden bestehende Zuordnungen automatisch mitgeführt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div><p class="catalog-help">Archivierte Einträge bleiben in historischen Buchungen sichtbar und können wieder aktiviert werden. Neue Freitextwerte aus Importen werden als Stammdaten ergänzt.</p>${editor}</div></main>`;
+      ? `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="empty-state">Stammdaten stehen derzeit nicht zur Verfügung. Bitte versuche es später erneut.</div></div></main>`
+        : `<main class="main" id="content" tabindex="-1"><div class="catalogs-view"><div class="catalogs-view-header"><div><h2>Stammdaten</h2><p>Verwalte die Begriffe, mit denen du Planposten und Buchungen einheitlich ordnest. Beim Umbenennen werden bestehende Zuordnungen automatisch mitgeführt.</p></div><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div><p class="catalog-help">Archivierte Einträge bleiben in historischen Buchungen sichtbar und können wieder aktiviert werden. Neue Freitextwerte aus Importen werden als Stammdaten ergänzt.</p>${editor}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -3583,7 +3644,7 @@ class FinanzplanerPanel extends HTMLElement {
       const label = draft.label || account.label || "Konto";
       const bank = draft.bank || account.bank || "Nicht angegeben";
       const ownerTargets = Array.isArray(draft.owner_targets) ? draft.owner_targets : (Array.isArray(account.owner_targets) ? account.owner_targets : []);
-      const owners = ownerTargets.map((target) => this._persons.find((person) => person.entity_id === target)?.name || target).join(", ") || "Nicht zugeordnet";
+      const owners = ownerTargets.map((target) => this._targetLabel(target)).join(", ") || "Nicht zugeordnet";
       const maskedReference = account.iban_masked || account.account_reference || "Nicht verfügbar";
       const active = draft.active !== false && account.active !== false;
       return `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(bank)}</td><td class="table-number">${escapeHtml(maskedReference)}</td><td data-table-secondary>${escapeHtml(owners)}</td><td><span class="plan-item-status${active ? "" : " plan-item-status--archived"}">${accountActiveStatus(active)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-account-editor data-account-id="${escapeHtml(accountId)}" aria-label="${escapeHtml(label)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
@@ -3604,7 +3665,7 @@ class FinanzplanerPanel extends HTMLElement {
             return `<section class="management-editor" aria-labelledby="account-editor-heading"><div class="management-editor-header"><div><h3 id="account-editor-heading">Konto bearbeiten</h3><p>Ändere Name, Bank, Kontoinhaber oder den aktiven Status.</p></div><button class="management-editor-back" type="button" data-close-account-editor>${icon("chevronLeft", 16)} Zur Übersicht</button></div>${this._accountFormTemplate(account, accountIndex + 1)}</section>`;
           })()
           : this._accountOverviewTemplate();
-    const content = `<main class="main" id="content" tabindex="-1"><div class="accounts-view"><div class="accounts-view-header"><div><h2>Konten verwalten</h2><p>Vergib verständliche Namen, ordne Kontoinhaber zu und archiviere nicht mehr verwendete Konten. Kontodaten werden ausschließlich maskiert angezeigt.</p></div><div class="accounts-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 18)}</button></div></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>${accountList}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="accounts-view"><div class="accounts-view-header"><div><h2>Konten verwalten</h2><p>Vergib verständliche Namen, ordne Kontoinhaber zu und archiviere nicht mehr verwendete Konten. Kontodaten werden ausschließlich maskiert angezeigt.</p></div><div class="accounts-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 18)}</button></div></div>${accountList}</div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -3709,9 +3770,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _ruleTargetLabel(target) {
-    if (target === "household") return "Haushalt";
-    const person = this._persons.find((entry) => entry.entity_id === target);
-    return person ? person.name || person.entity_id : `${target || "Ziel"} (Person fehlt)`;
+    return this._targetLabel(target, " (Person fehlt)");
   }
 
   _ruleAllocationLabel(row, percentage = false) {
@@ -3743,7 +3802,7 @@ class FinanzplanerPanel extends HTMLElement {
     const body = this._rulesLoading ? `<p class="empty-state" role="status">Regeln und Zuordnungsziele werden geladen …</p>`
       : this._rulesLoadFailed ? `<div class="empty-state"><p>Die Regelübersicht ist derzeit nicht verfügbar.</p><button class="table-edit-button" type="button" data-action="rules">Erneut laden</button></div>`
         : this._ruleEditingId ? this._ruleFormTemplate() : this._rulesOverviewTemplate();
-    return this._shellTemplate(`<main class="main" id="content" tabindex="-1"><div class="accounts-view rules-view"><div class="accounts-view-header"><div><h2>Regeln</h2><p>Verwalte Vorschläge für Buchungsaufteilungen. Du bestätigst jede Aufteilung in der Prüfliste.</p></div><div class="accounts-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 18)}</button></div></div><p class="status-message" data-rule-message role="status" aria-live="polite" aria-atomic="true">${escapeHtml(this._ruleMessage)}</p>${body}</div></main>`);
+    return this._shellTemplate(`<main class="main" id="content" tabindex="-1"><div class="accounts-view rules-view"><div class="accounts-view-header"><div><h2>Regeln</h2><p>Verwalte Vorschläge für Buchungsaufteilungen. Du bestätigst jede Aufteilung in der Prüfliste.</p></div><div class="accounts-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 18)}</button></div></div>${body}</div></main>`);
   }
 
   _bookingRuleHintTemplate(booking, index) {
@@ -3823,7 +3882,7 @@ class FinanzplanerPanel extends HTMLElement {
       const purposeMarkup = purpose ? `<span class="booking-purpose-detail">Verwendungszweck: ${escapeHtml(purpose)}</span>` : "";
       return `<li><form class="booking-row" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose"><span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${escapeHtml(booking.account || "Konto nicht bekannt")}</span><span class="booking-amount">${formatEuro(booking.amount)}</span>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
     }).join("")}</ul>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div><div class="status-message" aria-live="polite">${escapeHtml(this._message)}</div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
     return this._shellTemplate(content);
   }
 }

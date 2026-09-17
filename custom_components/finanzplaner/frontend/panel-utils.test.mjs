@@ -41,6 +41,13 @@ test("builds an accessible chart summary from trend values", () => {
   );
 });
 
+test("gives the monthly trend chart enough vertical room at each breakpoint", () => {
+  assert.match(panelSource, /\.trend-card\s*\{[^}]*--chart-block-size:\s*20rem/s);
+  assert.match(panelSource, /\.chart-wrap\s*\{[^}]*min-block-size:\s*var\(--chart-block-size\)/s);
+  assert.match(panelSource, /\.chart-wrap svg\s*\{[^}]*block-size:\s*var\(--chart-block-size\)/s);
+  assert.match(panelSource, /@media \(max-width: 45rem\)[\s\S]*?\.trend-card\s*\{[^}]*--chart-block-size:\s*16rem/s);
+});
+
 test("returns from a root-hosted panel to the HA base route", () => {
   assert.equal(
     utils.homeAssistantPath("https://ha.example/finanzplaner?view=review#booking"),
@@ -414,6 +421,16 @@ test("names each account save action and renders its lifecycle status", () => {
   assert.match(panelSource, /data-account-active-status/);
 });
 
+test("uses a transient presenter for global feedback and humanizes household targets", () => {
+  assert.match(panelSource, /id="feedback-presenter"[^>]*popover="manual"/);
+  assert.match(panelSource, /data-feedback-message/);
+  assert.match(panelSource, /popovertarget="feedback-presenter" popovertargetaction="hide"/);
+  assert.doesNotMatch(panelSource, /class="status-message"/);
+  assert.match(panelSource, /_syncFeedbackPresenter\(\)/);
+  assert.match(panelSource, /const owners = ownerTargets\.map\(\(target\) => this\._targetLabel\(target\)\)/);
+  assert.match(panelSource, /if \(target === "household"\) return "Haushalt"/);
+});
+
 test("keeps allocation locks and account drafts outside the rendered form", () => {
   assert.match(panelSource, /this\._allocationSubmissions = new Set\(\)/);
   assert.match(panelSource, /this\._allocationSubmissions\.has\(bookingId\)/);
@@ -437,6 +454,10 @@ test("keeps import account counts in the review feedback after reload", () => {
   assert.match(panelSource, /result\.new_accounts \|\| 0/);
   assert.match(panelSource, /result\.unconfigured_accounts \|\| 0/);
   assert.match(panelSource, /this\._message = feedback/);
+});
+
+test("keeps the Excel confirmation feedback after refreshing the overview", () => {
+  assert.match(panelSource, /this\._excelPreview = null;\s*await this\._loadOverview\(\);\s*this\._message = `\$\{result\.accepted\} Planposten übernommen, \$\{result\.skipped\} abgewählt\.`/s);
 });
 
 test("offers ZIP uploads for multiple bank statement files", () => {
