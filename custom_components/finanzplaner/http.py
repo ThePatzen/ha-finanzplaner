@@ -18,6 +18,7 @@ from .core import (
     Booking,
     CATALOG_KINDS,
     CATALOG_VALUE_FIELDS,
+    ParsedBooking,
     RULE_FIELDS,
     booking_fingerprint,
     catalog_id_for_label,
@@ -29,7 +30,9 @@ from .core import (
     overview_values,
     parse_allocation_payload,
     parse_camt053,
+    parse_camt053_records,
     parse_mt940,
+    parse_mt940_records,
     plan_item_totals,
     record_feed_profile_purchase,
     rule_payload_from_booking,
@@ -215,6 +218,16 @@ def _booking_payload(
         "allocations": [],
         "status": "unresolved",
         "matched_rule": None,
+    }
+
+
+def _booking_response_projection(booking: dict[str, Any]) -> dict[str, Any]:
+    """Return booking data suitable for list and import-preview responses."""
+
+    return {
+        key: value
+        for key, value in booking.items()
+        if key != "source_data"
     }
 
 
@@ -1829,7 +1842,9 @@ class UnresolvedBookingsView(HomeAssistantView):
         bookings = [] if not coordinator or not coordinator.data else coordinator.data.get("bookings", [])
         unresolved = [booking for booking in bookings if booking.get("status") != "resolved"]
         if coordinator is None:
-            return self.json(_response_payload({"bookings": unresolved}))
+            return self.json(_response_payload({
+                "bookings": [_booking_response_projection(booking) for booking in unresolved]
+            }))
         accounts = _rule_accounts(coordinator)
         catalogs = _rule_catalogs(coordinator)
         pets = _pet_records(coordinator)
@@ -1849,7 +1864,7 @@ class UnresolvedBookingsView(HomeAssistantView):
             account = accounts.get(account_id) if isinstance(account_id, str) else None
             account_label = account.get("label") if isinstance(account, dict) else None
             projected.append({
-                **booking,
+                **_booking_response_projection(booking),
                 "account_label": account_label if isinstance(account_label, str) else None,
                 **suggestion,
             })
@@ -1871,7 +1886,9 @@ class ResolvedBookingsView(HomeAssistantView):
             for booking in bookings
             if isinstance(booking, dict) and booking.get("status") == "resolved"
         ]
-        return self.json(_response_payload({"bookings": resolved}))
+        return self.json(_response_payload({
+            "bookings": [_booking_response_projection(booking) for booking in resolved]
+        }))
 
 
 class BookingDeleteView(HomeAssistantView):
@@ -2148,15 +2165,15 @@ class ImportView(HomeAssistantView):
         raw_bytes: bytes,
         *,
         require_bookings: bool = False,
-    ) -> tuple[list[Booking], str]:
+    ) -> tuple[list[ParsedBooking], str]:
         if len(raw_bytes) > BANK_MAX_BYTES:
             raise ValueError("Die Buchungsdatei ist größer als 10 MB.")
         raw = cls._decode_bank_file(raw_bytes)
         if filename.lower().endswith((".xml", ".camt", ".camt053")) or "<Document" in raw:
-            parsed = parse_camt053(raw)
+            parsed = parse_camt053_records(raw)
             format_name = "CAMT.053"
         else:
-            parsed = parse_mt940(raw)
+            parsed = parse_mt940_records(raw)
             format_name = "MT940"
         if require_bookings and not parsed:
             raise ValueError(f"{filename} enthält keine lesbaren Buchungen.")
@@ -2166,7 +2183,7 @@ class ImportView(HomeAssistantView):
     def _archive_files(
         cls,
         raw_bytes: bytes,
-    ) -> list[tuple[str, bytes, list[Booking], str]]:
+    ) -> list[tuple[str, bytes, list[ParsedBooking], str]]:
         if len(raw_bytes) > BANK_MAX_BYTES:
             raise ValueError("Die ZIP-Datei ist größer als 10 MB.")
         try:
@@ -2227,16 +2244,17 @@ class ImportView(HomeAssistantView):
         for source_filename, source_bytes, parsed, format_name in import_files:
             file_accepted = 0
             file_duplicates = 0
-            for booking in parsed:
-                payload = _booking_payload(booking)
+            source_hash = hashlib.sha256(source_bytes).hexdigest()
+            for record_index, parsed_booking in enumerate(parsed):
+                payload = _booking_payload(parsed_booking.booking)
                 if payload["id"] in existing:
                     duplicates += 1
                     file_duplicates += 1
                     continue
                 account, created = ensure_account(
                     coordinator.store.data,
-                    booking.account,
-                    booking.account if format_name == "CAMT.053" else None,
+                    parsed_booking.booking.account,
+                    parsed_booking.booking.account if format_name == "CAMT.053" else None,
                 )
                 if account is not None:
                     account_id = account.get("id")
@@ -2246,6 +2264,13 @@ class ImportView(HomeAssistantView):
                             new_account_ids.add(account_id)
                         if not account.get("owner_targets"):
                             unconfigured_account_ids.add(account_id)
+                payload["source_data"] = {
+                    **parsed_booking.source_data,
+                    "format": format_name,
+                    "filename": source_filename,
+                    "file_sha256": source_hash,
+                    "record_index": record_index,
+                }
                 existing.add(payload["id"])
                 coordinator.store.data["bookings"].append(payload)
                 accepted.append(payload)
@@ -2255,7 +2280,7 @@ class ImportView(HomeAssistantView):
                     {
                         "filename": source_filename,
                         "format": format_name,
-                        "sha256": hashlib.sha256(source_bytes).hexdigest(),
+                        "sha256": source_hash,
                         "accepted": file_accepted,
                         "duplicates": file_duplicates,
                     }
@@ -2292,7 +2317,7 @@ class ImportView(HomeAssistantView):
                     "rule_conflicts": auto_summary["conflicts"],
                     "rule_unresolved": auto_summary["unresolved"],
                     "files": file_summaries if archive_import else [],
-                    "preview": accepted,
+                    "preview": [_booking_response_projection(booking) for booking in accepted],
                 }
             )
         )

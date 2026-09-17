@@ -330,6 +330,41 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(account["account_reference"], "BANK-ACCOUNT-42")
         self.assertEqual(account["owner_targets"], [])
 
+    def test_import_persists_complete_source_data_and_file_metadata(self):
+        raw = (
+            ":20:STATEMENT-42\n"
+            ":25:BANK-ACCOUNT-42\n"
+            ":61:2609020902D42,50NTRFNONREF\n"
+            ":86:Testkauf\n"
+            ":99:Zusatzfeld\n"
+        )
+
+        self._import("statement.sta", raw)
+        booking = self.coordinator.store.data["bookings"][0]
+
+        self.assertEqual(booking["source_data"]["format"], "MT940")
+        self.assertEqual(booking["source_data"]["filename"], "statement.sta")
+        self.assertEqual(booking["source_data"]["record_index"], 0)
+        self.assertEqual(booking["source_data"]["record"]["lines"][-1], ":99:Zusatzfeld")
+        self.assertEqual(len(booking["source_data"]["file_sha256"]), 64)
+
+    def test_duplicate_import_does_not_replace_existing_source_data(self):
+        first_raw = ":20:FIRST\n:25:ACCOUNT\n:61:2609020902D1,00NTRFFIRST\n"
+        second_raw = ":20:SECOND\n:25:ACCOUNT\n:61:2609020902D1,00NTRFFIRST\n"
+
+        self._import("first.sta", first_raw)
+        self._import("second.sta", second_raw)
+
+        booking = self.coordinator.store.data["bookings"][0]
+        self.assertEqual(booking["source_data"]["filename"], "first.sta")
+
+    def test_import_preview_excludes_persisted_source_data(self):
+        raw = ":20:STATEMENT\n:25:ACCOUNT\n:61:2609020902D1,00NTRFREF\n"
+
+        result = self._import("statement.sta", raw)
+
+        self.assertNotIn("source_data", result["preview"][0])
+
     def test_duplicate_import_keeps_fingerprint_and_does_not_rediscover_account(self):
         raw = (
             ":20:STATEMENT-42\n"
@@ -391,6 +426,12 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(len(result["files"]), 2)
         self.assertEqual({item["format"] for item in result["files"]}, {"CAMT.053", "MT940"})
         self.assertEqual(len(self.coordinator.store.data["bookings"]), 2)
+        for booking in self.coordinator.store.data["bookings"]:
+            source_data = booking["source_data"]
+            self.assertIn(source_data["filename"], {"januar.xml", "februar.sta"})
+            self.assertIn(source_data["format"], {"CAMT.053", "MT940"})
+            self.assertEqual(len(source_data["file_sha256"]), 64)
+            self.assertEqual(source_data["record_index"], 0)
         self.assertEqual(self.coordinator.store.data["imports"][0]["format"], "ZIP")
         self.assertEqual(len(self.coordinator.store.data["imports"][0]["files"]), 2)
 
