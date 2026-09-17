@@ -661,6 +661,17 @@ test("breakdown error uses feedback and offers retry; empty results explain both
   assert.equal(panel._breakdownError, "");
 });
 
+test("opening breakdown focuses its heading without suppressing native scrolling", async () => {
+  const panel = comparisonTestPanel();
+  const focusOptions = [];
+  panel.shadowRoot.querySelector = (selector) => selector === "#comparison-details-heading"
+    ? { focus: (options) => focusOptions.push(options) } : null;
+  panel._hass = { fetchWithAuth: async () => breakdownResponse() };
+  await panel._loadBreakdown("categories", "id:food");
+  assert.equal(focusOptions.length, 1);
+  assert.notEqual(focusOptions[0]?.preventScroll, true);
+});
+
 test("new selection wins even if the previous breakdown finishes last", async () => {
   const panel = comparisonTestPanel();
   const responses = [];

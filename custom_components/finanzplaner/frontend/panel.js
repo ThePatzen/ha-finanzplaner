@@ -1148,7 +1148,7 @@ class FinanzplanerPanel extends HTMLElement {
     const current = () => this._view === "overview" && this._breakdownSelection === selection
       && this._monthValue() === selection.month && this._comparisonDimension === dimension;
     this._render();
-    this.shadowRoot.querySelector("#comparison-details-heading")?.focus({ preventScroll: true });
+    this.shadowRoot.querySelector("#comparison-details-heading")?.focus();
     try {
       const response = await fetchWithHomeAssistantAuth(this._hass, breakdownRequestUrl(BREAKDOWN_URL, selection.month, dimension, key));
       const result = await readApiResponse(response);
