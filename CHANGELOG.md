@@ -8,7 +8,7 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
-## Unreleased
+## [0.8.0] – 2026-09-17
 
 - Buchungsdetails als Popup für ungeklärte und übernommene Buchungen
 - verlustfreie Quelldatenansicht für importierte MT940-/CAMT.053-Buchungssätze
@@ -143,5 +143,6 @@ Erste vorbereitete vertikale Version:
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
 [0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
+[0.8.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.6.0

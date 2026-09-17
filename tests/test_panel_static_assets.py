@@ -20,7 +20,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
             / "manifest.json"
         )
         version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-        self.assertEqual(version, "0.7.0")
+        self.assertEqual(version, "0.8.0")
         build_path = getattr(
             const, "panel_static_path", lambda _version: "/api/finanzplaner/static"
         )(version)
@@ -28,7 +28,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
 
         self.assertEqual(
             urljoin(panel_url, "panel-utils.mjs"),
-            "https://ha.example/api/finanzplaner/static/0.7.0/panel-utils.mjs",
+            "https://ha.example/api/finanzplaner/static/0.8.0/panel-utils.mjs",
         )
 
     def test_booking_lists_use_shared_detail_dialog_and_raw_data_action(self) -> None:
