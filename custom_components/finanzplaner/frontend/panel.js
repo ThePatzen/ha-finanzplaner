@@ -666,6 +666,7 @@ const styles = `
     .rail-nav { display: flex; gap: 0.25rem; overflow-x: auto; padding: 0.4rem 0.5rem; scrollbar-width: none; }
     .rail-nav::-webkit-scrollbar { display: none; }
     .nav-item { min-block-size: 2.5rem; flex: 0 0 auto; padding-inline: 0.7rem; }
+    .nav-item[data-nav="rules"] { min-block-size: 48px; }
     .nav-item span { display: none; }
     .rail-footer { display: none; }
     .main { padding-inline: 0.85rem; }
@@ -1078,33 +1079,37 @@ class FinanzplanerPanel extends HTMLElement {
     }
   }
 
-  async _loadRules() {
-    if (this._rulesRequest) return this._rulesRequest;
+  async _loadRules({ fresh = false } = {}) {
+    if (this._rulesRequest && !fresh) return this._rulesRequest;
     this._rulesLoading = true;
     this._rulesLoadFailed = false;
-    this._rulesRequest = (async () => {
-      const results = await Promise.all([RULES_URL, ACCOUNTS_URL, PERSONS_URL, PETS_URL, CATALOGS_URL].map(async (url) => {
-        const response = await fetchWithHomeAssistantAuth(this._hass, url);
-        const result = await readApiResponse(response);
-        if (!response.ok) throw new Error(apiErrorMessage(result, "Regeln oder Zuordnungsziele konnten nicht geladen werden."));
-        return result;
-      }));
+    const request = Promise.all([RULES_URL, ACCOUNTS_URL, PERSONS_URL, PETS_URL, CATALOGS_URL].map(async (url) => {
+      const response = await fetchWithHomeAssistantAuth(this._hass, url);
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Regeln oder Zuordnungsziele konnten nicht geladen werden."));
+      return result;
+    }));
+    this._rulesRequest = request;
+    try {
+      const results = await request;
+      // A mutation's fresh read owns the snapshot, even if an older read finishes later.
+      if (this._rulesRequest !== request) return;
       const [rules, accounts, persons, pets, catalogs] = results;
       this._rules = rules.rules || [];
       this._accounts = accounts.accounts || [];
       this._persons = persons.persons || [];
       this._pets = pets.pets || [];
       this._catalogs = catalogs.catalogs || { categories: [], areas: [], projects: [] };
-    })();
-    try {
-      await this._rulesRequest;
     } catch (error) {
+      if (this._rulesRequest !== request) return;
       this._rulesLoadFailed = true;
       this._ruleMessage = error.message || "Regeln konnten nicht geladen werden. Bitte erneut laden.";
       throw error;
     } finally {
-      this._rulesLoading = false;
-      this._rulesRequest = null;
+      if (this._rulesRequest === request) {
+        this._rulesLoading = false;
+        this._rulesRequest = null;
+      }
     }
   }
 
@@ -1324,7 +1329,7 @@ class FinanzplanerPanel extends HTMLElement {
     if (sourceBookingId) this._confirmedBookings.delete(sourceBookingId);
     this._resetRuleEditor();
     this._ruleMessage = "Regel gespeichert. Bestätigte Buchungen bleiben unverändert.";
-    try { await this._loadRules(); } catch {
+    try { await this._loadRules({ fresh: true }); } catch {
       this._ruleMessage = "Regel gespeichert. Die Übersicht konnte danach nicht geladen werden. Bitte erneut laden.";
     }
     this._ruleSubmitting = false;
@@ -1349,7 +1354,7 @@ class FinanzplanerPanel extends HTMLElement {
       return;
     }
     this._ruleMessage = "Regel deaktiviert. Bestätigte Buchungen bleiben unverändert.";
-    try { await this._loadRules(); } catch {
+    try { await this._loadRules({ fresh: true }); } catch {
       this._ruleMessage = "Regel deaktiviert. Die Übersicht konnte danach nicht geladen werden. Bitte erneut laden.";
     }
     this._ruleSubmitting = false;
@@ -2769,9 +2774,12 @@ class FinanzplanerPanel extends HTMLElement {
     } catch (error) {
       this._allocationSubmissions.delete(bookingId);
       this._allocationErrors.set(bookingId, error.message || "Die Aufteilung konnte nicht gespeichert werden. Bitte versuche es erneut.");
-      form.removeAttribute("aria-busy");
-      if (status) status.textContent = this._allocationErrors.get(bookingId);
-      this._updateAllocationSummary(form);
+      // Another booking's interaction may have replaced the form during this request.
+      const currentForm = this._allocationForm(bookingId) || form;
+      currentForm.removeAttribute("aria-busy");
+      const currentStatus = currentForm.querySelector("[data-allocation-status]");
+      if (currentStatus) currentStatus.textContent = this._allocationErrors.get(bookingId);
+      this._updateAllocationSummary(currentForm);
       return;
     }
     this._allocationSubmissions.delete(bookingId);

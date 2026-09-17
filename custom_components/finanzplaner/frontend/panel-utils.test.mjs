@@ -647,6 +647,135 @@ test("an invalid share total is associated with its percentage field after inter
   assert.equal(input["aria-invalid"], "true");
 });
 
+for (const failure of ["server", "network"]) {
+  test(`a deferred ${failure} booking failure unlocks the current editor after another suggestion replaces it`, async () => {
+    const panel = ruleTestPanel();
+    const rows = [{ target: "household", amount: 42.37 }];
+    panel._bookings = ["b1", "b2"].map((id) => ({
+      id, amount: -42.37, status: "suggested", suggestion: { allocations: rows },
+    }));
+    for (const booking of panel._bookings) panel._allocationOriginalDrafts.set(booking.id, rows);
+    let forms;
+    panel._render = () => {
+      // Minimal DOM boundary: rendering replaces nodes, just as shadowRoot.innerHTML does.
+      forms = panel._bookings.map((booking) => {
+        const nodes = new Map([
+          [".allocation-editor", { disabled: false }],
+          ["[data-accept-suggestion]", { disabled: false }],
+          ["[type='submit']", { disabled: false }],
+          ["[data-allocation-status]", { textContent: panel._allocationErrors.get(booking.id) || "" }],
+        ]);
+        const form = {
+          dataset: { bookingId: booking.id, bookingTotal: "42.37" },
+          querySelector: (selector) => nodes.get(selector),
+          setAttribute(key, value) { this[key] = value; },
+          removeAttribute(key) { delete this[key]; },
+        };
+        panel._updateAllocationSummary(form);
+        return form;
+      });
+    };
+    panel.shadowRoot.querySelectorAll = (selector) => selector === "[data-assignment-form]" ? forms : [];
+    panel._acceptSuggestion("b1");
+    const originalForm = panel._allocationForm("b1");
+    const response = Promise.withResolvers();
+    const writes = [];
+    panel._hass = { fetchWithAuth: (url, options) => {
+      writes.push({ url, method: options.method });
+      return response.promise;
+    } };
+    const saving = panel._handleAssignment({ preventDefault() {}, currentTarget: originalForm });
+    assert.equal(originalForm.querySelector(".allocation-editor").disabled, true);
+    panel._acceptSuggestion("b2");
+    const currentForm = panel._allocationForm("b1");
+    assert.notEqual(currentForm, originalForm);
+    assert.equal(currentForm.querySelector(".allocation-editor").disabled, true);
+    await panel._handleAssignment({ preventDefault() {}, currentTarget: currentForm });
+    if (failure === "server") response.resolve(new Response("Aufteilung ungültig", { status: 400 }));
+    else response.reject(new Error("Verbindung unterbrochen"));
+    await saving;
+    const recovered = panel._allocationForm("b1");
+    assert.equal(recovered.querySelector(".allocation-editor").disabled, false);
+    assert.equal(recovered.querySelector("[type='submit']").disabled, false);
+    assert.equal(recovered.querySelector("[data-accept-suggestion]").disabled, false);
+    assert.notEqual(recovered["aria-busy"], "true");
+    assert.match(recovered.querySelector("[data-allocation-status]").textContent,
+      failure === "server" ? /Aufteilung ungültig/ : /Verbindung unterbrochen/);
+    assert.deepEqual(panel._allocationDrafts.get("b2"), rows);
+    assert.equal(panel._confirmedBookings.size, 0);
+    assert.equal(panel._allocationSubmissions.size, 0);
+    assert.deepEqual(writes, [{ url: "/api/finanzplaner/bookings/b1/allocations", method: "POST" }]);
+  });
+}
+
+for (const mutation of ["create", "update", "deactivate"]) {
+  for (const order of ["old first", "fresh first", "old error first", "old error last"]) {
+    test(`rule ${mutation} refresh ignores an older deferred read (${order})`, async () => {
+      const panel = ruleTestPanel();
+      const oldRule = { ...validRuleDraft(), id: "r1", label: "Vorher" };
+      const savedRule = { ...oldRule, label: "Nachher", active: mutation !== "deactivate" };
+      const snapshot = (rules) => new Response(JSON.stringify({ rules }), { headers: { "Content-Type": "application/json" } });
+      const oldResponse = Promise.withResolvers();
+      const freshResponse = Promise.withResolvers();
+      const writes = [];
+      let reads = 0;
+      panel._rules = [oldRule];
+      panel._ruleEditingId = mutation === "create" ? "new" : "r1";
+      panel._ruleDraft = validRuleDraft();
+      panel._hass = { fetchWithAuth: (url, options) => {
+        if (options.method === "POST") {
+          writes.push({ url, body: JSON.parse(options.body) });
+          return Promise.resolve(snapshot([savedRule]));
+        }
+        if (url === "/api/finanzplaner/rules") {
+          reads += 1;
+          return reads === 1 ? oldResponse.promise : freshResponse.promise;
+        }
+        return Promise.resolve(new Response("{}", { headers: { "Content-Type": "application/json" } }));
+      } };
+      const oldRead = panel._loadRules().catch(() => {});
+      const saving = mutation === "deactivate" ? panel._deactivateRule("r1") : panel._handleRuleSave({
+        preventDefault() {}, currentTarget: { querySelector: () => null, querySelectorAll: () => [] },
+      });
+      const finishOld = () => order.includes("error")
+        ? oldResponse.reject(new Error("Veralteter Ladefehler")) : oldResponse.resolve(snapshot([oldRule]));
+      try {
+        await new Promise(setImmediate);
+        assert.equal(reads, 2, "a successful mutation must start a fresh rules GET");
+        if (order.endsWith("first") && order !== "fresh first") {
+          finishOld();
+          await oldRead;
+          assert.equal(panel._rulesLoading, true, "the current refresh is still pending");
+          assert.equal(panel._rulesLoadFailed, false);
+          const sharedRead = panel._loadRules();
+          assert.equal(reads, 2, "an obsolete request must not clear the current in-flight read");
+          freshResponse.resolve(snapshot([savedRule]));
+          await sharedRead;
+        } else {
+          freshResponse.resolve(snapshot([savedRule]));
+          await saving;
+          finishOld();
+          await oldRead;
+        }
+        await saving;
+        assert.deepEqual(panel._rules, [savedRule]);
+        assert.equal(panel._rulesLoading, false);
+        assert.equal(panel._rulesLoadFailed, false);
+        assert.equal(panel._ruleSubmitting, false);
+        assert.match(panel._ruleMessage, mutation === "deactivate" ? /deaktiviert/ : /gespeichert/);
+        assert.doesNotMatch(panel._ruleMessage, /Ladefehler/);
+        assert.equal(writes.length, 1);
+        assert.equal(writes[0].url, mutation === "create" ? "/api/finanzplaner/rules" : "/api/finanzplaner/rules/r1");
+        if (mutation === "deactivate") assert.deepEqual(writes[0].body, { active: false });
+      } finally {
+        oldResponse.resolve(snapshot([oldRule]));
+        freshResponse.resolve(snapshot([savedRule]));
+        await Promise.allSettled([oldRead, saving]);
+      }
+    });
+  }
+}
+
 test("leaving a field does not erase server feedback without editing", () => {
   const panel = ruleTestPanel();
   panel._ruleDraft = validRuleDraft();
