@@ -2049,12 +2049,12 @@ def parse_mt940_records(raw: str) -> list[ParsedBooking]:
             current = None
             current_lines = []
 
-    for line in raw.splitlines():
-        line = line.strip()
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
         if line.startswith(":25:"):
             finish()
             account = line[4:].strip()
-            context_lines.append(line)
+            context_lines.append(raw_line)
         elif line.startswith(":61:"):
             finish()
             match = re.match(
@@ -2071,9 +2071,9 @@ def parse_mt940_records(raw: str) -> list[ParsedBooking]:
                 "reference": match.group("reference").strip(),
                 "purpose": "",
             }
-            current_lines = [line]
+            current_lines = [raw_line]
         elif current is not None:
-            current_lines.append(line)
+            current_lines.append(raw_line)
             if line.startswith(":86:"):
                 current["purpose"] = line[4:].strip()
         else:

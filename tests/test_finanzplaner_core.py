@@ -333,6 +333,25 @@ class ForecastTests(unittest.TestCase):
 
 
 class ImportTests(unittest.TestCase):
+    def test_mt940_records_preserve_source_line_whitespace(self):
+        core = load_core()
+        raw = (
+            "  :20:STATEMENT-1  \n"
+            " :25:AT123456789012345678 \n"
+            "  :61:2609020902D42,50NTRFNONREF  \n"
+            " :86:Hundefutter \n"
+        )
+
+        record = core.parse_mt940_records(raw)[0]
+
+        self.assertEqual(
+            record.source_data["record"]["lines"],
+            [
+                "  :61:2609020902D42,50NTRFNONREF  ",
+                " :86:Hundefutter ",
+            ],
+        )
+
     def test_mt940_records_keep_unknown_tags_and_continuations(self):
         core = load_core()
         raw = (
@@ -380,6 +399,21 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         xml_record = records[0].source_data['record']
         self.assertEqual(xml_record['name'], 'Ntry')
+        self.assertEqual(xml_record['namespace'], 'urn:test')
+        self.assertEqual(xml_record['attributes'], {})
+        self.assertEqual(xml_record['text'].strip(), '')
+        self.assertEqual(xml_record['tail'].strip(), '')
+        self.assertEqual(xml_record['children'][0]['name'], 'Amt')
+        self.assertEqual(xml_record['children'][0]['namespace'], 'urn:test')
+        self.assertEqual(xml_record['children'][0]['attributes'], {'Ccy': 'EUR'})
+        self.assertEqual(xml_record['children'][0]['text'], '12.50')
+        self.assertEqual(xml_record['children'][0]['tail'], '')
+        self.assertEqual(xml_record['children'][0]['children'], [])
+        unknown_node = xml_record['children'][3]['children'][0]['children'][1]
+        self.assertEqual(unknown_node['name'], 'UnknownBankData')
+        self.assertEqual(unknown_node['attributes'], {'code': 'X7'})
+        self.assertEqual(unknown_node['children'][0]['name'], 'Value')
+        self.assertEqual(unknown_node['children'][0]['text'], 'nicht verlieren')
         unknown = str(xml_record)
         self.assertIn('UnknownBankData', unknown)
         self.assertIn('nicht verlieren', unknown)
