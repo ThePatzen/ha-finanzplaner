@@ -64,6 +64,7 @@ Zusätzlich enthalten:
 - Regelübernahme beim Import und über einen expliziten erneuten Lauf aus der Prüfliste; kein automatisches Nachfassen beim bloßen Anzeigen einer Buchung
 - nachvollziehbare Kennzeichnung der verwendeten Regel und ihres Treffergrunds bei automatisch übernommenen Buchungen
 - Ansicht aller übernommenen Buchungen mit Rückgängig-Funktion, die die Buchung wieder in die Prüfliste verschiebt
+- über Checkboxen auswählbare und dauerhaft löschbare Buchungen in der Prüfliste und der Ansicht übernommener Buchungen
 - Regelvorlage aus einer bestätigten Buchung über „Als Regel speichern“
 - ungültige passende Regeln mit höchster Priorität halten die Buchung mit konkretem Prüfgrund ungeklärt; es erfolgt kein Rückgriff auf niedrigere Prioritäten
 - aus bestätigten Buchungen vorbelegte Regeln lassen sich vor der ausdrücklichen Speicherung korrigieren; der Server validiert den bearbeiteten Entwurf

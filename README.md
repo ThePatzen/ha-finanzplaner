@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.5.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
+Version 0.6.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
 mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -30,6 +30,7 @@ mit den folgenden Erweiterungen und UI-Verbesserungen:
 - Regelverwaltung mit Konto-, Zahlungsempfänger- und optionalem Verwendungszweck-Matching
 - priorisierte Regelübernahmen nur bei eindeutigen Treffern, mit sichtbarer Zuordnungsquelle und Rückgängig-Funktion
 - Prüfliste mit erneutem Regel-Lauf sowie separate Ansicht für sämtliche übernommene Buchungen
+- Buchungen lassen sich in der Prüfliste und der Übernahmesicht per Checkbox einzeln oder vollständig auswählen und dauerhaft löschen
 - lokale Versionierung über Home Assistants persistenten Store
 - ausgewählte Übersichtswerte als HA-Sensoren
 
@@ -102,6 +103,8 @@ Nach einer bestätigten manuellen Aufteilung kannst du in der Prüfliste `Als Re
 Fehlende oder archivierte Zuordnungen und durch Umrechnung ungültige Prozentanteile kannst du im Entwurf korrigieren. Erst `Regel speichern` sendet die bearbeiteten Angaben zur serverseitigen Prüfung und speichert die neue Regel. Die ursprüngliche Buchung bleibt dabei unverändert.
 
 In `Übernommene Buchungen` kannst du sämtliche automatisch und manuell übernommenen Buchungen einsehen. Die Zuordnungsquelle zeigt bei Regelübernahmen die verwendete Regel und ihren Treffergrund. `Zuordnung rückgängig` leert die Aufteilung und setzt die Buchung wieder auf ungeklärt; sie erscheint danach erneut in der Prüfliste und wird erst bei einem erneuten Regel-Lauf wieder automatisch geprüft.
+
+In `Buchungen prüfen` und `Übernommene Buchungen` kannst du Buchungen per Checkbox markieren. `Alle auswählen` markiert die aktuell sichtbare Liste; `Auswahl löschen` entfernt die markierten Buchungen nach einer Sicherheitsbestätigung dauerhaft.
 
 Regeln und Vorschläge verarbeitet Finanzplaner lokal in Home Assistant. Vollständige Kontoreferenzen bleiben im lokalen Speicher; Oberfläche und API zeigen nur maskierte Kontodaten.
 

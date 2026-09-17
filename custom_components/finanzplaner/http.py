@@ -1823,6 +1823,55 @@ class ResolvedBookingsView(HomeAssistantView):
         return self.json(_response_payload({"bookings": resolved}))
 
 
+class BookingDeleteView(HomeAssistantView):
+    """Permanently delete a selected set of bookings."""
+
+    url = "/api/finanzplaner/bookings"
+    name = "api:finanzplaner:bookings:delete"
+    requires_auth = True
+
+    async def delete(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(
+                text="Die Löschung ist kein gültiges JSON."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Löschung muss als Objekt übermittelt werden.")
+
+        booking_ids = payload.get("booking_ids")
+        if not isinstance(booking_ids, list) or not booking_ids:
+            raise web.HTTPBadRequest(text="Bitte mindestens eine Buchung zum Löschen auswählen.")
+        if not all(isinstance(booking_id, str) and booking_id.strip() for booking_id in booking_ids):
+            raise web.HTTPBadRequest(text="Die Buchungs-IDs müssen gültige Texte sein.")
+        requested_ids = list(dict.fromkeys(booking_id.strip() for booking_id in booking_ids))
+
+        stored_bookings = coordinator.store.data.get("bookings", [])
+        if not isinstance(stored_bookings, list):
+            raise web.HTTPBadRequest(text="Die gespeicherten Buchungen sind ungültig.")
+        stored_ids = {
+            booking.get("id")
+            for booking in stored_bookings
+            if isinstance(booking, dict) and isinstance(booking.get("id"), str)
+        }
+        if any(booking_id not in stored_ids for booking_id in requested_ids):
+            raise web.HTTPNotFound(text="Eine oder mehrere Buchungen wurden nicht gefunden.")
+
+        requested_id_set = set(requested_ids)
+        coordinator.store.data["bookings"] = [
+            booking
+            for booking in stored_bookings
+            if not isinstance(booking, dict) or booking.get("id") not in requested_id_set
+        ]
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"deleted": len(requested_ids)}))
+
+
 class ApplyRulesView(HomeAssistantView):
     """Re-apply rules to every currently unresolved booking."""
 

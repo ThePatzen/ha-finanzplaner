@@ -598,6 +598,7 @@ class RuleViewTests(unittest.TestCase):
             self.http.RulesView().post(self._request(self._valid_rule_payload(), authenticated=False)),
             self.http.RuleView().post(self._request({"active": False}, authenticated=False), "rule-1"),
             self.http.RuleFromBookingView().post(self._request({}, authenticated=False), "booking-resolved"),
+            self.http.BookingDeleteView().delete(self._request({"booking_ids": ["booking-resolved"]}, authenticated=False)),
             self.http.UnresolvedBookingsView().get(self._request(authenticated=False)),
         )
         for call in calls:
@@ -842,6 +843,32 @@ class AutomaticRuleApplicationTests(unittest.TestCase):
         self.assertEqual(self.coordinator.store.save_count, 1)
         self.assertEqual(self.coordinator.refresh_count, before_refreshes + 1)
 
+    def test_delete_removes_selected_bookings_and_refreshes_data(self):
+        result = asyncio.run(
+            self.http.BookingDeleteView().delete(
+                self._request({"booking_ids": ["booking-resolved", "booking-unresolved"]})
+            )
+        )
+
+        self.assertEqual(result["deleted"], 2)
+        self.assertEqual(self.coordinator.store.data["bookings"], [])
+        self.assertEqual(self.coordinator.store.save_count, 1)
+        self.assertEqual(self.coordinator.refresh_count, 1)
+
+    def test_delete_rejects_unknown_booking_without_mutating_store(self):
+        before = deepcopy(self.coordinator.store.data)
+
+        with self.assertRaises(self.not_found):
+            asyncio.run(
+                self.http.BookingDeleteView().delete(
+                    self._request({"booking_ids": ["booking-missing"]})
+                )
+            )
+
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+        self.assertEqual(self.coordinator.refresh_count, 0)
+
 
 class RuleRegistrationTests(unittest.TestCase):
     def test_async_setup_registers_authenticated_rule_views(self):
@@ -855,7 +882,7 @@ class RuleRegistrationTests(unittest.TestCase):
         with patch.dict(sys.modules, {"custom_components.finanzplaner.http": http}):
             asyncio.run(finanzplaner.async_setup(hass, {}))
 
-        for view in (http.RulesView, http.RuleView, http.RuleFromBookingView):
+        for view in (http.RulesView, http.RuleView, http.RuleFromBookingView, http.BookingDeleteView):
             with self.subTest(view=view.__name__):
                 self.assertIn(view, registered)
                 self.assertIs(view.requires_auth, True)

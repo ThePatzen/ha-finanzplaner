@@ -40,6 +40,19 @@ export function selectedSuggestionSummary(suggestions = []) {
   );
 }
 
+export function bookingSelectionState(bookings = [], selectedIds = []) {
+  const selected = new Set([...selectedIds].map((id) => String(id)));
+  const selectedCount = bookings.reduce(
+    (count, booking) => count + (selected.has(String(booking?.id)) ? 1 : 0),
+    0,
+  );
+  return {
+    selectedCount,
+    allSelected: bookings.length > 0 && selectedCount === bookings.length,
+    someSelected: selectedCount > 0 && selectedCount < bookings.length,
+  };
+}
+
 export function suggestionDraft(booking) {
   return booking?.status === "suggested"
     ? (booking.suggestion?.allocations || []).map((row) => ({ ...row }))

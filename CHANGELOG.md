@@ -8,9 +8,9 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
-## Unreleased
+## [0.6.0] – 2026-09-17
 
-Noch keine Änderungen.
+- Buchungen können in der Prüfliste und der Ansicht übernommener Buchungen per Checkbox einzeln oder vollständig ausgewählt und dauerhaft gelöscht werden.
 
 ## [0.5.0] – 2026-09-17
 
@@ -132,3 +132,4 @@ Erste vorbereitete vertikale Version:
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
 [0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
+[0.6.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.6.0

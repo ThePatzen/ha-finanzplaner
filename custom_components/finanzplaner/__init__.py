@@ -30,6 +30,7 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
         AccountView,
         ApplyRulesView,
         BookingAllocationsView,
+        BookingDeleteView,
         CatalogEntriesView,
         CatalogEntryView,
         CatalogsView,
@@ -77,6 +78,7 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
     hass.http.register_view(ApplyRulesView)
     hass.http.register_view(BookingAssignmentView)
     hass.http.register_view(BookingAllocationsView)
+    hass.http.register_view(BookingDeleteView)
     hass.http.register_view(BookingUnresolveView)
     hass.http.register_view(ImportView)
     hass.http.register_view(ExcelPreviewView)

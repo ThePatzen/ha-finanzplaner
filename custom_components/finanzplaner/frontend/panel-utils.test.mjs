@@ -199,6 +199,26 @@ test("distributes remainder cents one-by-one across the first rows", () => {
   );
 });
 
+test("describes empty, partial, and complete booking selections", () => {
+  const bookings = [{ id: "booking-1" }, { id: "booking-2" }, { id: "booking-3" }];
+
+  assert.deepEqual(utils.bookingSelectionState(bookings, []), {
+    selectedCount: 0,
+    allSelected: false,
+    someSelected: false,
+  });
+  assert.deepEqual(utils.bookingSelectionState(bookings, ["booking-1", "booking-2"]), {
+    selectedCount: 2,
+    allSelected: false,
+    someSelected: true,
+  });
+  assert.deepEqual(utils.bookingSelectionState(bookings, ["booking-1", "booking-2", "booking-3"]), {
+    selectedCount: 3,
+    allSelected: true,
+    someSelected: false,
+  });
+});
+
 test("calculates the remaining allocation amount in cents", () => {
   assert.equal(
     utils.allocationRemaining(100, [{ amount: 60 }, { amount: 20 }]),
@@ -525,9 +545,48 @@ test("review exposes rule reapplication and the resolved booking navigation", ()
   assert.match(panelSource, /const APPLY_RULES_URL = "\/api\/finanzplaner\/bookings\/apply-rules"/);
   assert.match(panelSource, /const RESOLVED_URL = "\/api\/finanzplaner\/bookings\/resolved"/);
   assert.match(panelSource, /data-action="apply-rules"/);
-  assert.match(panelSource, /\["resolved", "check", "Übernommen"\]/);
+  assert.match(panelSource, /\["resolved", "check", "Buchungen"\]/);
   assert.match(panelSource, /data-unresolve-booking=/);
+  assert.match(panelSource, /data-booking-select-all/);
+  assert.match(panelSource, /data-delete-bookings/);
   assert.match(panelSource, /<table[^>]*>.*Übernommene Buchungen/s);
+});
+
+test("deleting selected review bookings sends a bulk DELETE and refreshes the data", async () => {
+  const panel = ruleTestPanel();
+  panel._bookings = [{ id: "booking-1" }, { id: "booking-2" }];
+  panel._selectedReviewBookings = new Set(["booking-1"]);
+  panel._loadReviewData = async () => {};
+  panel._loadOverview = async () => {};
+  panel._hass = { fetchWithAuth: async (url, options) => {
+    assert.equal(url, "/api/finanzplaner/bookings");
+    assert.equal(options.method, "DELETE");
+    assert.deepEqual(JSON.parse(options.body), { booking_ids: ["booking-1"] });
+    return new Response(JSON.stringify({ deleted: 1 }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } };
+
+  await panel._deleteSelectedBookings("review");
+
+  assert.equal(panel._selectedReviewBookings.size, 0);
+});
+
+test("deleting selected resolved bookings refreshes the resolved list", async () => {
+  const panel = ruleTestPanel();
+  panel._resolvedBookings = [{ id: "booking-resolved" }];
+  panel._selectedResolvedBookings = new Set(["booking-resolved"]);
+  let resolvedLoads = 0;
+  panel._loadResolvedBookings = async () => { resolvedLoads += 1; };
+  panel._loadOverview = async () => {};
+  panel._hass = { fetchWithAuth: async () => new Response(JSON.stringify({ deleted: 1 }), {
+    headers: { "Content-Type": "application/json" },
+  }) };
+
+  await panel._deleteSelectedBookings("resolved");
+
+  assert.equal(resolvedLoads, 1);
+  assert.equal(panel._selectedResolvedBookings.size, 0);
 });
 
 test("reapplying rules posts once and refreshes the review and overview", async () => {
