@@ -38,6 +38,8 @@ Die Integration zeigt bei einem leeren Workspace klar markierte synthetische Dem
 
 ## Installation über HACS
 
+[![Repository in HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ThePatzen&repository=ha-finanzplaner&category=integration)
+
 1. HACS → Integrationen → Drei-Punkte-Menü → Benutzerdefiniertes Repository.
 2. `https://github.com/ThePatzen/ha-finanzplaner` als Integration hinzufügen.
 3. Finanzplaner installieren und Home Assistant neu starten.
