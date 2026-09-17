@@ -6,8 +6,8 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.6.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
-mit den folgenden Erweiterungen und UI-Verbesserungen:
+Version 0.7.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
+und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
 - native Home-Assistant-Seitenleiste mit schneller Monatsübersicht
@@ -31,18 +31,10 @@ mit den folgenden Erweiterungen und UI-Verbesserungen:
 - priorisierte Regelübernahmen nur bei eindeutigen Treffern, mit sichtbarer Zuordnungsquelle und Rückgängig-Funktion
 - Prüfliste mit erneutem Regel-Lauf sowie separate Ansicht für sämtliche übernommene Buchungen
 - Buchungen lassen sich in der Prüfliste und der Übernahmesicht per Checkbox einzeln oder vollständig auswählen und dauerhaft löschen
+- Budget-Ist-Vergleich für Bereiche, Kategorien und Projekte mit Inline-Details zu Planposten und Buchungen
+- erkannte Konten in ungeklärten Buchungen mit Kontonamen und maskierter Referenz
 - lokale Versionierung über Home Assistants persistenten Store
 - ausgewählte Übersichtswerte als HA-Sensoren
-
-### Unreleased
-
-Die noch nicht veröffentlichte Erweiterung ergänzt die Monatsübersicht um den
-Budget-Ist-Vergleich. Er zeigt die Werte des ausgewählten Monats je Bereich,
-Kategorie oder Projekt. Über die drei Schaltflächen wechselst du die Dimension.
-Mit `Details` öffnest du unter der Tabelle eine Inline-Ansicht mit den passenden
-Planposten und Buchungen. Planposten zeigen Betrag, Richtung und Rhythmus;
-Buchungen zeigen den zugeordneten Teilbetrag. In Demo-Daten sind
-Detailbuchungen nicht verfügbar.
 
 Die Integration zeigt bei einem leeren Workspace klar markierte synthetische Demo-Daten. Private Konten, Bankdateien und die ursprüngliche Excel-Datei gehören nicht in dieses öffentliche Repository.
 

@@ -943,10 +943,13 @@ test("review shows payment recipient separately from purpose", () => {
   panel._bookings = [{
     id: "b-display", booking_date: "2026-06-08", counterparty: "Sparenzu",
     purpose: "POS 166,90 AT K1 05.06. 10:30", amount: -0.10, status: "unresolved",
+    account_label: "Gemeinsames Girokonto", account_reference: "•••• 5678",
   }];
   const markup = panel._reviewTemplate();
   assert.match(markup, /Zahlungsempfänger:.*Sparenzu/);
   assert.match(markup, /Verwendungszweck:.*POS 166,90/);
+  assert.match(markup, /Erkanntes Konto:.*Gemeinsames Girokonto/);
+  assert.match(markup, /Kontoreferenz:.*•••• 5678/);
 
   panel._bookings[0].counterparty = "";
   panel._bookings[0].purpose = "Sparenzu POS 166,90 AT K1 05.06. 10:30";

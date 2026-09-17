@@ -1845,7 +1845,14 @@ class UnresolvedBookingsView(HomeAssistantView):
                 catalogs=catalogs,
                 pets=pets,
             )
-            projected.append({**booking, **suggestion})
+            account_id = booking.get("account_id")
+            account = accounts.get(account_id) if isinstance(account_id, str) else None
+            account_label = account.get("label") if isinstance(account, dict) else None
+            projected.append({
+                **booking,
+                "account_label": account_label if isinstance(account_label, str) else None,
+                **suggestion,
+            })
         return self.json(_response_payload({"bookings": projected}))
 
 

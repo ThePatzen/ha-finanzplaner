@@ -623,6 +623,25 @@ class UnresolvedRuleProjectionTests(unittest.TestCase):
     setUp = RuleViewTests.setUp
     _request = RuleViewTests._request
 
+    def test_unresolved_list_exposes_account_label_and_masked_reference(self):
+        booking = {
+            "id": "booking-account-display",
+            "status": "unresolved",
+            "account_id": "account-1",
+            "account_reference": "AT123456789012345678",
+            "counterparty": "Offene Buchung",
+            "amount": -15.0,
+            "allocations": [],
+        }
+        self.coordinator.store.data["bookings"] = [booking]
+
+        body = asyncio.run(self.http.UnresolvedBookingsView().get(self._request()))
+
+        projected = body["bookings"][0]
+        self.assertEqual(projected["account_label"], "Gemeinsames Girokonto")
+        self.assertEqual(projected["account_reference"], "…5678")
+        self.assertNotIn("AT123456789012345678", str(body))
+
     def test_unresolved_list_exposes_suggestion_without_mutating_store(self):
         booking = {
             "id": "booking-1",

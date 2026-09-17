@@ -10,6 +10,9 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+## [0.7.0] – 2026-09-17
+
+- Ungeklärte Buchungen zeigen das erkannte Konto jetzt mit Kontonamen und maskierter Referenz klar getrennt vom Zuordnungsziel.
 - Monatsübersicht um einen Budget-Ist-Vergleich für Bereiche, Kategorien und Projekte erweitert; die Tabelle zeigt Plan, Prognose, Ist und Abweichung.
 - Vergleichszeilen öffnen eine Inline-Detailansicht mit den passenden Planposten und Buchungen; Buchungen zeigen den zugeordneten Teilbetrag.
 - Monatsverlauf proportional skaliert und den zugänglichen Chart-Inhalt gegen sichtbaren Textüberlauf abgesichert.
@@ -137,4 +140,5 @@ Erste vorbereitete vertikale Version:
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
 [0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
+[0.7.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.6.0
