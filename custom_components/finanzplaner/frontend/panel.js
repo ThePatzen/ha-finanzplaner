@@ -256,12 +256,12 @@ const styles = `
 
   .workspace { display: grid; grid-template-columns: minmax(0, 3fr) minmax(16rem, 1fr); gap: 1rem; }
   .surface { border: 1px solid var(--fp-line); border-radius: var(--fp-radius); background: rgb(255 254 249 / 0.72); box-shadow: var(--fp-shadow); }
-  .trend-card { --chart-block-size: 20rem; min-inline-size: 0; padding: 1.15rem 1.25rem 0.95rem; }
+  .trend-card { --chart-aspect-ratio: 720 / 260; min-inline-size: 0; padding: 1.15rem 1.25rem 0.95rem; }
   .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
   .section-heading h3 { margin: 0; font-family: var(--fp-display); font-size: 1.4rem; line-height: 1; letter-spacing: -0.025em; }
   .section-heading p { margin: 0; color: var(--fp-muted); font-size: 0.78rem; }
-  .chart-wrap { position: relative; margin-block-start: 0.8rem; min-block-size: var(--chart-block-size); }
-  .chart-wrap svg { inline-size: 100%; block-size: var(--chart-block-size); overflow: visible; }
+  .chart-wrap { position: relative; margin-block-start: 0.8rem; }
+  .chart-wrap svg { display: block; inline-size: 100%; aspect-ratio: var(--chart-aspect-ratio); block-size: auto; overflow: visible; }
   .chart-grid-line { stroke: #d7dddf; stroke-width: 1; }
   .chart-axis-label { fill: #647487; font-family: var(--fp-data); font-size: 10px; }
   .chart-plan { fill: none; stroke: #9daab6; stroke-width: 2; stroke-dasharray: 7 6; }
@@ -692,7 +692,7 @@ const styles = `
   .confirmed-bookings { display: grid; gap: 0.65rem; padding: 0; list-style: none; }
   .confirmed-bookings li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.65rem; padding-block: 0.65rem; border-block-end: 1px solid var(--fp-line); }
 
-  .visually-hidden { position: absolute !important; inline-size: 1px !important; block-size: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
+  .visually-hidden { position: absolute !important; display: block !important; inline-size: 1px !important; block-size: 1px !important; margin: -1px !important; padding: 0 !important; overflow: hidden !important; border: 0 !important; clip: rect(0 0 0 0) !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
   .skip-link { inset: 0.75rem auto auto 0.75rem; z-index: 10; padding: 0.6rem 0.8rem; color: var(--fp-paper); background: var(--fp-navy); }
   .skip-link:focus-visible { position: fixed !important; inline-size: auto !important; block-size: auto !important; overflow: visible !important; clip-path: none !important; white-space: normal !important; }
   :where(a, button, input, select):focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 3px; }
@@ -746,10 +746,9 @@ const styles = `
     .metric { padding-inline: 0.6rem; }
     .metric-value { font-size: 1.35rem; }
     .metric-caption { font-size: 0.73rem; }
-    .trend-card { --chart-block-size: 16rem; padding-inline: 0.75rem; }
+    .trend-card { --chart-aspect-ratio: 720 / 260; padding-inline: 0.75rem; }
     .section-heading { display: block; }
     .section-heading p { margin-block-start: 0.35rem; }
-    .chart-wrap, .chart-wrap svg { min-block-size: var(--chart-block-size); block-size: var(--chart-block-size); }
     .chart-legend { gap: 0.45rem 0.7rem; font-size: 0.68rem; }
     .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1rem; }
     .statusbar { display: block; }
@@ -954,7 +953,7 @@ function chartMarkup(trend = fallbackOverview.trend) {
     return `<line class="chart-grid-line" x1="${left}" x2="${width - right}" y1="${y}" y2="${y}"></line><text class="chart-axis-label" x="0" y="${y + 4}">${label}</text>`;
   }).join("");
   const dots = (values, className) => values.map((value, index) => `<circle class="chart-dot ${className}" cx="${point(value, index).split(",")[0]}" cy="${point(value, index).split(",")[1]}" r="${className.includes("planned") ? 3.2 : 4}"></circle>`).join("");
-  return `<svg role="img" aria-labelledby="trend-title trend-description" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+  return `<svg role="img" aria-labelledby="trend-title trend-description" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
     <title id="trend-title">Kumulativer Monatsverlauf</title>
     <desc id="trend-description">${escapeHtml(trendSummary(trend))}</desc>
     ${grid}

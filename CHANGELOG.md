@@ -12,6 +12,7 @@ Das Projekt verwendet Semantic Versioning:
 
 - Monatsübersicht um einen Budget-Ist-Vergleich für Bereiche, Kategorien und Projekte erweitert; die Tabelle zeigt Plan, Prognose, Ist und Abweichung.
 - Vergleichszeilen öffnen eine Inline-Detailansicht mit den passenden Planposten und Buchungen; Buchungen zeigen den zugeordneten Teilbetrag.
+- Monatsverlauf proportional skaliert und den zugänglichen Chart-Inhalt gegen sichtbaren Textüberlauf abgesichert.
 
 ## [0.6.0] – 2026-09-17
 - Buchungen können in der Prüfliste und der Ansicht übernommener Buchungen per Checkbox einzeln oder vollständig ausgewählt und dauerhaft gelöscht werden.

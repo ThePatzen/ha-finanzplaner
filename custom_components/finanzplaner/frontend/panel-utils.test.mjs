@@ -41,11 +41,15 @@ test("builds an accessible chart summary from trend values", () => {
   );
 });
 
-test("gives the monthly trend chart enough vertical room at each breakpoint", () => {
-  assert.match(panelSource, /\.trend-card\s*\{[^}]*--chart-block-size:\s*20rem/s);
-  assert.match(panelSource, /\.chart-wrap\s*\{[^}]*min-block-size:\s*var\(--chart-block-size\)/s);
-  assert.match(panelSource, /\.chart-wrap svg\s*\{[^}]*block-size:\s*var\(--chart-block-size\)/s);
-  assert.match(panelSource, /@media \(max-width: 45rem\)[\s\S]*?\.trend-card\s*\{[^}]*--chart-block-size:\s*16rem/s);
+test("keeps the monthly trend chart proportional in its responsive card", () => {
+  assert.match(panelSource, /\.trend-card\s*\{[^}]*--chart-aspect-ratio:\s*720\s*\/\s*260/s);
+  assert.match(panelSource, /\.chart-wrap svg\s*\{[^}]*display:\s*block[^}]*aspect-ratio:\s*var\(--chart-aspect-ratio\)[^}]*block-size:\s*auto/s);
+  assert.match(panelSource, /preserveAspectRatio="xMidYMid meet"/);
+  assert.doesNotMatch(panelSource, /preserveAspectRatio="none"/);
+});
+
+test("keeps the accessible chart summary from spilling into the visible card", () => {
+  assert.match(panelSource, /\.visually-hidden\s*\{[^}]*margin:\s*-1px[^}]*clip:\s*rect\(0\s+0\s+0\s+0\)/s);
 });
 
 test("returns from a root-hosted panel to the HA base route", () => {
