@@ -10,6 +10,9 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+- Buchungsdetails als Popup für ungeklärte und übernommene Buchungen
+- verlustfreie Quelldatenansicht für importierte MT940-/CAMT.053-Buchungssätze
+
 ## [0.7.0] – 2026-09-17
 
 - Ungeklärte Buchungen zeigen das erkannte Konto jetzt mit Kontonamen und maskierter Referenz klar getrennt vom Zuordnungsziel.

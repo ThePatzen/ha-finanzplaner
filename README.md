@@ -90,6 +90,8 @@ neue Zuordnungen nicht angeboten, bleiben in alten Buchungen aber sichtbar.
 
 Beim Import einer CAMT.053- oder MT940-Datei erkennt Finanzplaner das verwendete Konto automatisch und verknüpft neue Buchungen mit diesem Konto. Eindeutige, gültige Regeltreffer mit höchster Priorität werden dabei automatisch übernommen; Konflikte und ungeklärte Treffer bleiben in `Buchungen prüfen`. Mehrere solche Buchungsdateien können auch gemeinsam als ZIP-Datei importiert werden; das Archiv wird vor dem Speichern vollständig geprüft und darf maximal 500 Dateien beziehungsweise 10 MB entpackte Daten enthalten. Damit lassen sich beispielsweise Jahresdaten von fünf Konten mit je zwölf Monatsdateien gemeinsam importieren. Vollständige IBANs bleiben ausschließlich im lokalen Speicher; die Oberfläche und API-Antworten zeigen nur maskierte Kontoangaben. Unbekannte Konten werden ohne automatische Zuordnung angelegt und können anschließend in der Ansicht `Konten` benannt, archiviert und mit mehreren Kontoinhabern gepflegt werden.
 
+Über das Detail-Popup lassen sich ungeklärte und übernommene Buchungen einschließlich ihrer normalisierten Felder und des vollständigen buchungsbezogenen MT940-/CAMT.053-Quellsatzes prüfen. Die Quelldaten werden lokal aufbewahrt, in Oberfläche und API jedoch maskiert dargestellt. Ein unverändertes Original der hochgeladenen Bankdatei wird nicht als Downloadarchiv gespeichert.
+
 Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`person.*`-Entitäten; zusätzlich steht `Haushalt` für gemeinsame Konten und Ausgaben bereit. Kontoinhaber beschreiben nur die Zahlungsquelle. Sie werden nicht automatisch auf bestehende oder neue Buchungen übertragen.
 
 ## Buchungsregeln

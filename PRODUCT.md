@@ -92,6 +92,8 @@ Weitere Produktfähigkeiten und Leitplanken:
 - Manuelle Zuordnungen werden ausdrücklich gespeichert; eine automatische oder manuelle Übernahme kann über die Ansicht „Übernommene Buchungen“ rückgängig gemacht werden.
 - Regeländerungen und deaktivierte Regeln verändern bestehende bestätigte Buchungsaufteilungen nicht rückwirkend.
 - Vollständige Kontoreferenzen bleiben im lokalen Speicher; Panel und API zeigen Kontodaten nur maskiert.
+- Die normalisierten Parserfelder bleiben für die Fachlogik erhalten; zusätzlich wird der vollständige buchungsbezogene MT940-/CAMT.053-Quellsatz lokal zur Prüfung aufbewahrt und in API sowie Panel maskiert dargestellt.
+- Es wird kein unverändertes Original der importierten Bankdatei als Downloadarchiv aufbewahrt.
 - keine direkte Open-Banking-Anbindung in der ersten Version
 - keine automatische Überwachung eines Dateiordners in der ersten Version
 - keine echten Finanzdaten im öffentlichen Repository
