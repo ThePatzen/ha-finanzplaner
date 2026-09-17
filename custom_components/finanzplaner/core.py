@@ -2101,6 +2101,20 @@ def _descendant_text(element: ET.Element, name: str) -> str:
     return ""
 
 
+def _camt_counterparty(entry: ET.Element, direction: str) -> str:
+    party_name = {"DBIT": "Cdtr", "CRDT": "Dbtr"}.get(direction.upper())
+    if party_name:
+        for related_parties in entry.iter():
+            if _local_name(related_parties.tag) != "RltdPties":
+                continue
+            for party in related_parties:
+                if _local_name(party.tag) == party_name:
+                    name = _descendant_text(party, "Nm")
+                    if name:
+                        return name
+    return _descendant_text(entry, "Nm")
+
+
 def parse_camt053_records(raw: str) -> list[ParsedBooking]:
     """Parse CAMT.053 entries without binding the UI to a bank-specific namespace."""
 
@@ -2141,7 +2155,7 @@ def parse_camt053_records(raw: str) -> list[ParsedBooking]:
                         amount=amount,
                         purpose=_descendant_text(entry, "Ustrd"),
                         reference=_descendant_text(entry, "EndToEndId"),
-                        counterparty=_descendant_text(entry, "Nm"),
+                        counterparty=_camt_counterparty(entry, direction),
                         currency=amount_node.attrib.get("Ccy", "EUR"),
                     ),
                     source_data={

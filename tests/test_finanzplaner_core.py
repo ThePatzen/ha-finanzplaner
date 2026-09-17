@@ -533,6 +533,34 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(bookings[0].counterparty, "Solarwerk")
         self.assertEqual(bookings[0].reference, "PAY-42")
 
+    def test_camt053_uses_counterparty_for_booking_direction(self):
+        core = load_core()
+        raw = """<Document>
+          <BkToCstmrStmt><Stmt><Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+            <Ntry><Amt Ccy="EUR">6.08</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+              <BookgDt><Dt>2026-08-17</Dt></BookgDt>
+              <NtryDtls><TxDtls><RltdPties>
+                <Dbtr><Nm>Egger David</Nm></Dbtr>
+                <Cdtr><Nm>Marktgemeinde Telfs</Nm></Cdtr>
+              </RltdPties><RmtInf><Ustrd>Gemeindeabgabe</Ustrd></RmtInf></TxDtls></NtryDtls>
+            </Ntry>
+            <Ntry><Amt Ccy="EUR">125.00</Amt><CdtDbtInd>CRDT</CdtDbtInd>
+              <BookgDt><Dt>2026-08-18</Dt></BookgDt>
+              <NtryDtls><TxDtls><RltdPties>
+                <Dbtr><Nm>Solarwerk</Nm></Dbtr>
+                <Cdtr><Nm>Egger David</Nm></Cdtr>
+              </RltdPties><RmtInf><Ustrd>PV Erlös</Ustrd></RmtInf></TxDtls></NtryDtls>
+            </Ntry>
+          </Stmt></BkToCstmrStmt>
+        </Document>"""
+
+        bookings = core.parse_camt053(raw)
+
+        self.assertEqual(
+            [booking.counterparty for booking in bookings],
+            ["Marktgemeinde Telfs", "Solarwerk"],
+        )
+
     def test_camt053_uses_each_statement_account_and_ignores_counterparty_iban(self):
         core = load_core()
         raw = """<Document>

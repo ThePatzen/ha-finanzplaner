@@ -8,6 +8,10 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## Unreleased
+
+- CAMT.053-Lastschriften zeigen jetzt den Zahlungsempfänger statt des eigenen Kontoinhabers als Gegenpartei.
+
 ## [0.8.0] – 2026-09-17
 
 - Buchungsdetails als Popup für ungeklärte und übernommene Buchungen
