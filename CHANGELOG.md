@@ -10,6 +10,10 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+Noch keine Änderungen.
+
+## [0.5.0] – 2026-09-17
+
 - Eindeutige, gültige Regeltreffer werden beim Import automatisch übernommen; gleichrangige Regelkonflikte und ungeklärte Treffer bleiben in der Prüfliste.
 - Die Prüfliste bietet `Regeln erneut anwenden`, um nach neuen oder geänderten Regeln offene Buchungen erneut zu prüfen.
 - Übernommene Buchungen sind in einer eigenen Ansicht vollständig einsehbar; automatische Zuordnungen speichern die zutreffende Regel als Snapshot mit Treffergrund.

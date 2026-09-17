@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.4.1 umfasst die erste durchgängige Konten- und Aufteilungsstrecke
+Version 0.5.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
 mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
