@@ -1324,6 +1324,10 @@ def _catalog_entries(
     return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
 
 
+def _catalog_scope_key(label: object, parent_id: object = None) -> tuple[str, str]:
+    return (str(parent_id or ""), str(label or "").casefold())
+
+
 def _catalog_kind(kind: str) -> str:
     if kind not in CATALOG_KINDS:
         raise ValueError("Die Stammdatenart ist ungültig.")
@@ -1411,12 +1415,20 @@ class CatalogEntriesView(HomeAssistantView):
 
         entries = _catalog_entries(coordinator, kind)
         label = str(values["label"])
-        if any(str(entry.get("label", "")).casefold() == label.casefold() for entry in entries):
+        scope_key = _catalog_scope_key(label, values.get("parent_id"))
+        if any(
+            _catalog_scope_key(entry.get("label"), entry.get("parent_id")) == scope_key
+            for entry in entries
+        ):
             raise web.HTTPBadRequest(text="Diese Bezeichnung ist bereits vorhanden.")
         now_iso = datetime.now(timezone.utc).isoformat()
         entry = _materialize_catalog_entry(
             values,
-            entry_id=catalog_id_for_label(kind, label),
+            entry_id=catalog_id_for_label(
+                kind,
+                label,
+                values.get("parent_id") if kind == "categories" else None,
+            ),
             now_iso=now_iso,
         )
         catalogs = coordinator.store.data.setdefault("catalogs", {})
@@ -1482,9 +1494,10 @@ class CatalogEntryView(HomeAssistantView):
             raise web.HTTPBadRequest(text=str(exc)) from exc
 
         label = str(values["label"])
+        scope_key = _catalog_scope_key(label, values.get("parent_id"))
         if any(
             other is not entry
-            and str(other.get("label", "")).casefold() == label.casefold()
+            and _catalog_scope_key(other.get("label"), other.get("parent_id")) == scope_key
             for other in _catalog_entries(coordinator, kind)
         ):
             raise web.HTTPBadRequest(text="Diese Bezeichnung ist bereits vorhanden.")

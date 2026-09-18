@@ -746,6 +746,47 @@ class PetApiTests(unittest.TestCase):
         )["catalog"]
         self.assertEqual(renamed["parent_id"], shopping["id"])
 
+        bank = asyncio.run(
+            self.http.CatalogEntriesView().post(
+                self._request({"label": "Bank", "active": True}),
+                "categories",
+            )
+        )["catalog"]
+        house_fees = asyncio.run(
+            self.http.CatalogEntriesView().post(
+                self._request({"label": "Gebühren", "parent_id": shopping["id"]}),
+                "categories",
+            )
+        )["catalog"]
+        bank_fees = asyncio.run(
+            self.http.CatalogEntriesView().post(
+                self._request({"label": "Gebühren", "parent_id": bank["id"]}),
+                "categories",
+            )
+        )["catalog"]
+        self.assertNotEqual(house_fees["id"], bank_fees["id"])
+
+        with self.assertRaises(self.bad_request):
+            asyncio.run(
+                self.http.CatalogEntriesView().post(
+                    self._request(
+                        {"label": " gebühren ", "parent_id": shopping["id"]}
+                    ),
+                    "categories",
+                )
+            )
+
+        with self.assertRaises(self.bad_request):
+            asyncio.run(
+                self.http.CatalogEntryView().post(
+                    self._request(
+                        {"label": "Amazon Prime", "parent_id": shopping["id"]}
+                    ),
+                    "categories",
+                    bank_fees["id"],
+                )
+            )
+
         with self.assertRaises(self.bad_request):
             asyncio.run(
                 self.http.CatalogEntriesView().post(
