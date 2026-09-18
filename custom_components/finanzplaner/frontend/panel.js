@@ -686,10 +686,12 @@ const styles = `
   .rule-actions p { flex: 1 1 16rem; }
   .rules-view button:disabled, .review-view button:disabled { cursor: not-allowed; opacity: 0.55; }
   .rules-view .management-table-wrap:focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 3px; }
-  .rules-view .management-table { min-inline-size: 64rem; }
+  .rules-view .management-table { min-inline-size: 58rem; }
   .rules-view .management-table td, .rules-view .management-table tbody th { min-inline-size: 9rem; max-inline-size: 24rem; overflow-wrap: anywhere; }
   .rules-view .management-table .table-number { min-inline-size: 6rem; }
   .rules-view .management-table ul { margin: 0; padding-inline-start: 1.1rem; }
+  .rules-view .management-table .rule-account-group:hover { background: transparent; }
+  .rules-view .management-table .rule-account-group th { padding-block: 0.7rem; border-block-start: 0.7rem solid var(--fp-paper); color: var(--fp-navy); background: var(--fp-cyan-soft); font-family: var(--fp-display); font-size: 0.85rem; letter-spacing: 0; text-transform: none; }
   .booking-rule-hint { grid-column: 1 / -1; padding: 0.8rem; background: var(--fp-cyan-soft); border-radius: 0.45rem; overflow-wrap: anywhere; }
   .booking-rule-hint--conflict { background: var(--fp-amber-soft); }
   .booking-rule-hint h3, .booking-rule-hint p { margin: 0 0 0.55rem; }
@@ -4499,14 +4501,33 @@ class FinanzplanerPanel extends HTMLElement {
 
   _rulesOverviewTemplate() {
     const disabled = this._ruleSubmitting ? " disabled" : "";
-    const rows = this._rules.map((rule) => {
+    const accountLabelForRule = (rule) => {
       const account = this._accounts.find((entry) => entry.id === rule.account_id);
-      const accountLabel = !rule.account_id ? "Alle Konten" : account ? `${account.label || account.iban_masked || account.id}${account.active === false ? " (archiviert)" : ""}` : `${rule.account_id} (Konto fehlt)`;
-      const invalid = Object.keys(this._ruleValidationErrors(this._ruleDraftFromRule(rule))).length > 0;
-      return `<tr><th scope="row">${escapeHtml(rule.label)}</th><td>${rule.active === false ? "Deaktiviert" : "Aktiv"}${invalid ? " · Angaben prüfen" : ""}</td><td class="table-number">${escapeHtml(rule.priority)}</td><td>${escapeHtml(accountLabel)}</td><td>${escapeHtml(rule.counterparty)}${rule.purpose_contains ? `<p>Verwendungszweck enthält: ${escapeHtml(rule.purpose_contains)}</p>` : ""}</td><td><ul>${(rule.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row, true))}</li>`).join("")}</ul></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-rule-editor="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} bearbeiten"${disabled}>Bearbeiten</button> <button class="table-edit-button" type="button" data-deactivate-rule="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} deaktivieren"${this._ruleSubmitting || rule.active === false ? " disabled" : ""}>Deaktivieren</button></td></tr>`;
-    }).join("");
+      return !rule.account_id ? "Alle Konten" : account ? `${account.label || account.iban_masked || account.id}${account.active === false ? " (archiviert)" : ""}` : `${rule.account_id} (Konto fehlt)`;
+    };
+    const compareLabels = (left, right) => String(left || "").localeCompare(String(right || ""), "de-DE", { sensitivity: "base" });
+    const compareRules = (left, right) => {
+      const priorityDifference = Number(right.priority ?? 0) - Number(left.priority ?? 0);
+      return priorityDifference || compareLabels(left.label, right.label) || compareLabels(left.id, right.id);
+    };
+    const groups = new Map();
+    this._rules.forEach((rule) => {
+      const key = rule.account_id || "";
+      if (!groups.has(key)) groups.set(key, { key, label: accountLabelForRule(rule), rules: [] });
+      groups.get(key).rules.push(rule);
+    });
+    const groupsMarkup = [...groups.values()]
+      .sort((left, right) => compareLabels(left.label, right.label) || compareLabels(left.key, right.key))
+      .map((group) => {
+        const rows = [...group.rules].sort(compareRules).map((rule) => {
+          const invalid = Object.keys(this._ruleValidationErrors(this._ruleDraftFromRule(rule))).length > 0;
+          return `<tr><th scope="row">${escapeHtml(rule.label)}</th><td>${rule.active === false ? "Deaktiviert" : "Aktiv"}${invalid ? " · Angaben prüfen" : ""}</td><td class="table-number">${escapeHtml(rule.priority)}</td><td>${escapeHtml(rule.counterparty)}${rule.purpose_contains ? `<p>Verwendungszweck enthält: ${escapeHtml(rule.purpose_contains)}</p>` : ""}</td><td><ul>${(rule.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row, true))}</li>`).join("")}</ul></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-rule-editor="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} bearbeiten"${disabled}>Bearbeiten</button> <button class="table-edit-button" type="button" data-deactivate-rule="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} deaktivieren"${this._ruleSubmitting || rule.active === false ? " disabled" : ""}>Deaktivieren</button></td></tr>`;
+        }).join("");
+        return `<tbody><tr class="rule-account-group"><th scope="rowgroup" colspan="6">${escapeHtml(group.label)}</th></tr>${rows}</tbody>`;
+      }).join("");
+    const body = groupsMarkup || `<tbody><tr><td colspan="6">Noch keine Regeln angelegt. Mit „Regel anlegen“ legst du Bedingungen und eine Aufteilungsvorlage für künftige Vorschläge fest.</td></tr></tbody>`;
     return `<div class="management-list-toolbar"><p>${this._rules.filter((rule) => rule.active !== false).length} aktive Regeln · Deaktivierte Regeln bleiben erhalten.</p><button class="table-new-button" type="button" data-open-rule-editor="new"${disabled}>Regel anlegen ${icon("plus", 17)}</button></div>
-      <div class="management-table-wrap" tabindex="0" role="region" aria-label="Regelübersicht, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Regeln für Buchungsvorschläge</caption><thead><tr><th scope="col">Regelname</th><th scope="col">Status</th><th scope="col">Priorität</th><th scope="col">Konto</th><th scope="col">Zahlungsempfänger</th><th scope="col">Aufteilung</th><th scope="col">Aktionen</th></tr></thead><tbody>${rows || `<tr><td colspan="7">Noch keine Regeln angelegt. Mit „Regel anlegen“ legst du Bedingungen und eine Aufteilungsvorlage für künftige Vorschläge fest.</td></tr>`}</tbody></table></div>`;
+      <div class="management-table-wrap" tabindex="0" role="region" aria-label="Regelübersicht, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Regeln für Buchungsvorschläge</caption><thead><tr><th scope="col">Regelname</th><th scope="col">Status</th><th scope="col">Priorität</th><th scope="col">Zahlungsempfänger</th><th scope="col">Aufteilung</th><th scope="col">Aktionen</th></tr></thead>${body}</table></div>`;
   }
 
   _rulesTemplate() {

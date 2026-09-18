@@ -8,6 +8,10 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## Unreleased
+
+- Die Regelansicht gruppiert Regeln nach Konto; die Konto-Spalte entfällt. Innerhalb der Gruppen werden Regeln wie beim Matching nach absteigender Priorität und danach alphabetisch nach Regelname sortiert.
+
 ## [0.11.0] – 2026-09-18
 
 - Interne Konten werden in ungeklärten und übernommenen Buchungen direkt neben Absender und Zahlungsempfänger angezeigt; das redundante Kontenpaar rechts entfällt.

@@ -587,6 +587,36 @@ function ruleTestPanel() {
   return panel;
 }
 
+test("rule overview groups by account and sorts by matching priority then label", () => {
+  const panel = ruleTestPanel();
+  panel._accounts = [
+    { id: "account-giro", label: "Gemeinsames Girokonto", active: true },
+    { id: "account-savings", label: "Rücklagen", active: true },
+  ];
+  const rule = (id, label, priority, account_id) => ({
+    id, label, priority, account_id, active: true, counterparty: label,
+    purpose_contains: "", allocations: [{ target: "household", share_percent: 100 }],
+  });
+  panel._rules = [
+    rule("r-low", "Zahlung", 20, "account-giro"),
+    rule("r-high-z", "Zoo", 100, "account-giro"),
+    rule("r-high-a", "Apotheke", 100, "account-giro"),
+    rule("r-savings", "Rücklage", 50, "account-savings"),
+  ];
+
+  const markup = panel._rulesOverviewTemplate();
+  assert.doesNotMatch(markup, /<th scope="col">Konto<\/th>/);
+  assert.match(markup, /<th scope="rowgroup" colspan="6">Gemeinsames Girokonto<\/th>/);
+  assert.match(markup, /<th scope="rowgroup" colspan="6">Rücklagen<\/th>/);
+
+  const giroGroupStart = markup.indexOf(">Gemeinsames Girokonto</th>");
+  const giroGroupEnd = markup.indexOf("</tbody>", giroGroupStart);
+  const giroMarkup = markup.slice(giroGroupStart, giroGroupEnd);
+  assert.ok(giroMarkup.indexOf(">Apotheke</th>") < giroMarkup.indexOf(">Zoo</th>"));
+  assert.ok(giroMarkup.indexOf(">Zoo</th>") < giroMarkup.indexOf(">Zahlung</th>"));
+  assert.ok(markup.indexOf(">Gemeinsames Girokonto</th>") < markup.indexOf(">Rücklagen</th>"));
+});
+
 test("review exposes rule reapplication and the resolved booking navigation", () => {
   assert.match(panelSource, /const APPLY_RULES_URL = "\/api\/finanzplaner\/bookings\/apply-rules"/);
   assert.match(panelSource, /const RESOLVED_URL = "\/api\/finanzplaner\/bookings\/resolved"/);

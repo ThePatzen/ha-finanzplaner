@@ -58,6 +58,7 @@ Zusätzlich enthalten:
 - Futter-Erinnerungsstatus als automationstauglicher Binary-Sensor und HA-Service zur Kaufbestätigung
 - lokal verwaltete Stammdaten für Kategorien, Bereiche und Projekte mit stabilen IDs und historischen Namens-Snapshots
 - Regelverwaltung für Buchungsvorschläge mit aktiven und deaktivierten Regeln, Priorität und Aufteilungsvorlage
+- Die Regelübersicht gruppiert Regeln nach Konto; je Konto werden sie wie beim Matching nach absteigender Priorität und anschließend alphabetisch nach Regelname sortiert.
 - Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim optionalen Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung.
 - optionaler Verwendungszweckfilter, der nur Buchungen mit dem angegebenen Textabschnitt berücksichtigt; jede Regel benötigt mindestens eine Bedingung aus Konto, Zahlungsempfänger oder Verwendungszweckfilter
 - automatische Übernahme nur bei einem eindeutigen, gültigen Treffer mit höchster Priorität; Regeln mit gleicher höchster Priorität bleiben ungeklärt
