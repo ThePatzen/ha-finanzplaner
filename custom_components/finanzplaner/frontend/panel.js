@@ -22,6 +22,7 @@ const EXCEL_CONFIRM_URL = "/api/finanzplaner/excel/confirm";
 const PAPER_TEXTURE_PATH = "assets/plates/main-paper-sample.png";
 const PAPER_TEXTURE_URL = new URL(PAPER_TEXTURE_PATH, import.meta.url).href;
 const SECTION_VIEWS = ["energy", "calendar", "tasks", "household", "people"];
+const HUB_VIEWS = ["bookings", "planning"];
 const SECTION_OVERVIEW_META = {
   energy: {
     title: "Energie",
@@ -47,6 +48,18 @@ const SECTION_OVERVIEW_META = {
     title: "Personen",
     kicker: "Home-Assistant-Personen",
     description: "Die Personen, die für Kontoinhaber und Buchungsaufteilungen im Haushalt verfügbar sind.",
+  },
+};
+const HUB_OVERVIEW_META = {
+  bookings: {
+    title: "Buchungen",
+    kicker: "Prüfen und nachvollziehen",
+    description: "Ungeklärte und übernommene Buchungen an einem Ort.",
+  },
+  planning: {
+    title: "Planen",
+    kicker: "Plan und Regeln",
+    description: "Planposten und Zuordnungsregeln gemeinsam verwalten.",
   },
 };
 
@@ -76,6 +89,7 @@ const iconPaths = {
   tags: "M4 5.5A1.5 1.5 0 0 1 5.5 4H11l9 9-7 7-9-9V5.5ZM7.5 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
   car: "m5 16 1-5 2-4h8l2 4 1 5m-14 0h14M7 16v2m10-2v2M7 11h10M4 13h2m12 0h2",
   file: "M6 3h8l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm8 0v5h4M8 12h6m-6 4h6",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
   check: "m5 12 4 4L19 6",
   plus: "M12 5v14M5 12h14",
   income: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-14v10m-4-4 4-4 4 4",
@@ -129,6 +143,7 @@ const styles = `
   }
 
   .rail {
+    position: relative;
     min-block-size: 100dvh;
     display: flex;
     flex-direction: column;
@@ -166,6 +181,12 @@ const styles = `
     gap: 0.2rem;
     padding: 1.05rem 0.5rem;
   }
+
+  .nav-more-menu { position: absolute; inset-block-start: 4.2rem; inset-inline-end: 0.75rem; z-index: 8; display: grid; gap: 0.2rem; min-inline-size: 12rem; padding: 0.45rem; border: 1px solid var(--fp-line); border-radius: 0.65rem; color: var(--fp-ink); background: var(--fp-paper-strong); box-shadow: 0 0.9rem 2rem rgb(11 30 63 / 0.2); }
+  .nav-more-menu button { min-block-size: 2.65rem; display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.7rem; border: 1px solid transparent; border-radius: 0.4rem; color: var(--fp-ink); background: transparent; text-align: start; font-size: 0.8rem; font-weight: 800; }
+  .nav-more-menu button:hover { border-color: var(--fp-line); background: var(--fp-cyan-soft); }
+  .nav-more-menu button[aria-current="page"] { color: var(--fp-paper); background: var(--fp-navy); }
+  .nav-more-menu button:focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 2px; }
 
   .nav-item {
     min-block-size: 2.85rem;
@@ -241,6 +262,22 @@ const styles = `
   .review-pill .count { min-inline-size: 1.85rem; min-block-size: 1.85rem; display: grid; place-items: center; color: var(--fp-navy); background: var(--fp-amber); border-radius: 50%; font-family: var(--fp-data); font-size: 0.9rem; }
 
   .hero { padding: 1.45rem 0 1.15rem; }
+  .report-switcher { inline-size: fit-content; display: inline-flex; align-items: center; gap: 0.2rem; margin-block-end: 0.95rem; padding: 0.25rem; border: 1px solid var(--fp-line); border-radius: 0.7rem; color: var(--fp-muted); background: rgb(255 254 249 / 0.86); box-shadow: 0 0.25rem 0.8rem rgb(23 40 62 / 0.06); }
+  .report-switcher > span { padding-inline: 0.55rem 0.35rem; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+  .report-switcher button { min-block-size: 2.35rem; padding: 0.45rem 0.8rem; border: 1px solid transparent; border-radius: 0.48rem; color: var(--fp-muted); background: transparent; font-size: 0.8rem; font-weight: 800; transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease; }
+  .report-switcher button:hover:not(:disabled) { color: var(--fp-ink); background: var(--fp-cyan-soft); }
+  .report-switcher button[aria-pressed="true"] { border-color: var(--fp-navy); color: var(--fp-paper); background: var(--fp-navy); }
+  .report-switcher button:disabled { cursor: wait; opacity: 0.72; }
+  .report-switcher button:focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 2px; }
+  .report-card { margin-block-start: 1.1rem; padding: 1rem 1.15rem 1.15rem; }
+  .report-card h3 { margin: 0; font-family: var(--fp-display); font-size: 1.35rem; line-height: 1.05; letter-spacing: -0.02em; }
+  .report-card-context { margin: 0.35rem 0 0; color: var(--fp-muted); font-size: 0.78rem; }
+  .report-card .empty-state { margin-block-start: 0.85rem; }
+  .overview-data-alert { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-block-start: 1.1rem; padding: 0.9rem 1rem; border: 1px solid var(--fp-coral); border-radius: 0.65rem; color: var(--fp-ink); background: var(--fp-coral-soft); }
+  .overview-data-alert p { margin: 0; line-height: 1.45; }
+  .overview-data-alert p strong { display: block; margin-block-end: 0.15rem; }
+  .overview-data-alert button { flex: 0 0 auto; min-block-size: 2.45rem; padding: 0.45rem 0.75rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-paper); background: var(--fp-navy); font-size: 0.78rem; font-weight: 800; }
+  .overview-data-alert button:hover { background: var(--fp-navy-deep); }
   .heading-line { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
   .heading-line h2 { margin: 0; font-family: var(--fp-display); font-size: 2.1875rem; line-height: 1; letter-spacing: -0.03em; text-wrap: balance; }
   .heading-line p { margin: 0; color: var(--fp-muted); font-size: 0.9rem; }
@@ -794,6 +831,7 @@ const styles = `
     .nav-item { min-block-size: 2.5rem; flex: 0 0 auto; padding-inline: 0.7rem; }
     .nav-item[data-nav="rules"] { min-block-size: 48px; }
     .nav-item span { display: none; }
+    .nav-more-menu { position: fixed; inset-block-start: 3.65rem; inset-inline: auto 0.65rem; }
     .rail-footer { display: none; }
     .main { padding-inline: 0.85rem; }
     .toolbar { min-block-size: auto; align-items: flex-start; flex-direction: column; padding-block: 0.8rem; }
@@ -811,6 +849,11 @@ const styles = `
     .chart-legend { gap: 0.45rem 0.7rem; font-size: 0.68rem; }
     .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1rem; }
     .statusbar { display: block; }
+    .report-switcher { inline-size: 100%; justify-content: space-between; }
+    .report-switcher > span { padding-inline-start: 0.35rem; }
+    .report-switcher button { flex: 1 1 0; }
+    .overview-data-alert { display: block; }
+    .overview-data-alert button { inline-size: 100%; margin-block-start: 0.75rem; }
     .statusbar span { display: block; }
     .statusbar span:last-child { margin-block-start: 0.35rem; text-align: start; }
     .review-view-header, .resolved-view-header, .accounts-view-header, .plan-items-view-header, .pets-view-header, .feed-profiles-view-header, .catalogs-view-header, .section-view-header, .import-strip, .excel-review-header { display: block; }
@@ -1065,6 +1108,21 @@ function trendTable(trend = fallbackOverview.trend) {
 
 function dataWithDefaults(data) {
   const liveData = data?.demo === false;
+  const liveDefaults = {
+    demo: false,
+    month: new Date().toISOString().slice(0, 7),
+    plan: 0,
+    forecast: 0,
+    actual: 0,
+    variance: 0,
+    unresolved_count: 0,
+    unresolved_total: 0,
+    household: { income: 0, expenses: 0, savings: 0, available: 0 },
+    trend: { planned: [], forecast: [], actual: [], min_value: 0, max_value: 0, today_index: 0, today_label: "" },
+    areas: [],
+    categories: [],
+    comparison: {},
+  };
   const demoComparison = (entries) => entries.map((entry) => {
     const plan = Number(entry.plan || 0);
     const actual = Number(entry.actual ?? entry.value ?? 0);
@@ -1073,12 +1131,14 @@ function dataWithDefaults(data) {
       variance_percent: plan ? (actual - plan) / Math.abs(plan) * 100 : null };
   });
   return {
-    ...fallbackOverview,
+    ...(liveData ? liveDefaults : fallbackOverview),
     ...data,
     household: liveData
-      ? { income: 0, expenses: 0, savings: 0, available: 0, ...(data?.household || {}) }
+      ? { ...liveDefaults.household, ...(data?.household || {}) }
       : { ...demoHousehold, ...(data?.household || {}) },
-    trend: { ...fallbackOverview.trend, ...(data?.trend || {}) },
+    trend: liveData
+      ? { ...liveDefaults.trend, ...(data?.trend || {}) }
+      : { ...fallbackOverview.trend, ...(data?.trend || {}) },
     areas: data?.areas?.length ? data.areas : liveData ? [] : fallbackOverview.areas,
     categories: data?.categories?.length ? data.categories : liveData ? [] : fallbackOverview.categories,
     comparison: data?.comparison ?? (liveData ? {} : {
@@ -1101,20 +1161,24 @@ class FinanzplanerPanel extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._month = new Date();
-    this._data = fallbackOverview;
+    this._data = { demo: false, month: this._month.toISOString().slice(0, 7) };
     this._view = "overview";
+    this._moreOpen = false;
     this._comparisonDimension = "categories";
     this._comparisonCategoryGrouping = "structure";
     this._reportView = "month";
     this._report = null;
     this._reportLoading = false;
     this._reportLoadFailed = false;
+    this._reportError = "";
     this._reportRequest = null;
     this._breakdownSelection = null;
     this._breakdown = null;
     this._breakdownLoading = false;
     this._breakdownError = "";
     this._overviewRequest = null;
+    this._overviewLoadFailed = false;
+    this._overviewError = "";
     this._accounts = [];
     this._accountsLoading = false;
     this._accountsLoadFailed = false;
@@ -1248,6 +1312,10 @@ class FinanzplanerPanel extends HTMLElement {
     };
     this._overviewRequest = request;
     this._loading = true;
+    this._overviewLoadFailed = false;
+    this._overviewError = "";
+    this._message = "";
+    if (this.isConnected) this._render();
     try {
       const response = await fetchWithHomeAssistantAuth(
         this._hass,
@@ -1258,10 +1326,14 @@ class FinanzplanerPanel extends HTMLElement {
       if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
       this._data = dataWithDefaults(result);
       this._message = "";
+      this._overviewLoadFailed = false;
+      this._overviewError = "";
     } catch (error) {
       if (this._overviewRequest !== request || this._monthValue() !== request.month || this._comparisonCategoryGrouping !== request.categoryGrouping) return;
-      this._data = dataWithDefaults(fallbackOverview);
-      this._message = `Demo-Ansicht aktiv: ${error.message || "Die Finanzplaner-API ist noch nicht erreichbar."}`;
+      this._data = dataWithDefaults({ demo: false, month: request.month });
+      this._overviewLoadFailed = true;
+      this._overviewError = error.message || "Die Finanzplaner-API ist noch nicht erreichbar.";
+      this._message = this._overviewError;
     } finally {
       if (this._overviewRequest === request && this._monthValue() === request.month && this._comparisonCategoryGrouping === request.categoryGrouping) {
         this._loading = false;
@@ -1326,6 +1398,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._reportView = view;
     this._reportLoading = true;
     this._reportLoadFailed = false;
+    this._reportError = "";
     this._report = null;
     if (this.isConnected) this._render();
     try {
@@ -1337,7 +1410,8 @@ class FinanzplanerPanel extends HTMLElement {
     } catch (error) {
       if (this._reportRequest !== request) return;
       this._reportLoadFailed = true;
-      this._message = error.message || "Der Bericht konnte nicht geladen werden.";
+      this._reportError = error.message || "Der Bericht konnte nicht geladen werden.";
+      this._message = this._reportError;
     } finally {
       if (this._reportRequest === request) {
         this._reportLoading = false;
@@ -1347,15 +1421,19 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _reportTemplate() {
-    if (this._reportLoading) return `<section class="surface report-card" aria-live="polite"><h3>Bericht</h3><p class="empty-state" role="status">${this._reportView === "cashflow" ? "Cashflow" : this._reportView === "year" ? "Jahresbericht" : "Monatsbericht"} wird geladen …</p></section>`;
-    if (this._reportLoadFailed) return `<section class="surface report-card" aria-live="assertive"><h3>Bericht</h3><p class="empty-state" role="alert">${escapeHtml(this._message || "Der Bericht konnte nicht geladen werden.")}</p><button class="table-edit-button" type="button" data-report-retry>Erneut laden</button></section>`;
-    if (!this._report || (this._reportView === "cashflow" && !this._report.cashflow?.length)) return `<section class="surface report-card"><h3>Bericht</h3><p class="empty-state">Für diesen Zeitraum liegen noch keine Berichtsdaten vor.</p></section>`;
+    const reportTitle = this._reportView === "cashflow" ? "Cashflow" : this._reportView === "year" ? "Jahresbericht" : "Monatsbericht";
+    const reportContext = this._reportView === "year" || this._reportView === "cashflow"
+      ? `Jahr ${this._month.getFullYear()}`
+      : monthLabel(this._month);
+    if (this._reportLoading) return `<section class="surface report-card" aria-live="polite"><h3>${reportTitle}</h3><p class="report-card-context">${reportContext}</p><p class="empty-state" role="status">${reportTitle} wird geladen …</p></section>`;
+    if (this._reportLoadFailed) return `<section class="surface report-card" aria-live="assertive"><h3>${reportTitle}</h3><p class="report-card-context">${reportContext}</p><p class="empty-state" role="alert">${escapeHtml(this._reportError || "Der Bericht konnte nicht geladen werden.")}</p><button class="table-edit-button" type="button" data-report-retry>Erneut laden</button></section>`;
+    if (!this._report || (this._reportView === "cashflow" && !this._report.cashflow?.length)) return `<section class="surface report-card"><h3>${reportTitle}</h3><p class="report-card-context">${reportContext}</p><p class="empty-state">Für diesen Zeitraum liegen noch keine Berichtsdaten vor.</p></section>`;
     if (this._reportView === "cashflow") {
       const rows = (this._report.cashflow || []).map((entry) => `<tr><th scope="row">${escapeHtml(entry.month)}</th><td class="table-number">${formatEuro(entry.income)}</td><td class="table-number">${formatEuro(entry.expenses)}</td><td class="table-number">${formatEuro(entry.savings)}</td><td class="table-number">${formatEuro(entry.actual)}</td></tr>`).join("");
-      return `<section class="surface report-card" aria-labelledby="report-heading"><h3 id="report-heading">Cashflow</h3><div class="management-table-wrap" tabindex="0" role="region" aria-label="Cashflow, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Monatlicher Cashflow</caption><thead><tr><th scope="col">Monat</th><th scope="col">Einnahmen</th><th scope="col">Ausgaben</th><th scope="col">Rücklagen</th><th scope="col">Ist</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+      return `<section class="surface report-card" aria-labelledby="report-heading"><h3 id="report-heading">Cashflow</h3><p class="report-card-context">${reportContext}</p><div class="management-table-wrap" tabindex="0" role="region" aria-label="Cashflow, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Monatlicher Cashflow</caption><thead><tr><th scope="col">Monat</th><th scope="col">Einnahmen</th><th scope="col">Ausgaben</th><th scope="col">Rücklagen</th><th scope="col">Ist</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
     }
     const rows = Object.entries(this._report).filter(([key]) => ["plan", "forecast", "actual", "variance", "unresolved_total"].includes(key));
-    return `<section class="surface report-card" aria-labelledby="report-heading"><h3 id="report-heading">${this._reportView === "year" ? "Jahresbericht" : "Monatsbericht"}</h3><div class="management-table-wrap" tabindex="0" role="region" aria-label="Berichtswerte, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Berichtswerte für den ausgewählten Zeitraum</caption><thead><tr><th scope="col">Wert</th><th scope="col">Betrag</th></tr></thead><tbody>${rows.map(([key, value]) => `<tr><th scope="row">${escapeHtml({ plan: "Plan", forecast: "Prognose", actual: "Ist", variance: "Abweichung", unresolved_total: "Offener Betrag" }[key] || key)}</th><td class="table-number">${formatEuro(value)}</td></tr>`).join("")}</tbody></table></div></section>`;
+    return `<section class="surface report-card" aria-labelledby="report-heading"><h3 id="report-heading">${reportTitle}</h3><p class="report-card-context">${reportContext}</p><div class="management-table-wrap" tabindex="0" role="region" aria-label="Berichtswerte, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Berichtswerte für den ausgewählten Zeitraum</caption><thead><tr><th scope="col">Wert</th><th scope="col">Betrag</th></tr></thead><tbody>${rows.map(([key, value]) => `<tr><th scope="row">${escapeHtml({ plan: "Plan", forecast: "Prognose", actual: "Ist", variance: "Abweichung", unresolved_total: "Offener Betrag" }[key] || key)}</th><td class="table-number">${formatEuro(value)}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
 
   _bookingAccountInlineTemplate(accounts, side, className = "booking-account-inline") {
@@ -1601,6 +1679,15 @@ class FinanzplanerPanel extends HTMLElement {
         this._focusContent();
       }
     }
+  }
+
+  async _openHubOverview(view) {
+    if (!HUB_VIEWS.includes(view) || !(await this._confirmDiscardUnsavedChanges())) return;
+    this._moreOpen = false;
+    this._view = view;
+    this._message = "";
+    this._render();
+    this._focusContent();
   }
 
   async _loadRules({ fresh = false } = {}) {
@@ -3889,6 +3976,8 @@ class FinanzplanerPanel extends HTMLElement {
               ? this._catalogsTemplate()
             : this._view === "accounts"
               ? this._accountsTemplate()
+              : HUB_VIEWS.includes(this._view)
+                ? this._hubOverviewTemplate(this._view)
               : SECTION_VIEWS.includes(this._view)
                 ? this._sectionOverviewTemplate(this._view)
               : this._overviewTemplate();
@@ -3928,6 +4017,7 @@ class FinanzplanerPanel extends HTMLElement {
       this._loadReport(button.dataset.reportView).then(() => this.shadowRoot.querySelector(`[data-report-view="${button.dataset.reportView}"]`)?.focus());
     }));
     this.shadowRoot.querySelector("[data-report-retry]")?.addEventListener("click", () => this._loadReport(this._reportView));
+    this.shadowRoot.querySelector("[data-overview-retry]")?.addEventListener("click", () => this._loadOverview());
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
     this.shadowRoot.querySelectorAll("[data-action='resolved']").forEach((button) => button.addEventListener("click", () => this._openResolvedBookings()));
     this.shadowRoot.querySelectorAll("[data-action='apply-rules']").forEach((button) => button.addEventListener("click", () => this._applyRules()));
@@ -4001,6 +4091,11 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelector("[data-rule-add]")?.addEventListener("click", () => this._changeRuleAllocation());
     this.shadowRoot.querySelectorAll("[data-rule-remove]").forEach((button) => button.addEventListener("click", () => this._changeRuleAllocation(Number(button.dataset.ruleRemove))));
     this.shadowRoot.querySelector("[data-action='accounts']")?.addEventListener("click", () => this._openAccounts());
+    this.shadowRoot.querySelector("[data-action='more']")?.addEventListener("click", () => {
+      this._moreOpen = !this._moreOpen;
+      this._render();
+      this.shadowRoot.querySelector("[data-action='more']")?.focus();
+    });
     this.shadowRoot.querySelector("[data-action='back']")?.addEventListener("click", () => this._navigateToOverview());
     this.shadowRoot.querySelector("[data-import]")?.addEventListener("change", (event) => this._handleImport(event));
     this.shadowRoot.querySelector("[data-excel-confirm]")?.addEventListener("click", () => this._confirmExcelImport());
@@ -4060,6 +4155,7 @@ class FinanzplanerPanel extends HTMLElement {
       if (target === "review") this._openReview();
       else if (target === "resolved") this._openResolvedBookings();
       else if (target === "plan_items") this._openPlanItems();
+      else if (target === "rules") this._openRules();
       else if (target === "accounts") this._openAccounts();
       else if (target === "pets") this._openPets();
       else if (target === "feed_profiles") this._openFeedProfiles();
@@ -4068,7 +4164,11 @@ class FinanzplanerPanel extends HTMLElement {
       else if (SECTION_VIEWS.includes(target)) this._openSectionOverview(target);
     }));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
-      if (button.dataset.nav === "review") this._openReview();
+      if (button.dataset.nav === "more") return;
+      this._moreOpen = false;
+      if (button.dataset.nav === "bookings") this._openHubOverview("bookings");
+      else if (button.dataset.nav === "planning") this._openHubOverview("planning");
+      else if (button.dataset.nav === "review") this._openReview();
       else if (button.dataset.nav === "resolved") this._openResolvedBookings();
       else if (button.dataset.nav === "plan_items") this._openPlanItems();
       else if (button.dataset.nav === "accounts") this._openAccounts();
@@ -4084,24 +4184,34 @@ class FinanzplanerPanel extends HTMLElement {
   _navTemplate() {
     const items = [
       ["overview", "overview", "Übersicht"],
-      ["energy", "energy", "Energie"],
-      ["planner", "planner", "Planposten"],
-      ["calendar", "calendar", "Kalender"],
-      ["tasks", "tasks", "Aufgaben"],
+      ["bookings", "file", "Buchungen"],
+      ["planning", "planner", "Planen"],
       ["household", "household", "Haushalt"],
-      ["people", "people", "Personen"],
-      ["pets", "paw", "Tiere"],
+      ["calendar", "calendar", "Kalender"],
       ["feed_profiles", "cart", "Futter"],
-      ["catalogs", "tags", "Stammdaten"],
-      ["accounts", "settings", "Konten"],
-      ["rules", "tasks", "Regeln"],
-      ["resolved", "check", "Buchungen"],
+      ["more", "more", "Mehr"],
     ];
     return items.map(([id, iconName, label]) => {
-      const target = id === "planner" ? "plan_items" : id;
-      const current = (this._view === "plan_items" && id === "planner") || this._view === id;
-      return `<button class="nav-item" data-nav="${target}"${current ? ' aria-current="page"' : ""} type="button" aria-label="${escapeHtml(label)}">${icon(iconName, 22)}<span>${label}</span></button>`;
+      const target = id;
+      const current = id === "bookings"
+        ? ["bookings", "review", "resolved"].includes(this._view)
+        : id === "planning"
+          ? ["planning", "plan_items", "rules"].includes(this._view)
+          : id === "household"
+            ? ["household", "accounts", "people", "pets", "catalogs"].includes(this._view)
+            : id === "more"
+              ? this._moreOpen || ["energy", "tasks"].includes(this._view)
+              : this._view === id;
+      const expanded = id === "more" ? ` aria-expanded="${this._moreOpen ? "true" : "false"}"` : "";
+      const action = id === "more" ? ' data-action="more"' : "";
+      return `<button class="nav-item" data-nav="${target}"${current ? ' aria-current="page"' : ""}${expanded}${action} type="button" aria-label="${escapeHtml(label)}">${icon(iconName, 22)}<span>${label}</span></button>`;
     }).join("");
+  }
+
+  _moreNavTemplate() {
+    if (!this._moreOpen) return "";
+    const entries = [["tasks", "tasks", "Aufgaben"], ["energy", "energy", "Energie"]];
+    return `<div class="nav-more-menu" role="menu" aria-label="Weitere Bereiche">${entries.map(([target, iconName, label]) => `<button type="button" role="menuitem" data-nav="${target}"${this._view === target ? ' aria-current="page"' : ""}>${icon(iconName, 18)}<span>${label}</span></button>`).join("")}</div>`;
   }
 
   _shellTemplate(content) {
@@ -4110,6 +4220,7 @@ class FinanzplanerPanel extends HTMLElement {
       <aside class="rail" aria-label="Finanzplaner-Navigation">
         <a class="rail-brand" href="${homeAssistantPath(window.location.href)}">${icon("home", 18)}<span>Home Assistant</span><span class="brand-arrow">${icon("chevronRight", 18)}</span></a>
         <nav class="rail-nav" aria-label="Bereiche">${this._navTemplate()}</nav>
+        ${this._moreNavTemplate()}
         <div class="rail-footer"><button class="household-switcher" type="button">${icon("household", 21)}<span>Gemeinsamer Haushalt</span>${icon("chevronRight", 16)}</button><p>Zu Hause leben. Besser planen.</p></div>
       </aside>
       ${content}
@@ -4139,7 +4250,6 @@ class FinanzplanerPanel extends HTMLElement {
       <div class="toolbar-actions">
         <div class="month-control" aria-label="Monat auswählen"><button type="button" data-action="previous-month" aria-label="Vorheriger Monat">${icon("chevronLeft", 20)}</button><span class="month-label">${monthLabel(this._month)} ${icon("calendarSmall", 16)}</span><button type="button" data-action="next-month" aria-label="Nächster Monat">${icon("chevronRight", 20)}</button></div>
         <button class="review-pill" type="button" data-action="review">${icon("warning", 17)}<span>Buchungen prüfen</span><span class="count">${escapeHtml(this._data.unresolved_count)}</span></button>
-        <button class="icon-button" type="button" data-action="accounts" aria-label="Konten verwalten">${icon("settings", 21)}</button>
       </div>
     </header>`;
   }
@@ -4228,8 +4338,9 @@ class FinanzplanerPanel extends HTMLElement {
     }).join("");
     const content = `<main class="main" id="content" tabindex="-1">
       ${this._toolbarTemplate()}
+      ${this._overviewLoadFailed ? `<div class="overview-data-alert" role="alert" aria-live="assertive"><p><strong>Live-Daten konnten nicht geladen werden.</strong>${escapeHtml(this._overviewError || "Die Finanzplaner-API ist noch nicht erreichbar.")}</p><button type="button" data-overview-retry>Erneut laden ${icon("arrowRight", 17)}</button></div>` : ""}
       <section class="hero" id="overview" aria-labelledby="overview-title">
-        <div class="report-switcher" role="group" aria-label="Berichtszeitraum"><span>Bericht</span><button type="button" data-report-view="month" aria-pressed="${this._reportView === "month"}">Monat</button><button type="button" data-report-view="year" aria-pressed="${this._reportView === "year"}">Jahr</button><button type="button" data-report-view="cashflow" aria-pressed="${this._reportView === "cashflow"}">Cashflow</button></div>
+        <div class="report-switcher" role="group" aria-label="Berichtszeitraum" aria-busy="${this._reportLoading ? "true" : "false"}"><span>Bericht</span><button type="button" data-report-view="month" aria-pressed="${this._reportView === "month"}"${this._reportLoading ? " disabled" : ""}>Monat</button><button type="button" data-report-view="year" aria-pressed="${this._reportView === "year"}"${this._reportLoading ? " disabled" : ""}>Jahr</button><button type="button" data-report-view="cashflow" aria-pressed="${this._reportView === "cashflow"}"${this._reportLoading ? " disabled" : ""}>Cashflow</button></div>
         <div class="heading-line"><h2 id="overview-title">Planung · Prognose · Ist</h2><p>${monthLabel(this._month)} · Alle Beträge in Euro</p></div>
         <div class="metric-grid">
           <article class="metric" data-reveal style="--reveal-order: 1"><p class="metric-label">Planung</p><p class="metric-value">${formatEuro(data.plan)}</p><p class="metric-caption">geplantes Ergebnis</p></article>
@@ -4252,6 +4363,16 @@ class FinanzplanerPanel extends HTMLElement {
       </div>
       <footer class="statusbar"><span>Datenstand: <strong>${new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date())}</strong> · ${data.demo ? "Demo-Daten" : "lokale Daten"}</span><span>Fin Zuhause · Viele Bereiche · Fin Plan</span></footer>
     </main>`;
+    return this._shellTemplate(content);
+  }
+
+  _hubOverviewTemplate(view) {
+    const meta = HUB_OVERVIEW_META[view] || HUB_OVERVIEW_META.bookings;
+    const actionButton = (target, label, iconName, tone = "") => `<button class="section-action${tone ? ` section-action--${tone}` : ""}" type="button" data-section-nav="${escapeHtml(target)}">${escapeHtml(label)} ${icon(iconName, 17)}</button>`;
+    const body = view === "planning"
+      ? `<section class="surface section-card section-card--wide" aria-labelledby="planning-actions-heading"><h3 id="planning-actions-heading">Planung verwalten</h3><p>Pflege wiederkehrende Planposten und Regeln für automatische Zuordnung.</p><div class="section-actions">${actionButton("plan_items", "Planposten öffnen", "planner", "primary")}${actionButton("rules", "Regeln verwalten", "tasks")}</div></section>`
+      : `<section class="surface section-card section-card--wide" aria-labelledby="booking-actions-heading"><h3 id="booking-actions-heading">Buchungen bearbeiten</h3><p>Prüfe offene Buchungen oder öffne bereits übernommene Buchungen zur Kontrolle.</p><div class="section-actions">${actionButton("review", "Prüfliste öffnen", "warning", "accent")}${actionButton("resolved", "Übernommene Buchungen", "check")}</div></section>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="section-view"><div class="section-view-header"><div><p class="section-kicker">${escapeHtml(meta.kicker)}</p><h2>${escapeHtml(meta.title)}</h2><p>${escapeHtml(meta.description)}</p></div><div class="section-view-actions"><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div><div class="section-view-grid">${body}</div></div></main>`;
     return this._shellTemplate(content);
   }
 
@@ -4316,7 +4437,7 @@ class FinanzplanerPanel extends HTMLElement {
         ${metricCard("Rücklagen", formatEuro(household.savings), planShareCaption(household.savings, household.savings_plan, "kein Planwert"), "negative")}
         ${metricCard("Verfügbar", formatEuro(household.available), "bisheriger Saldo", household.available < 0 ? "negative" : "positive")}
         <section class="surface section-card section-card--wide" aria-labelledby="household-plan-heading"><h3 id="household-plan-heading">Haushaltsplan</h3><p>Vergleich der Planwerte mit dem aktuellen Monatsstand für ${monthLabel(this._month)}.</p><div class="section-data-table-wrap"><table class="section-data-table"><caption class="visually-hidden">Haushaltswerte im Vergleich</caption><thead><tr><th scope="col">Wert</th><th scope="col">Ist</th><th scope="col">Plan</th></tr></thead><tbody><tr><th scope="row">Einnahmen</th><td class="section-table-number">${formatEuro(household.income)}</td><td class="section-table-number">${formatEuro(household.income_plan)}</td></tr><tr><th scope="row">Ausgaben</th><td class="section-table-number">${formatEuro(household.expenses)}</td><td class="section-table-number">${formatEuro(-Math.abs(Number(household.expenses_plan) || 0))}</td></tr><tr><th scope="row">Rücklagen</th><td class="section-table-number">${formatEuro(household.savings)}</td><td class="section-table-number">${formatEuro(-Math.abs(Number(household.savings_plan) || 0))}</td></tr><tr><th scope="row">Verfügbar</th><td class="section-table-number">${formatEuro(household.available)}</td><td class="section-table-number">${formatEuro(household.available_plan)}</td></tr></tbody></table></div></section>
-        <section class="surface section-card" aria-labelledby="household-manage-heading"><h3 id="household-manage-heading">Verwalten</h3><p>Konten und Tierprofile liegen in eigenen, übersichtlichen Verwaltungsansichten.</p><div class="section-actions">${actionButton("accounts", "Konten öffnen", "settings", "primary")}${actionButton("pets", "Tiere öffnen", "paw")}</div></section>
+        <section class="surface section-card" aria-labelledby="household-manage-heading"><h3 id="household-manage-heading">Verwalten</h3><p>Konten, Personen, Tiere und Stammdaten liegen gebündelt in den Verwaltungsansichten des Haushalts.</p><div class="section-actions">${actionButton("accounts", "Konten öffnen", "settings", "primary")}${actionButton("people", "Personen öffnen", "people")}${actionButton("pets", "Tiere öffnen", "paw")}${actionButton("catalogs", "Stammdaten öffnen", "tags")}</div></section>
       </div>`;
     } else {
       const people = Array.isArray(this._persons) ? this._persons : [];

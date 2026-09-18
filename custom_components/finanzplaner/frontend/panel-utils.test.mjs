@@ -380,12 +380,12 @@ test("exposes the authenticated plan item editor routes and form states", () => 
   assert.match(panelSource, /data-plan-item-archive/);
   assert.match(panelSource, /method: "DELETE"/);
   assert.match(panelSource, /aria-busy/);
-  assert.match(panelSource, /data-action="accounts" aria-label="Konten verwalten"/);
+  assert.match(panelSource, /actionButton\("accounts", "Konten öffnen"/);
 });
 
 test("exposes authenticated pet profile management and pet-aware assignment fields", () => {
   assert.match(panelSource, /const PETS_URL = "\/api\/finanzplaner\/pets"/);
-  assert.match(panelSource, /\["pets", "paw", "Tiere"\]/);
+  assert.match(panelSource, /actionButton\("pets", "Tiere öffnen"/);
   assert.match(panelSource, /data-pet-form/);
   assert.match(panelSource, /data-pet-archive/);
   assert.match(panelSource, /data-plan-item-field="pet_id"/);
@@ -416,7 +416,7 @@ test("exposes feed profiles, forecast status, and purchase confirmation", () => 
 
 test("exposes first-class catalog management and catalog-backed selectors", () => {
   assert.match(panelSource, /const CATALOGS_URL = "\/api\/finanzplaner\/catalogs"/);
-  assert.match(panelSource, /\["catalogs", "tags", "Stammdaten"\]/);
+  assert.match(panelSource, /actionButton\("catalogs", "Stammdaten öffnen"/);
   assert.match(panelSource, /data-catalog-form/);
   assert.match(panelSource, /data-catalog-archive/);
   assert.match(panelSource, /_catalogOptions\("categories"/);
@@ -560,6 +560,26 @@ test("provides overview pages for every prepared navigation section", () => {
   assert.match(panelSource, /Als Nächstes/);
   assert.match(panelSource, /Personen im Haushalt/);
   assert.doesNotMatch(panelSource, /für die nächste Ausbaustufe vorbereitet/);
+});
+
+test("mobile navigation groups work areas into seven primary destinations", () => {
+  assert.match(panelSource, /\["overview", "overview", "Übersicht"\]/);
+  assert.match(panelSource, /\["bookings", "file", "Buchungen"\]/);
+  assert.match(panelSource, /\["planning", "planner", "Planen"\]/);
+  assert.match(panelSource, /\["household", "household", "Haushalt"\]/);
+  assert.match(panelSource, /\["calendar", "calendar", "Kalender"\]/);
+  assert.match(panelSource, /\["feed_profiles", "cart", "Futter"\]/);
+  assert.match(panelSource, /\["more", "more", "Mehr"\]/);
+  assert.match(panelSource, /_moreNavTemplate\(\)/);
+  assert.match(panelSource, /data-action="more"/);
+  assert.match(panelSource, /data-nav="tasks"/);
+  assert.match(panelSource, /data-nav="energy"/);
+  assert.doesNotMatch(panelSource, /\["people", "people", "Personen"\]/);
+  assert.doesNotMatch(panelSource, /\["pets", "paw", "Tiere"\]/);
+  assert.doesNotMatch(panelSource, /\["catalogs", "tags", "Stammdaten"\]/);
+  assert.doesNotMatch(panelSource, /\["accounts", "settings", "Konten"\]/);
+  assert.match(panelSource, /actionButton\("people", "Personen öffnen"/);
+  assert.match(panelSource, /actionButton\("catalogs", "Stammdaten öffnen"/);
 });
 
 test("acceptSuggestionDraft identifies the booking and copies allocations", () => {
@@ -822,6 +842,14 @@ test("overview source includes comparison semantics, native controls and live st
   assert.ok(markup.indexOf("Budget-Ist-Vergleich") > markup.indexOf("Monatsverlauf"));
 });
 
+test("report switcher has an intentional active state and compact control styling", () => {
+  assert.match(panelSource, /\.report-switcher\s*\{[^}]*display:\s*inline-flex/s);
+  assert.match(panelSource, /\.report-switcher button\[aria-pressed="true"\][^{]*\{/);
+  assert.match(panelSource, /data-report-view="month"/);
+  assert.match(panelSource, /data-report-view="year"/);
+  assert.match(panelSource, /data-report-view="cashflow"/);
+});
+
 test("category options render the full parent path", () => {
   const panel = comparisonTestPanel();
   panel._catalogs.categories = [
@@ -982,6 +1010,31 @@ test("empty live comparison stays empty and demo data has an explicit projection
   assert.match(markup, /<th scope="row">Lebensmittel<\/th>/);
   assert.match(markup, /Demo-Daten/);
   assert.match(markup, /Detailbuchungen.*Demo/);
+});
+
+test("live empty data never inherits demo metrics or trend points", () => {
+  const panel = comparisonTestPanel();
+  panel._data = { demo: false, month: "2026-09" };
+  const markup = panel._overviewTemplate();
+  assert.doesNotMatch(markup, /4\.200,00 €/);
+  assert.doesNotMatch(markup, /5\.220,00 €/);
+  assert.doesNotMatch(markup, /Lebensmittel/);
+  assert.match(markup, /Keine Vergleichswerte/);
+});
+
+test("overview API errors show a live error state instead of demo values", async () => {
+  const panel = comparisonTestPanel();
+  panel.isConnected = true;
+  panel._render = () => { panel.markup = panel._overviewTemplate(); };
+  panel._hass = { fetchWithAuth: async () => { throw new Error("API nicht erreichbar"); } };
+
+  await panel._loadOverview();
+
+  assert.equal(panel._data.demo, false);
+  assert.equal(panel._overviewLoadFailed, true);
+  assert.doesNotMatch(panel.markup, /Demo-Daten/);
+  assert.match(panel.markup, /Live-Daten konnten nicht geladen werden/);
+  assert.match(panel.markup, /API nicht erreichbar/);
 });
 
 test("overview ignores old month responses and requests the local calendar month", async () => {

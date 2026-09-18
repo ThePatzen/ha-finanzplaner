@@ -6,11 +6,12 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.16.0 umfasst wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
+Version 0.17.0 umfasst die gebündelte Sieben-Punkte-Navigation, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
 - native Home-Assistant-Seitenleiste mit schneller Monatsübersicht
+- sieben Hauptbereiche mit Buchungen, Planung, Haushalt, Kalender, Futter und einem Mehr-Menü für weitere Bereiche
 - Plan · Prognose · Ist und offene Buchungen als zentrale Sicht
 - Home-Assistant-`person.*`-Entitäten als Personenquelle
 - MT940- und CAMT.053-Upload mit Duplikatfingerprint
