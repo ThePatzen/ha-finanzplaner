@@ -2244,20 +2244,24 @@ def camt_account_references_from_source(source_data: object) -> dict[str, str]:
 
     references: dict[str, str] = {}
 
-    def visit(node: object) -> None:
+    def visit(node: object, account_names: dict[str, str]) -> None:
         if not isinstance(node, dict):
             return
         name = node.get("name")
-        if name in {"DbtrAcct", "CdtrAcct"}:
+        if name in account_names:
             reference = _source_node_text(node, "IBAN") or _source_node_text(node, "Id")
-            if reference and name[:-4] not in references:
-                references[name[:-4]] = reference
+            key = account_names[name]
+            if reference and key not in references:
+                references[key] = reference
         children = node.get("children")
         if isinstance(children, list):
             for child in children:
-                visit(child)
+                visit(child, account_names)
 
-    visit(record)
+    visit(record, {"DbtrAcct": "Dbtr", "CdtrAcct": "Cdtr"})
+    # Some bank exports put the related account reference in an agent node
+    # instead of providing the standard DbtrAcct/CdtrAcct nodes.
+    visit(record, {"DbtrAgt": "Dbtr", "CdtrAgt": "Cdtr"})
     return references
 
 

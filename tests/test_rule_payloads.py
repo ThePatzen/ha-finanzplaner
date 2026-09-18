@@ -881,6 +881,44 @@ class RuleViewTests(unittest.TestCase):
             "Tagesgeldkonto",
         )
 
+    def test_internal_camt_transfer_uses_bank_specific_agent_account_references(self):
+        self.coordinator.store.data["accounts"].append({
+            "id": "account-giro",
+            "label": "Girokonto",
+            "iban": "AT050350350350350350",
+            "account_reference": "AT050350350350350350",
+            "bank": "Testbank",
+            "owner_targets": [],
+            "active": True,
+        })
+        camt_source = self.http.parse_camt053_records(
+            """<Document><BkToCstmrStmt><Stmt>
+              <Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+              <Ntry><Amt Ccy="EUR">0.04</Amt><CdtDbtInd>CRDT</CdtDbtInd>
+                <BookgDt><Dt>2026-09-17</Dt></BookgDt><NtryDtls><TxDtls>
+                  <RltdPties />
+                  <RltdAgts>
+                    <DbtrAgt><FinInstnId><Othr><Id>AT050350350350350350</Id></Othr></FinInstnId></DbtrAgt>
+                    <CdtrAgt><FinInstnId><Othr><Id>AT050350350350350350</Id></Othr></FinInstnId></CdtrAgt>
+                  </RltdAgts>
+                </TxDtls></NtryDtls></Ntry>
+            </Stmt></BkToCstmrStmt></Document>"""
+        )[0].source_data
+        camt_source["format"] = "CAMT.053"
+        self.coordinator.store.data["bookings"][0].update(
+            amount=0.04,
+            source_data=camt_source,
+        )
+
+        result = asyncio.run(self.http.ResolvedBookingsView().get(self._request()))
+
+        booking = result["bookings"][0]
+        self.assertEqual(booking["booking_accounts"]["sender"]["label"], "Girokonto")
+        self.assertEqual(
+            booking["booking_accounts"]["recipient"]["label"],
+            "Gemeinsames Girokonto",
+        )
+
 
 class UnresolvedRuleProjectionTests(unittest.TestCase):
     setUp = RuleViewTests.setUp

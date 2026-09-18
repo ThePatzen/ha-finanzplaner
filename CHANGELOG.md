@@ -10,6 +10,7 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+- Bank-spezifische CAMT-Kontoreferenzen aus `DbtrAgt` und `CdtrAgt` werden bei internen Überweisungen erkannt, damit Absender- und Empfängerkonto auch in übernommenen Buchungen korrekt angezeigt werden.
 - Die Regelansicht gruppiert Regeln nach Konto; die Konto-Spalte entfällt. Innerhalb der Gruppen werden Regeln wie beim Matching nach absteigender Priorität und danach alphabetisch nach Regelname sortiert.
 
 ## [0.11.0] – 2026-09-18
