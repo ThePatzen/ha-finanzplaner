@@ -1,4 +1,4 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const BREAKDOWN_URL = "/api/finanzplaner/overview/breakdown";
@@ -619,6 +619,8 @@ const styles = `
   .section-data-table .section-table-number { font-family: var(--fp-data); white-space: nowrap; }
   .section-data-table .section-table-muted { color: var(--fp-muted); }
   .comparison-section { margin-block-start: 1.2rem; }
+  .comparison-grouping { margin: 0.9rem 0 0; padding: 0; border: 0; }
+  .comparison-grouping legend { color: var(--fp-muted); font-size: 0.72rem; font-weight: 800; }
   .comparison-section .section-actions { margin-block: 0.9rem; }
   .comparison-section .section-action { white-space: nowrap; }
   .comparison-section [aria-pressed="true"] { border-color: var(--fp-navy); color: var(--fp-paper); background: var(--fp-navy); }
@@ -630,6 +632,9 @@ const styles = `
   .comparison-details { margin-block-start: 1.2rem; padding-block-start: 1rem; border-block-start: 1px solid var(--fp-line); }
   .comparison-details h4 { margin: 0; font-size: 1rem; }
   .comparison-details caption { padding: 0.75rem; text-align: start; font-weight: 700; }
+  .comparison-source-categories { margin-block: 0.9rem; color: var(--fp-muted); font-size: 0.8rem; line-height: 1.45; }
+  .comparison-source-categories strong { color: var(--fp-ink); }
+  .comparison-source-categories ul { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin: 0.35rem 0 0; padding-inline-start: 1.1rem; }
   .section-empty { display: grid; justify-items: start; gap: 0.75rem; margin-block-start: 0.9rem; padding: 1rem; border: 1px dashed var(--fp-line); color: var(--fp-muted); font-size: 0.82rem; line-height: 1.45; }
   .section-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-block-start: 1rem; }
   .section-action { min-block-size: 2.65rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; padding: 0.55rem 0.8rem; border: 1px solid var(--fp-control-border); border-radius: 0.5rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 0.78rem; font-weight: 800; }
@@ -994,6 +999,16 @@ function catalogKindSingularLabel(kind) {
   }[kind] || kind;
 }
 
+function catalogDisplayLabel(entry, entries) {
+  const label = String(entry?.label || entry?.name || entry?.id || "");
+  const parent = entry?.parent_id
+    ? entries.find((candidate) => String(candidate.id) === String(entry.parent_id))
+    : null;
+  const parentLabel = String(parent?.label || parent?.name || "").trim();
+  const path = parentLabel ? `${parentLabel} → ${label}` : label;
+  return entry?.active === false ? `${path} (archiviert)` : path;
+}
+
 function percentBelowPlan(variance, plan) {
   if (!plan) return "0,0 %";
   return `${Math.abs((variance / plan) * 100).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
@@ -1089,6 +1104,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._data = fallbackOverview;
     this._view = "overview";
     this._comparisonDimension = "categories";
+    this._comparisonCategoryGrouping = "structure";
     this._reportView = "month";
     this._report = null;
     this._reportLoading = false;
@@ -1226,22 +1242,28 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _loadOverview() {
-    const request = { month: this._monthValue() };
+    const request = {
+      month: this._monthValue(),
+      categoryGrouping: this._comparisonCategoryGrouping,
+    };
     this._overviewRequest = request;
     this._loading = true;
     try {
-      const response = await fetchWithHomeAssistantAuth(this._hass, `${OVERVIEW_URL}?month=${request.month}`);
+      const response = await fetchWithHomeAssistantAuth(
+        this._hass,
+        overviewRequestUrl(OVERVIEW_URL, request.month, request.categoryGrouping),
+      );
       const result = await readApiResponse(response);
-      if (this._overviewRequest !== request || this._monthValue() !== request.month) return;
+      if (this._overviewRequest !== request || this._monthValue() !== request.month || this._comparisonCategoryGrouping !== request.categoryGrouping) return;
       if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
       this._data = dataWithDefaults(result);
       this._message = "";
     } catch (error) {
-      if (this._overviewRequest !== request || this._monthValue() !== request.month) return;
+      if (this._overviewRequest !== request || this._monthValue() !== request.month || this._comparisonCategoryGrouping !== request.categoryGrouping) return;
       this._data = dataWithDefaults(fallbackOverview);
       this._message = `Demo-Ansicht aktiv: ${error.message || "Die Finanzplaner-API ist noch nicht erreichbar."}`;
     } finally {
-      if (this._overviewRequest === request && this._monthValue() === request.month) {
+      if (this._overviewRequest === request && this._monthValue() === request.month && this._comparisonCategoryGrouping === request.categoryGrouping) {
         this._loading = false;
         if (this.isConnected) this._render();
       }
@@ -1258,9 +1280,20 @@ class FinanzplanerPanel extends HTMLElement {
   _setComparisonDimension(dimension) {
     if (!["categories", "areas", "projects"].includes(dimension)) return;
     this._comparisonDimension = dimension;
+    if (dimension !== "categories") this._comparisonCategoryGrouping = "structure";
     this._clearBreakdown();
     this._render();
     this.shadowRoot.querySelector(`[data-comparison-dimension="${dimension}"]`)?.focus();
+  }
+
+  _setComparisonCategoryGrouping(grouping) {
+    if (this._comparisonDimension !== "categories" || !["structure", "name"].includes(grouping)) return;
+    if (this._comparisonCategoryGrouping === grouping) return;
+    this._comparisonCategoryGrouping = grouping;
+    this._clearBreakdown();
+    this._render();
+    this._loadOverview();
+    this.shadowRoot.querySelector(`[data-comparison-grouping="${grouping}"]`)?.focus();
   }
 
   _closeBreakdown() {
@@ -1436,18 +1469,27 @@ class FinanzplanerPanel extends HTMLElement {
 
   async _loadBreakdown(dimension, key) {
     if (this._view !== "overview" || this._loading || dimension !== this._comparisonDimension || this._data.demo !== false) return;
-    const selection = { month: this._monthValue(), dimension, key };
+    const selection = {
+      month: this._monthValue(),
+      dimension,
+      key,
+      categoryGrouping: this._comparisonCategoryGrouping,
+    };
     this._breakdownSelection = selection;
     this._breakdown = null;
     this._breakdownLoading = true;
     this._breakdownError = "";
     this._message = "";
     const current = () => this._view === "overview" && this._breakdownSelection === selection
-      && this._monthValue() === selection.month && this._comparisonDimension === dimension;
+      && this._monthValue() === selection.month && this._comparisonDimension === dimension
+      && this._comparisonCategoryGrouping === selection.categoryGrouping;
     this._render();
     this.shadowRoot.querySelector("#comparison-details-heading")?.focus();
     try {
-      const response = await fetchWithHomeAssistantAuth(this._hass, breakdownRequestUrl(BREAKDOWN_URL, selection.month, dimension, key));
+      const response = await fetchWithHomeAssistantAuth(
+        this._hass,
+        breakdownRequestUrl(BREAKDOWN_URL, selection.month, dimension, key, selection.categoryGrouping),
+      );
       const result = await readApiResponse(response);
       if (!current()) return;
       if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
@@ -2550,8 +2592,7 @@ class FinanzplanerPanel extends HTMLElement {
         : []),
     ]);
     options.push(...orderedEntries.map((entry) => {
-      const label = entry.active === false ? `${entry.label} (archiviert)` : entry.label;
-      const displayLabel = kind === "categories" && entry.parent_id ? `Unterkategorie · ${label}` : label;
+      const displayLabel = catalogDisplayLabel(entry, allEntries);
       return `<option value="${escapeHtml(entry.id)}" data-catalog-label="${escapeHtml(entry.label)}"${String(entry.id) === selectedId ? " selected" : ""}>${escapeHtml(displayLabel)}</option>`;
     }));
     return options.join("");
@@ -3869,6 +3910,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   _bindEvents() {
     this.shadowRoot.querySelectorAll("[data-comparison-dimension]").forEach((button) => button.addEventListener("click", () => this._setComparisonDimension(button.dataset.comparisonDimension)));
+    this.shadowRoot.querySelectorAll("[data-comparison-grouping]").forEach((button) => button.addEventListener("click", () => this._setComparisonCategoryGrouping(button.dataset.comparisonGrouping)));
     this.shadowRoot.querySelectorAll("[data-comparison-detail]").forEach((button) => button.addEventListener("click", () => this._loadBreakdown(this._comparisonDimension, button.dataset.comparisonDetail)));
     this.shadowRoot.querySelector("[data-comparison-close]")?.addEventListener("click", () => this._closeBreakdown());
     this.shadowRoot.querySelector("[data-comparison-retry]")?.addEventListener("click", () => {
@@ -4123,6 +4165,9 @@ class FinanzplanerPanel extends HTMLElement {
       <div class="section-actions" role="group" aria-label="Vergleich gruppieren nach">
         ${["categories", "areas", "projects"].map((kind) => `<button class="section-action" id="comparison-dimension-${kind}" type="button" data-comparison-dimension="${kind}" aria-pressed="${dimension === kind}">${comparisonDimensionLabel(kind)}</button>`).join("")}
       </div>
+      ${dimension === "categories" ? `<fieldset class="comparison-grouping"><legend>Kategorien gruppieren</legend><div class="section-actions" role="group" aria-label="Kategorien gruppieren nach">
+        ${[["structure", "Struktur"], ["name", "Name zusammenfassen"]].map(([grouping, text]) => `<button class="section-action" type="button" data-comparison-grouping="${grouping}" aria-pressed="${this._comparisonCategoryGrouping === grouping}">${text}</button>`).join("")}
+      </div></fieldset>` : ""}
       ${this._loading ? `<p role="status" aria-live="polite">Vergleichswerte werden geladen …</p>` : rows ? `<div class="section-data-table-wrap" role="region" aria-label="${label} im Monatsvergleich" tabindex="0"><table class="section-data-table">
         <caption class="visually-hidden">${label} · ${monthLabel(this._month)} · Beträge in Euro</caption>
         <thead><tr><th scope="col">Bezeichnung</th><th scope="col">Plan</th><th scope="col">Prognose</th><th scope="col">Ist</th><th scope="col">Abweichung</th><th scope="col">Details</th></tr></thead>
@@ -4143,12 +4188,14 @@ class FinanzplanerPanel extends HTMLElement {
     const bookings = (details?.bookings || []).map((booking) => `<tr><th scope="row">${escapeHtml(booking.counterparty || "Ohne Zahlungsempfänger")}</th>
       <td>${escapeHtml(formatDate(booking.booking_date))}</td><td>${escapeHtml(booking.purpose)}</td>
       <td class="section-table-number">${formatEuro(booking.matched_amount)}</td></tr>`).join("");
+    const sourceCategories = (details?.source_categories || []).map((source) => `<li>${escapeHtml(source.name)}</li>`).join("");
     return `<section class="comparison-details" aria-labelledby="comparison-details-heading">
       <h4 id="comparison-details-heading" tabindex="-1">${escapeHtml(name)} · ${monthLabel(this._month)}</h4>
       <p role="status" aria-live="polite" aria-atomic="true">${escapeHtml(status)}</p>
       <div class="section-actions"><button class="section-action" id="comparison-close" type="button" data-comparison-close>Vergleich schließen</button>
         <button class="section-action" id="comparison-retry" type="button" data-comparison-retry ${this._breakdownLoading ? "disabled" : ""}>Erneut laden</button></div>
       ${details ? `<p>Planposten zeigen den hinterlegten Betrag und Rhythmus. Buchungen zeigen nur den Anteil dieser Zuordnung. Futterprognosen können zusätzliche Prognosewerte liefern.</p>
+        ${sourceCategories ? `<div class="comparison-source-categories"><strong>Enthaltene Kategorien</strong><ul>${sourceCategories}</ul></div>` : ""}
         <div class="section-data-table-wrap" role="region" aria-label="Planposten für ${escapeHtml(name)}" tabindex="0"><table class="section-data-table"><caption>Planposten · ${escapeHtml(name)}</caption>
           <thead><tr><th scope="col">Bezeichnung</th><th scope="col">Richtung</th><th scope="col">Betrag</th><th scope="col">Rhythmus</th></tr></thead>
           <tbody>${plans || `<tr><td colspan="4">Keine Planposten für diese Zuordnung im ausgewählten Monat.</td></tr>`}</tbody></table></div>
@@ -4565,7 +4612,9 @@ class FinanzplanerPanel extends HTMLElement {
     const rows = entries.map((entry) => {
       const entryId = String(entry.id);
       const label = entry.label || "Stammdateneintrag";
-      const visibleLabel = kind === "categories" && entry.parent_id ? `Unterkategorie · ${label}` : label;
+      const visibleLabel = kind === "categories"
+        ? catalogDisplayLabel(entry, this._catalogEntries(kind))
+        : catalogDisplayLabel(entry, entries);
       return `<tr><th scope="row">${escapeHtml(visibleLabel)}</th><td><span class="plan-item-status${entry.active !== false ? "" : " plan-item-status--archived"}">${planItemStatus(entry.active !== false)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-label="${escapeHtml(label)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
     }).join("");
     const activeCount = entries.filter((entry) => entry.active !== false).length;
@@ -4730,8 +4779,7 @@ class FinanzplanerPanel extends HTMLElement {
         .sort((left, right) => String(left.label || "").localeCompare(String(right.label || ""), "de")),
     ]);
     options.push(...orderedEntries.map((entry) => {
-      const label = entry.label || entry.name || entry.id;
-      const displayLabel = entry.parent_id ? `Unterkategorie · ${label}` : label;
+      const displayLabel = catalogDisplayLabel(entry, activeEntries);
       return `<option value="${escapeHtml(entry.id)}"${selected === entry.id ? " selected" : ""}>${escapeHtml(displayLabel)}</option>`;
     }));
     return options.join("");

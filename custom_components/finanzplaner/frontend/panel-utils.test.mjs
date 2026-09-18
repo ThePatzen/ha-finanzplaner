@@ -84,7 +84,8 @@ test("keeps the accessible chart summary from spilling into the visible card", (
 test("supports one-level category parents in the editor and selectors", () => {
   assert.match(panelSource, /parent_id/);
   assert.match(panelSource, /Übergeordnete Kategorie/);
-  assert.match(panelSource, /Unterkategorie/);
+  assert.match(panelSource, /→/);
+  assert.doesNotMatch(panelSource, /Unterkategorie ·/);
 });
 
 test("returns from a root-hosted panel to the HA base route", () => {
@@ -769,10 +770,18 @@ test("comparison labels and entries select only the requested dimension", () => 
 });
 
 test("breakdown URL encodes each query value independently", () => {
+  assert.equal(
+    utils.overviewRequestUrl("/overview", "2026-09", "name"),
+    "/overview?month=2026-09&category_grouping=name",
+  );
   assert.equal(utils.breakdownRequestUrl("/api/finanzplaner/overview/breakdown", "2026-09", "categories", "name:Futter & Öl/+?#"),
     "/api/finanzplaner/overview/breakdown?month=2026-09&dimension=categories&key=name%3AFutter%20%26%20%C3%96l%2F%2B%3F%23");
   assert.equal(utils.breakdownRequestUrl("/breakdown", "2026&09", "areas/projects", "__unassigned__"),
     "/breakdown?month=2026%2609&dimension=areas%2Fprojects&key=__unassigned__");
+  assert.equal(
+    utils.breakdownRequestUrl("/breakdown", "2026-09", "categories", "category-name:gebühren", "name"),
+    "/breakdown?month=2026-09&dimension=categories&key=category-name%3Ageb%C3%BChren&category_grouping=name",
+  );
 });
 
 function comparisonTestPanel() {
@@ -801,6 +810,8 @@ test("overview source includes comparison semantics, native controls and live st
   assert.match(panelSource, /<button[^>]*type="button"[^>]*data-comparison-dimension/);
   assert.match(panelSource, /aria-pressed=/);
   assert.match(panelSource, /data-comparison-detail/);
+  assert.doesNotMatch(panelSource, /Unterkategorie ·/);
+  assert.match(panelSource, /data-comparison-grouping/);
   assert.match(panelSource, /aria-live="polite"/);
   const panel = comparisonTestPanel();
   const markup = panel._overviewTemplate();
@@ -809,6 +820,16 @@ test("overview source includes comparison semantics, native controls and live st
   assert.match(markup, /<th scope="row">Futter &lt;Bio&gt;<\/th>/);
   assert.match(markup, /Ist über Plan/);
   assert.ok(markup.indexOf("Budget-Ist-Vergleich") > markup.indexOf("Monatsverlauf"));
+});
+
+test("category options render the full parent path", () => {
+  const panel = comparisonTestPanel();
+  panel._catalogs.categories = [
+    { id: "house", label: "Haus", active: true, parent_id: null },
+    { id: "fees", label: "Gebühren", active: true, parent_id: "house" },
+  ];
+
+  assert.match(panel._catalogOptions("categories", "fees"), /Haus → Gebühren/);
 });
 
 test("breakdown loads through HA auth and renders source tables and matched booking amount", async () => {
@@ -831,6 +852,24 @@ test("breakdown loads through HA auth and renders source tables and matched book
   assert.match(panel.markup, /Vergleich schließen/);
   assert.match(panel.markup, /Erneut laden/);
   assert.equal(panel._breakdownLoading, false);
+});
+
+test("name-grouped breakdown sends its mode and renders source category paths", async () => {
+  const panel = comparisonTestPanel();
+  panel._comparisonCategoryGrouping = "name";
+  let respond;
+  panel._hass = { fetchWithAuth: (url) => {
+    assert.equal(url, "/api/finanzplaner/overview/breakdown?month=2026-09&dimension=categories&key=id%3Afood&category_grouping=name");
+    return new Promise((resolve) => { respond = resolve; });
+  } };
+  const pending = panel._loadBreakdown("categories", "id:food");
+  respond(breakdownResponse({ source_categories: [
+    { key: "house-fees", name: "Haus → Gebühren" },
+    { key: "bank-fees", name: "Bank → Gebühren" },
+  ] }));
+  await pending;
+  assert.match(panel.markup, /Haus → Gebühren/);
+  assert.match(panel.markup, /Bank → Gebühren/);
 });
 
 test("breakdown error uses feedback and offers retry; empty results explain both source lists", async () => {

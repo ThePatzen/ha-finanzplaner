@@ -17,8 +17,14 @@ export function comparisonEntries(comparison, dimension) {
   return Array.isArray(comparison?.[dimension]) ? comparison[dimension] : [];
 }
 
-export function breakdownRequestUrl(baseUrl, month, dimension, key) {
-  return `${baseUrl}?month=${encodeURIComponent(month)}&dimension=${encodeURIComponent(dimension)}&key=${encodeURIComponent(key)}`;
+export function overviewRequestUrl(baseUrl, month, categoryGrouping = "structure") {
+  const query = `month=${encodeURIComponent(month)}`;
+  return `${String(baseUrl).replace(/\/$/, "")}?${categoryGrouping === "name" ? `${query}&category_grouping=name` : query}`;
+}
+
+export function breakdownRequestUrl(baseUrl, month, dimension, key, categoryGrouping = "structure") {
+  const query = `month=${encodeURIComponent(month)}&dimension=${encodeURIComponent(dimension)}&key=${encodeURIComponent(key)}`;
+  return `${String(baseUrl).replace(/\/$/, "")}?${dimension === "categories" && categoryGrouping === "name" ? `${query}&category_grouping=name` : query}`;
 }
 
 export function bookingDetailsRequestUrl(baseUrl, bookingId) {
