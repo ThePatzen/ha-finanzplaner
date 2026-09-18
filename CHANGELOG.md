@@ -8,7 +8,7 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
-## Unreleased
+## [0.11.0] – 2026-09-18
 
 - Interne Konten werden in ungeklärten und übernommenen Buchungen direkt neben Absender und Zahlungsempfänger angezeigt; das redundante Kontenpaar rechts entfällt.
 - Beim Erstellen einer Regel aus einer übernommenen Buchung wird der vorhandene Verwendungszweck als vorbefüllter Verwendungszweckfilter übernommen.
@@ -164,6 +164,7 @@ Erste vorbereitete vertikale Version:
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
 [0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
+[0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0
 [0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0
 [0.9.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.9.0
 [0.8.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.8.1

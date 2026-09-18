@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.10.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
+Version 0.11.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
