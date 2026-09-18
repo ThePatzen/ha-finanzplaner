@@ -22,6 +22,7 @@ und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserung
 - Futterprofile je Tier mit Kaufkosten, Verbrauchsintervall und nächster Kaufprognose
 - Stammdatenverwaltung für Kategorien, Bereiche und Projekte mit stabilen IDs und Namens-Snapshots
 - Kategorien können optional eine Unterkategorie-Ebene wie „Shopping“ → „Amazon“ und „Zalando“ enthalten
+- Unterkategorien dürfen unter verschiedenen Hauptkategorien denselben Namen tragen und werden als vollständiger Pfad angezeigt, zum Beispiel „Haus → Gebühren“ und „Bank → Gebühren“
 - breite Verwaltungsansichten mit ausgenutzter Inhaltsbreite und konsistenter Button-Ausrichtung
 - tabellarische Übersichten für alle Verwaltungsbereiche mit nachgelagerter Editieransicht
 - automationstauglicher HA-Status `Futterkauf fällig` und Service zum Bestätigen eines Kaufs
@@ -37,6 +38,7 @@ und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserung
 - Übernommene Buchungsdetails zeigen fehlende Absender und Zahlungsempfänger bei auflösbaren internen Konten; die unveränderten Quelldaten bleiben gespeichert
 - Buchungen lassen sich in der Prüfliste und der Übernahmesicht per Checkbox einzeln oder vollständig auswählen und dauerhaft löschen
 - Budget-Ist-Vergleich für Bereiche, Kategorien und Projekte mit Inline-Details zu Planposten und Buchungen
+- Der Kategorievergleich kann zwischen vollständiger Struktur und einer Zusammenfassung gleicher Unterkategorienamen umgeschaltet werden; die Detailansicht zeigt dabei weiterhin die Quellpfade.
 - erkannte Konten in ungeklärten Buchungen mit Kontonamen und maskierter Referenz
 - lokale Versionierung über Home Assistants persistenten Store
 - ausgewählte Übersichtswerte als HA-Sensoren

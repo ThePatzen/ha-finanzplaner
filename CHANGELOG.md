@@ -8,6 +8,12 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [Unreleased]
+
+- Unterkategorien dürfen unter verschiedenen Hauptkategorien denselben Namen tragen, zum Beispiel „Haus → Gebühren“ und „Bank → Gebühren“.
+- Auswahlfelder, Stammdaten, Regeln und Filter zeigen Unterkategorien mit ihrem vollständigen Pfad statt mit dem technischen Präfix „Unterkategorie ·“.
+- Der Budget-Ist-Vergleich kann Kategorien entweder nach Struktur getrennt oder nach gleichem Namen zusammengefasst auswerten; die Detailansicht weist die beteiligten Quellpfade aus.
+
 ## [0.15.0] – 2026-09-18
 
 - Kategorien unterstützen optional genau eine Unterkategorie-Ebene, die in Stammdaten- und Zuordnungsauswahl eingerückt angezeigt wird.
