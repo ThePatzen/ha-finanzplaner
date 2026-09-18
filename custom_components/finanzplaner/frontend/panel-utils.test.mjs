@@ -913,7 +913,7 @@ test("rule validation rejects bad shares, duplicate targets and unavailable refe
   assert.ok(errors["2-share_percent"]);
 });
 
-test("confirmed booking opens a prefilled rule with no purpose filter and no POST", async () => {
+test("confirmed booking opens a prefilled rule with its purpose filter and no POST", async () => {
   const panel = ruleTestPanel();
   panel._confirmedBookings.set("b1", {
     id: "b1", status: "resolved", counterparty: "Laden", purpose: "Private Details",
@@ -926,7 +926,7 @@ test("confirmed booking opens a prefilled rule with no purpose filter and no POS
     return new Response(JSON.stringify({ rules: [], accounts: [], persons: [], pets: [], catalogs: {} }), { headers: { "Content-Type": "application/json" } });
   } };
   await panel._openRuleFromBooking("b1");
-  assert.equal(panel._ruleDraft.purpose_contains, "");
+  assert.equal(panel._ruleDraft.purpose_contains, "Private Details");
   assert.equal(panel._ruleDraft.counterparty, "Laden");
   assert.equal(panel._ruleDraft.account_id, "a1");
   assert.deepEqual(Array.from(panel._ruleDraft.allocations, (row) => Number(row.share_percent)), [33.33, 66.67]);
@@ -969,6 +969,45 @@ test("review shows payment recipient separately from purpose", () => {
   const missingCounterpartyMarkup = panel._reviewTemplate();
   assert.match(missingCounterpartyMarkup, /Zahlungsempfänger nicht erkannt/);
   assert.match(missingCounterpartyMarkup, /Verwendungszweck:.*Sparenzu POS 166,90/);
+});
+
+test("review places internal account labels beside sender and recipient without an account pair", () => {
+  const panel = ruleTestPanel();
+  panel._bookings = [{
+    id: "b-internal-review", booking_date: "2026-06-08", sender: "Ing. David Egger",
+    counterparty: "Isabella Egger", purpose: "Giro-Überweisung", amount: -100,
+    status: "unresolved", account_label: "Haushaltsrücklagen", account_reference: "•••• 3157",
+    booking_accounts: {
+      sender: { label: "Girokonto", account_reference: "•••• 1234" },
+      recipient: { label: "Haushaltsrücklagen", account_reference: "•••• 3157" },
+    },
+  }];
+
+  const markup = panel._reviewTemplate();
+
+  assert.match(markup, /Absender: Ing\. David Egger <span class="booking-account-inline">\(Girokonto\)<\/span>/);
+  assert.match(markup, /Zahlungsempfänger: Isabella Egger <span class="booking-account-inline">\(Haushaltsrücklagen\)<\/span>/);
+  assert.match(markup, /Erkanntes Konto: Haushaltsrücklagen/);
+  assert.doesNotMatch(markup, /Konten:/);
+});
+
+test("resolved bookings place internal account labels beside sender and recipient without an account pair", () => {
+  const panel = ruleTestPanel();
+  panel._resolvedBookings = [{
+    id: "b-internal-resolved", booking_date: "2026-06-08", sender: "Ing. David Egger",
+    counterparty: "Isabella Egger", purpose: "Giro-Überweisung", amount: -100,
+    status: "resolved",
+    booking_accounts: {
+      sender: { label: "Girokonto", account_reference: "•••• 1234" },
+      recipient: { label: "Haushaltsrücklagen", account_reference: "•••• 3157" },
+    },
+  }];
+
+  const markup = panel._resolvedBookingsTemplate();
+
+  assert.match(markup, /Absender: Ing\. David Egger <span class="booking-account-inline">\(Girokonto\)<\/span>/);
+  assert.match(markup, /Zahlungsempfänger: Isabella Egger <span class="booking-account-inline">\(Haushaltsrücklagen\)<\/span>/);
+  assert.doesNotMatch(markup, /Konten:/);
 });
 
 test("saving a booking rule validates the edited payload and persists once and returns to the list", async () => {

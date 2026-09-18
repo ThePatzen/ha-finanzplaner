@@ -8,6 +8,11 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## Unreleased
+
+- Interne Konten werden in ungeklärten und übernommenen Buchungen direkt neben Absender und Zahlungsempfänger angezeigt; das redundante Kontenpaar rechts entfällt.
+- Beim Erstellen einer Regel aus einer übernommenen Buchung wird der vorhandene Verwendungszweck als vorbefüllter Verwendungszweckfilter übernommen.
+
 ## [0.10.0] – 2026-09-17
 
 - CAMT-Kontoreferenzen werden gegen konfigurierte Konten abgeglichen und interne Überweisungen in Buchungen, Prüfliste sowie Buchungsdetails als Absenderkonto → Empfängerkonto angezeigt.

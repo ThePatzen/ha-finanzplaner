@@ -96,7 +96,7 @@ Beim Import einer CAMT.053- oder MT940-Datei erkennt Finanzplaner das verwendete
 
 CAMT.053-Buchungen zeigen `Dbtr/Nm` als separaten Absender und `Cdtr/Nm` als Zahlungsempfänger. Das bestehende Zahlungsempfängerfeld bleibt für Fingerprints und Regelmatching unverändert. Ältere CAMT-Buchungen werden beim Laden aus den gespeicherten Quelldaten nachgezogen; fehlt bei MT940 ein verlässlicher Absender, zeigt die Oberfläche „Nicht vorhanden“.
 
-Wenn die CAMT-Kontoreferenz des Absenders oder Empfängers zu einem konfigurierten Konto passt, zeigen `Buchungen`, `Buchungen prüfen` und das Detail-Popup beide Konten als richtungsrichtiges Paar. Die Kontoreferenzen bleiben in Oberfläche und API maskiert; externe Gegenparteien werden weiterhin nur als Absender beziehungsweise Zahlungsempfänger angezeigt.
+Wenn die CAMT-Kontoreferenz des Absenders oder Empfängers zu einem konfigurierten Konto passt, zeigen `Buchungen` und `Buchungen prüfen` die jeweilige Kontobezeichnung direkt neben Absender beziehungsweise Zahlungsempfänger; das Detail-Popup führt beide Konten weiterhin getrennt auf. Die Kontoreferenzen bleiben in Oberfläche und API maskiert; externe Gegenparteien werden weiterhin nur als Absender beziehungsweise Zahlungsempfänger angezeigt.
 
 Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`person.*`-Entitäten; zusätzlich steht `Haushalt` für gemeinsame Konten und Ausgaben bereit. Kontoinhaber beschreiben nur die Zahlungsquelle. Sie werden nicht automatisch auf bestehende oder neue Buchungen übertragen.
 
@@ -110,7 +110,7 @@ Regelnamen dürfen bis zu 120 Zeichen enthalten, Zahlungsempfänger und Verwendu
 
 Eindeutige Treffer werden beim Bankimport automatisch gespeichert. Die Buchung enthält dabei einen Snapshot aus Regel-ID, Regelname, Treffergrund und Übernahmezeitpunkt. Nach dem Anlegen oder Ändern einer Regel kannst du in `Buchungen prüfen` mit `Regeln erneut anwenden` alle derzeit ungeklärten Buchungen noch einmal auswerten. Bereits übernommene Buchungen werden dabei nicht verändert; Konflikte und ungeklärte Treffer bleiben zur manuellen Prüfung offen.
 
-Nach einer bestätigten manuellen Aufteilung kannst du in der Prüfliste `Als Regel speichern` wählen. Finanzplaner öffnet daraus eine Regelvorlage mit Konto, dem bekannten Zahlungsempfänger und den bestätigten Anteilen. Ist kein Zahlungsempfänger importiert, bleibt das Feld leer; prüfe dann mindestens Konto oder Verwendungszweckfilter als Bedingung. Ergänze bei Bedarf den Verwendungszweckfilter und die Priorität und speichere die Vorlage mit `Regel speichern`. Regeländerungen wirken nicht rückwirkend auf bereits übernommene Buchungen.
+Nach einer bestätigten manuellen Aufteilung kannst du in der Prüfliste `Als Regel speichern` wählen. Finanzplaner öffnet daraus eine Regelvorlage mit Konto, dem bekannten Zahlungsempfänger, dem vorhandenen Verwendungszweck als vorbefülltem Filter und den bestätigten Anteilen. Ist kein Zahlungsempfänger importiert, bleibt das Feld leer; prüfe dann mindestens Konto oder Verwendungszweckfilter als Bedingung. Passe den Verwendungszweckfilter und die Priorität bei Bedarf an und speichere die Vorlage mit `Regel speichern`. Regeländerungen wirken nicht rückwirkend auf bereits übernommene Buchungen.
 
 Fehlende oder archivierte Zuordnungen und durch Umrechnung ungültige Prozentanteile kannst du im Entwurf korrigieren. Erst `Regel speichern` sendet die bearbeiteten Angaben zur serverseitigen Prüfung und speichert die neue Regel. Die ursprüngliche Buchung bleibt dabei unverändert.
 

@@ -135,7 +135,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
         self.assertGreaterEqual(source.count("Absender:"), 2)
         self.assertGreaterEqual(source.count("booking.sender"), 2)
 
-    def test_booking_surfaces_show_configured_internal_account_pair(self) -> None:
+    def test_booking_surfaces_show_configured_internal_account_labels_inline(self) -> None:
         panel_path = (
             Path(__file__).parents[1]
             / "custom_components"
@@ -146,7 +146,8 @@ class PanelStaticAssetsTest(unittest.TestCase):
         source = panel_path.read_text(encoding="utf-8")
 
         self.assertIn("booking_accounts", source)
-        self.assertIn("Konten:", source)
+        self.assertIn("_bookingAccountInlineTemplate", source)
+        self.assertIn('className = "booking-account-inline"', source)
         self.assertIn("booking?.booking_accounts", source)
         self.assertIn("booking.booking_accounts", source)
 

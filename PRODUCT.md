@@ -65,7 +65,7 @@ Zusätzlich enthalten:
 - nachvollziehbare Kennzeichnung der verwendeten Regel und ihres Treffergrunds bei automatisch übernommenen Buchungen
 - Ansicht aller übernommenen Buchungen mit Rückgängig-Funktion, die die Buchung wieder in die Prüfliste verschiebt
 - über Checkboxen auswählbare und dauerhaft löschbare Buchungen in der Prüfliste und der Ansicht übernommener Buchungen
-- Regelvorlage aus einer bestätigten Buchung über „Als Regel speichern“
+- Regelvorlage aus einer bestätigten Buchung über „Als Regel speichern“, mit dem vorhandenen Verwendungszweck als vorbefülltem Filter
 - ungültige passende Regeln mit höchster Priorität halten die Buchung mit konkretem Prüfgrund ungeklärt; es erfolgt kein Rückgriff auf niedrigere Prioritäten
 - aus bestätigten Buchungen vorbelegte Regeln lassen sich vor der ausdrücklichen Speicherung korrigieren; der Server validiert den bearbeiteten Entwurf
 
@@ -94,7 +94,7 @@ Weitere Produktfähigkeiten und Leitplanken:
 - Vollständige Kontoreferenzen bleiben im lokalen Speicher; Panel und API zeigen Kontodaten nur maskiert.
 - Die normalisierten Parserfelder bleiben für die Fachlogik erhalten; zusätzlich wird der vollständige buchungsbezogene MT940-/CAMT.053-Quellsatz lokal zur Prüfung aufbewahrt und in API sowie Panel maskiert dargestellt.
 - CAMT.053-Buchungen führen Absender und Zahlungsempfänger getrennt; bei fehlenden MT940-Absenderdaten wird dies ausdrücklich als nicht vorhanden angezeigt.
-- Wenn eine CAMT-Absender- oder Empfängerkontoreferenz einem konfigurierten Konto entspricht, zeigen Buchungen, Prüfliste und Buchungsdetails beide Konten richtungsrichtig an.
+- Wenn eine CAMT-Absender- oder Empfängerkontoreferenz einem konfigurierten Konto entspricht, zeigen Buchungen und Prüfliste die jeweilige Kontobezeichnung direkt neben Absender beziehungsweise Zahlungsempfänger; Buchungsdetails führen beide Konten weiterhin getrennt auf.
 - Unveränderte Uploads von Bankdateien werden pro Datei lokal aufbewahrt und können aus Buchungen einzeln oder als ZIP exportiert werden; Excel-Originaldateien bleiben ausgeschlossen.
 - keine direkte Open-Banking-Anbindung in der ersten Version
 - keine automatische Überwachung eines Dateiordners in der ersten Version
