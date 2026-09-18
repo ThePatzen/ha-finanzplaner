@@ -292,7 +292,7 @@ def _normalize_catalogs(data: dict[str, Any]) -> None:
     for kind in CATALOG_KINDS:
         entries = raw_catalogs.get(kind, [])
         entries = entries if isinstance(entries, list) else []
-        normalized: dict[str, dict[str, Any]] = {}
+        normalized: dict[tuple[str, str], dict[str, Any]] = {}
         used_ids: set[str] = set()
         for entry in entries:
             if isinstance(entry, str):
@@ -306,7 +306,15 @@ def _normalize_catalogs(data: dict[str, Any]) -> None:
                 continue
             if not label:
                 continue
-            key = label.casefold()
+            parent_id = None
+            if kind == "categories":
+                raw_parent_id = candidate.get("parent_id")
+                parent_id = (
+                    raw_parent_id.strip()
+                    if isinstance(raw_parent_id, str) and raw_parent_id.strip()
+                    else None
+                )
+            key = (parent_id or "", label.casefold())
             if key in normalized:
                 continue
             item = {
@@ -317,19 +325,21 @@ def _normalize_catalogs(data: dict[str, Any]) -> None:
                 "updated_at": candidate.get("updated_at"),
             }
             if kind == "categories":
-                parent_id = candidate.get("parent_id")
-                item["parent_id"] = parent_id.strip() if isinstance(parent_id, str) and parent_id.strip() else None
-            item["id"] = item["id"] or catalog_id_for_label(kind, label)
+                item["parent_id"] = parent_id
+            item["id"] = item["id"] or catalog_id_for_label(kind, label, parent_id)
             if item["id"] in used_ids:
-                item["id"] = catalog_id_for_label(kind, f"{label}:{len(used_ids)}")
+                item["id"] = catalog_id_for_label(
+                    kind, f"{label}:{len(used_ids)}", parent_id
+                )
             used_ids.add(item["id"])
             normalized[key] = item
 
         for value in _catalog_source_values(data, kind):
             label = value.strip()
-            if not label or label.casefold() in normalized:
+            key = ("", label.casefold())
+            if not label or key in normalized:
                 continue
-            normalized[label.casefold()] = {
+            normalized[key] = {
                 "id": catalog_id_for_label(kind, label),
                 "label": label,
                 "active": True,
@@ -428,22 +438,39 @@ def ensure_catalog_entries(data: dict[str, Any], values: dict[str, object]) -> N
         if not isinstance(entries, list):
             entries = []
             catalogs[kind] = entries
+        parent_id = None
+        if kind == "categories":
+            raw_parent_id = values.get("parent_id")
+            parent_id = (
+                raw_parent_id.strip()
+                if isinstance(raw_parent_id, str) and raw_parent_id.strip()
+                else None
+            )
+        scope_key = (parent_id or "", label.casefold())
         if any(
             isinstance(entry, dict)
             and isinstance(entry.get("label"), str)
-            and entry["label"].casefold() == label.casefold()
+            and (
+                (
+                    str(entry.get("parent_id") or "")
+                    if kind == "categories"
+                    else ""
+                ),
+                entry["label"].casefold(),
+            )
+            == scope_key
             for entry in entries
         ):
             continue
         entry = {
-            "id": catalog_id_for_label(kind, label),
+            "id": catalog_id_for_label(kind, label, parent_id),
             "label": label,
             "active": True,
             "created_at": now_iso,
             "updated_at": now_iso,
         }
         if kind == "categories":
-            entry["parent_id"] = None
+            entry["parent_id"] = parent_id
         entries.append(entry)
         entries.sort(key=lambda item: (str(item.get("label", "")).casefold(), str(item.get("id", ""))))
     _link_catalog_references(data)

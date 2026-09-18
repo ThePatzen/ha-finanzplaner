@@ -65,10 +65,14 @@ RULE_ALLOCATION_FIELDS = frozenset(
 )
 
 
-def catalog_id_for_label(kind: str, label: str) -> str:
+def catalog_id_for_label(
+    kind: str, label: str, parent_id: str | None = None
+) -> str:
     """Return a deterministic local ID for a catalog label."""
 
     material = f"{kind}:{label.casefold()}"
+    if parent_id:
+        material = f"{material}:parent:{parent_id}"
     prefix = CATALOG_VALUE_FIELDS.get(kind, kind.rstrip("s"))
     return f"catalog-{prefix}-{hashlib.sha256(material.encode('utf-8')).hexdigest()[:16]}"
 

@@ -199,6 +199,42 @@ class CatalogDomainTests(unittest.TestCase):
                 entry_id="category-zalando",
             )
 
+    def test_same_subcategory_label_survives_under_different_parents(self):
+        house_id = catalog_id_for_label("categories", "Haus")
+        bank_id = catalog_id_for_label("categories", "Bank")
+        migrated = migrate_store_data(
+            {
+                "version": 2,
+                "catalogs": {
+                    "categories": [
+                        {"id": house_id, "label": "Haus"},
+                        {"id": bank_id, "label": "Bank"},
+                        {"label": "Gebühren", "parent_id": house_id},
+                        {"label": "Gebühren", "parent_id": bank_id},
+                    ]
+                },
+            },
+            "Testhaushalt",
+        )
+
+        fees = [
+            entry
+            for entry in migrated["catalogs"]["categories"]
+            if entry["label"] == "Gebühren"
+        ]
+        self.assertEqual({entry["parent_id"] for entry in fees}, {house_id, bank_id})
+        self.assertEqual(len({entry["id"] for entry in fees}), 2)
+
+    def test_legacy_top_level_catalog_id_stays_unchanged(self):
+        self.assertEqual(
+            catalog_id_for_label("categories", "Gebühren"),
+            catalog_id_for_label("categories", "Gebühren", None),
+        )
+        self.assertNotEqual(
+            catalog_id_for_label("categories", "Gebühren", "category-house"),
+            catalog_id_for_label("categories", "Gebühren", "category-bank"),
+        )
+
 
 
 class PetDomainTests(unittest.TestCase):
