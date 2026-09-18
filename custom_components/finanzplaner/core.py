@@ -52,7 +52,11 @@ RULE_FIELDS = frozenset(
         "priority",
         "account_id",
         "counterparty",
+        "counterparty_account",
         "purpose_contains",
+        "direction",
+        "amount_min",
+        "amount_max",
         "allocations",
     }
 )
@@ -735,6 +739,20 @@ def _rule_priority(value: object) -> int:
     return value
 
 
+def _rule_amount(value: object, label: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{label} muss als positive Zahl angegeben werden.")
+    try:
+        amount = _money(value)
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise ValueError(f"{label} muss als positive Zahl angegeben werden.") from exc
+    if not amount.is_finite() or amount < 0:
+        raise ValueError(f"{label} muss als positive Zahl angegeben werden.")
+    return float(amount)
+
+
 def _active_reference(
     reference_id: str,
     references: dict[str, dict[str, object]],
@@ -812,11 +830,29 @@ def validate_rule_payload(
         normalized["counterparty"] = _normalized_rule_text(
             payload.get("counterparty"), "Der Zahlungsempfänger", required=False, max_length=160
         )
+    if not partial or "counterparty_account" in payload:
+        reference = payload.get("counterparty_account")
+        if reference is not None and not isinstance(reference, str):
+            raise ValueError("Das Gegenkonto muss als Text angegeben werden.")
+        normalized["counterparty_account"] = (
+            normalize_account_reference(reference) if reference else None
+        )
+    if not partial or "direction" in payload:
+        direction = payload.get("direction")
+        if direction is not None and direction not in PLAN_DIRECTIONS:
+            raise ValueError("Die Regelrichtung ist ungültig.")
+        normalized["direction"] = direction
+    if not partial or "amount_min" in payload:
+        normalized["amount_min"] = _rule_amount(payload.get("amount_min"), "Der Mindestbetrag")
+    if not partial or "amount_max" in payload:
+        normalized["amount_max"] = _rule_amount(payload.get("amount_max"), "Der Höchstbetrag")
+    if normalized.get("amount_min") is not None and normalized.get("amount_max") is not None and normalized["amount_min"] > normalized["amount_max"]:
+        raise ValueError("Der Mindestbetrag darf den Höchstbetrag nicht überschreiten.")
     if not partial or "purpose_contains" in payload:
         normalized["purpose_contains"] = _normalized_rule_text(
             payload.get("purpose_contains"), "Der Verwendungszweckfilter", required=False, max_length=160
         )
-    if not partial and all(normalized.get(field) is None for field in ("account_id", "counterparty", "purpose_contains")):
+    if not partial and all(normalized.get(field) is None for field in ("account_id", "counterparty", "counterparty_account", "purpose_contains", "direction", "amount_min", "amount_max")):
         raise ValueError("Eine Regel benötigt mindestens eine Bedingung.")
     if not partial or "allocations" in payload:
         allocations = payload.get("allocations")
@@ -884,6 +920,21 @@ def _rule_matches_booking(rule: dict[str, object], booking: dict[str, object]) -
     if rule_counterparty not in (None, ""):
         if counterparty is None or not isinstance(rule_counterparty, str) or rule_counterparty.casefold() != counterparty.casefold():
             return False
+    counterparty_account = rule.get("counterparty_account")
+    if counterparty_account not in (None, "") and counterparty_account != normalize_account_reference(booking.get("counterparty_account", "")):
+        return False
+    direction = rule.get("direction")
+    if direction is not None:
+        booking_direction = booking.get("direction")
+        if booking_direction is None:
+            booking_direction = "income" if _money(booking.get("amount", 0)) >= 0 else "expense"
+        if direction != booking_direction:
+            return False
+    amount = abs(_money(booking.get("amount", 0)))
+    if rule.get("amount_min") is not None and amount < Decimal(str(rule["amount_min"])):
+        return False
+    if rule.get("amount_max") is not None and amount > Decimal(str(rule["amount_max"])):
+        return False
     purpose_contains = rule.get("purpose_contains")
     if purpose_contains in (None, ""):
         return True
@@ -991,6 +1042,10 @@ def rule_suggestion(
                 "counterparty": _normalized_match_text(
                     rule.get("counterparty"), "Der Zahlungsempfänger", required=False
                 ),
+                "counterparty_account": normalize_account_reference(rule.get("counterparty_account", "")) or None,
+                "direction": rule.get("direction"),
+                "amount_min": _rule_amount(rule.get("amount_min"), "Der Mindestbetrag"),
+                "amount_max": _rule_amount(rule.get("amount_max"), "Der Höchstbetrag"),
                 "purpose_contains": _normalized_match_text(
                     rule.get("purpose_contains"), "Der Verwendungszweckfilter", required=False
                 ),
@@ -1040,6 +1095,12 @@ def rule_suggestion(
     reason = f"{account_condition}."
     if normalized["counterparty"]:
         reason += f" Zahlungsempfänger „{normalized['counterparty']}“ stimmt überein."
+    if normalized["counterparty_account"]:
+        reason += f" Gegenkonto „{normalized['counterparty_account']}“ stimmt überein."
+    if normalized["direction"]:
+        reason += f" Richtung „{normalized['direction']}“ stimmt überein."
+    if normalized["amount_min"] is not None or normalized["amount_max"] is not None:
+        reason += " Betrag liegt im definierten Bereich."
     if normalized["purpose_contains"]:
         reason += f" Verwendungszweck enthält „{normalized['purpose_contains']}“."
     return {
@@ -1442,6 +1503,17 @@ def overview_values(data: dict[str, object], month: str) -> dict[str, float | in
         planned_remaining=planned_remaining,
         unresolved_total=sum(float(item.get("amount", 0)) for item in unresolved),
     )
+    _, _, planned_by_direction, _ = _overview_breakdown_groups(data, month)
+    payment_candidates = []
+    for item in plan_items:
+        monthly, scheduled = plan_item_month_values(item, month)
+        if scheduled:
+            payment_candidates.append(
+                (
+                    abs(_money(monthly)),
+                    _overview_plan_payment_date(item, *_month_window(month)),
+                )
+            )
     return {
         "plan": snapshot.plan,
         "forecast": snapshot.forecast,
@@ -1451,9 +1523,164 @@ def overview_values(data: dict[str, object], month: str) -> dict[str, float | in
         "unresolved_count": len(unresolved),
         "planned_balance": snapshot.plan,
         "actual_balance": snapshot.actual,
+        "planned_income": float(_money(planned_by_direction["income"])),
+        "planned_expenses": float(_money(planned_by_direction["expense"])),
+        "planned_savings": float(_money(planned_by_direction["saving"])),
+        "unresolved_amount": snapshot.unresolved_total,
+        "household_balance": snapshot.actual,
+        "next_major_payment": (
+            max(payment_candidates, key=lambda candidate: (candidate[0], -candidate[1].toordinal()))[1].isoformat()
+            if payment_candidates
+            else None
+        ),
         "unresolved_bookings": len(unresolved),
         "feed_forecast_total": float(feed_forecast_total),
     }
+
+
+def _report_months(start: date, end: date) -> list[str]:
+    if not isinstance(start, date) or not isinstance(end, date) or start > end:
+        raise ValueError("Der Zeitraum ist ungültig.")
+    current = date(start.year, start.month, 1)
+    last = date(end.year, end.month, 1)
+    months = []
+    while current <= last:
+        months.append(current.strftime("%Y-%m"))
+        current = date(current.year + (current.month == 12), current.month % 12 + 1, 1)
+    return months
+
+
+def overview_period(
+    data: dict[str, object], start: date, end: date
+) -> dict[str, object]:
+    """Aggregate the resolved household cashflow for an inclusive date range."""
+
+    months = _report_months(start, end)
+    plan = Decimal("0.00")
+    scheduled = Decimal("0.00")
+    actual = Decimal("0.00")
+    feed_forecast = Decimal("0.00")
+    unresolved_total = Decimal("0.00")
+    unresolved_count = 0
+    for month in months:
+        month_start, month_end = _month_window(month)
+        clipped_start, clipped_end = max(start, month_start), min(end, month_end)
+        if clipped_start > clipped_end:
+            continue
+        for item in data.get("plan_items", []) if isinstance(data.get("plan_items"), list) else []:
+            if isinstance(item, dict) and item.get("active", True):
+                monthly, remaining = plan_item_month_values(item, month)
+                plan += _money(monthly)
+                if _plan_item_occurs_in_month(item, clipped_start, clipped_end, item.get("frequency_months", 1)):
+                    scheduled += _money(remaining)
+        for profile in data.get("feed_profiles", []) if isinstance(data.get("feed_profiles"), list) else []:
+            if isinstance(profile, dict):
+                _, value = feed_profile_month_values(profile, month)
+                feed_forecast += _money(value)
+        for booking in data.get("bookings", []) if isinstance(data.get("bookings"), list) else []:
+            if not isinstance(booking, dict):
+                continue
+            booking_date = _overview_booking_date(booking)
+            if booking_date is None or not clipped_start <= booking_date <= clipped_end:
+                continue
+            amount = _overview_booking_amount(booking)
+            if booking.get("status") == "resolved":
+                actual += amount
+            else:
+                unresolved_count += 1
+                unresolved_total += abs(amount)
+    forecast = actual + scheduled + feed_forecast
+    return {
+        "plan": float(_money(plan)),
+        "forecast": float(_money(forecast)),
+        "actual": float(_money(actual)),
+        "variance": float(_money(forecast - plan)),
+        "unresolved_total": float(_money(unresolved_total)),
+        "unresolved_count": unresolved_count,
+        "feed_forecast_total": float(_money(feed_forecast)),
+    }
+
+
+def cashflow_series(
+    data: dict[str, object], start: date, end: date
+) -> list[dict[str, object]]:
+    """Return one signed cashflow entry for every month in an inclusive range."""
+
+    result = []
+    for month in _report_months(start, end):
+        month_start, month_end = _month_window(month)
+        period = overview_period(data, max(start, month_start), min(end, month_end))
+        income = expense = savings = Decimal("0.00")
+        for booking in data.get("bookings", []) if isinstance(data.get("bookings"), list) else []:
+            if not isinstance(booking, dict) or booking.get("status") != "resolved":
+                continue
+            if not (max(start, month_start) <= (_overview_booking_date(booking) or date.min) <= min(end, month_end)):
+                continue
+            amount = _overview_booking_amount(booking)
+            if booking.get("direction") == "saving":
+                savings += amount
+            elif amount >= 0:
+                income += amount
+            else:
+                expense += amount
+        entry = {"month": month, "income": float(_money(income)), "expenses": float(_money(expense)), "savings": float(_money(savings)), **period}
+        result.append(entry)
+    return result
+
+
+def overview_report(
+    data: dict[str, object], start: date, end: date
+) -> dict[str, object]:
+    """Return period totals and allocation dimensions for reporting consumers."""
+
+    dimensions: dict[str, list[dict[str, object]]] = {}
+    for kind in CATALOG_KINDS:
+        groups: dict[str, dict[str, object]] = {}
+        for month in _report_months(start, end):
+            comparison = overview_comparison(data, month).get(kind, [])
+            for entry in comparison:
+                key = str(entry["key"])
+                group = groups.setdefault(key, {"key": key, "name": entry["name"], "plan": 0.0, "forecast": 0.0, "actual": 0.0, "variance": 0.0, "forecast_variance": 0.0, "variance_percent": None})
+                for field in ("plan", "forecast", "actual", "variance", "forecast_variance"):
+                    group[field] = float(group[field]) + float(entry[field])
+        for group in groups.values():
+            plan = float(group["plan"])
+            group["variance_percent"] = None if plan == 0 else round(float(group["variance"]) / abs(plan) * 100, 2)
+        dimensions[kind] = list(groups.values())
+    specs = {
+        "persons": ("target", data.get("persons", []), "name"),
+        "accounts": ("account_id", data.get("accounts", []), "label"),
+        "pets": ("pet_id", data.get("pets", []), "name"),
+    }
+    for kind, (field, records, label_field) in specs.items():
+        labels = {}
+        for item in records if isinstance(records, list) else []:
+            if not isinstance(item, dict):
+                continue
+            identifier = item.get("entity_id") if field == "target" else item.get("id")
+            if identifier:
+                labels[str(identifier)] = str(item.get(label_field) or item.get("name") or identifier)
+        groups: dict[str, Decimal] = {}
+        for booking in data.get("bookings", []) if isinstance(data.get("bookings"), list) else []:
+            if not isinstance(booking, dict) or booking.get("status") != "resolved":
+                continue
+            booking_date = _overview_booking_date(booking)
+            if booking_date is None or not start <= booking_date <= end:
+                continue
+            amount = _overview_booking_amount(booking)
+            if field == "account_id":
+                key = str(booking.get("account_id") or "__unassigned__")
+                groups[key] = groups.get(key, Decimal("0.00")) + amount
+                continue
+            allocations = booking.get("allocations") if isinstance(booking.get("allocations"), list) else []
+            for allocation in allocations:
+                if not isinstance(allocation, dict):
+                    continue
+                key = str(allocation.get(field) or "__unassigned__")
+                share = abs(_overview_booking_amount(allocation))
+                groups[key] = groups.get(key, Decimal("0.00")) + (share if amount >= 0 else -share)
+        dimensions[kind] = [{"key": key, "name": labels.get(key, "Nicht zugeordnet"), "actual": float(_money(value))} for key, value in groups.items()]
+    return {**overview_period(data, start, end), "dimensions": dimensions, "cashflow": cashflow_series(data, start, end)}
 
 
 def _overview_catalog_labels(data: dict[str, object], kind: str) -> dict[str, str]:

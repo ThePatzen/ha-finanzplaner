@@ -88,6 +88,20 @@ def _load_http_module():
 
 
 class RuleStorageTests(unittest.TestCase):
+    def test_legacy_rules_receive_null_optional_conditions_without_mutation(self):
+        data = storage.normalize_current_store_data(
+            {"version": 2, "rules": [{"id": "r1"}]}, "Test"
+        )
+        self.assertIsNone(data["rules"][0]["amount_min"])
+        self.assertIsNone(data["rules"][0]["direction"])
+
+    def test_malformed_counterparty_account_is_dropped_safely(self):
+        data = storage.normalize_current_store_data(
+            {"version": 2, "rules": [{"id": "r1", "counterparty_account": {"bad": True}}]},
+            "Test",
+        )
+        self.assertIsNone(data["rules"][0]["counterparty_account"])
+
     def test_current_store_adds_empty_rules_without_changing_bookings(self):
         data = storage.normalize_current_store_data(
             {
@@ -451,6 +465,26 @@ class RuleViewTests(unittest.TestCase):
         self.assertEqual(account["iban_masked"], "•••• 5678")
         self.assertNotIn("AT123456789012345678", str(result))
         self.assertEqual(self.coordinator.store.save_count, 0)
+
+    def test_rule_conditions_round_trip_and_counterparty_account_is_masked(self):
+        payload = self._valid_rule_payload()
+        payload.update({
+            "counterparty_account": "AT123456789012345678",
+            "direction": "expense",
+            "amount_min": 40,
+            "amount_max": 50,
+        })
+        created = asyncio.run(self.http.RulesView().post(self._request(payload)))
+        response_rule = created["rule"]
+        self.assertEqual(response_rule["counterparty_account"], "…5678")
+        self.assertEqual(response_rule["direction"], "expense")
+        self.assertEqual(response_rule["amount_min"], 40.0)
+        self.assertEqual(response_rule["amount_max"], 50.0)
+        self.assertNotIn("AT123456789012345678", str(created))
+        self.assertEqual(
+            self.coordinator.store.data["rules"][-1]["counterparty_account"],
+            "AT123456789012345678",
+        )
 
     def test_opaque_id_collision_round_trips_get_update_and_deactivation(self):
         rule_id = "ab12cdef0123456789abcdef01234567"

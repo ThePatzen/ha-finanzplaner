@@ -69,6 +69,10 @@ Zusätzlich enthalten:
 - Regelvorlage aus einer bestätigten Buchung über „Als Regel speichern“, mit dem vorhandenen Verwendungszweck als vorbefülltem Filter
 - ungültige passende Regeln mit höchster Priorität halten die Buchung mit konkretem Prüfgrund ungeklärt; es erfolgt kein Rückgriff auf niedrigere Prioritäten
 - aus bestätigten Buchungen vorbelegte Regeln lassen sich vor der ausdrücklichen Speicherung korrigieren; der Server validiert den bearbeiteten Entwurf
+- Regelbedingungen unterstützen zusätzlich Richtung (`income`/`expense`), maskiertes Gegenkonto (`counterparty_account`) und eine inklusive Betragsspanne (`amount_min`/`amount_max`)
+- die Buchungshistorie unterstützt Suche, Zeitraum, Status, Konto und Kategorie; die Importhistorie zeigt Dateiname, Format, Zeitpunkt, Buchungs- und Duplikatanzahl ohne Quelldateien
+- Berichte unterstützen die Modi `month`, `year` und `cashflow`; `month` bleibt die Standardansicht
+- fehlende Home-Assistant-Personenziele werden als „Person fehlt“ markiert und können über ein verfügbares Ersatzziel repariert werden
 
 Weitere Produktfähigkeiten und Leitplanken:
 
@@ -86,6 +90,7 @@ Weitere Produktfähigkeiten und Leitplanken:
 - Excel-Migration aus der bereitgestellten Vorlage
 - Monats-, Jahres- und Cashflow-Auswertungen
 - Kennzahlen als Home-Assistant-Sensoren
+- Sensoren für Plan-/Ist-Restbetrag, geplante Einnahmen, Ausgaben und Rücklagen, Prognose, ungeklärten Betrag, Haushaltssaldo, nächste größere Zahlung, ungeklärte Buchungen und nächsten Futterkauf
 - Installation und Updates über HACS
 - EUR als erste Währung
 - lokale Verarbeitung ohne Bankzugangsdaten

@@ -84,6 +84,43 @@ def _load_services_module():
     return module, HomeAssistantError
 
 
+def _load_sensor_module():
+    class SensorEntity:
+        pass
+
+    class SensorDeviceClass:
+        DATE = "date"
+
+    class CoordinatorEntity:
+        @classmethod
+        def __class_getitem__(cls, _item):
+            return cls
+
+        def __init__(self, coordinator):
+            self.coordinator = coordinator
+
+    fake_sensor = types.ModuleType("homeassistant.components.sensor")
+    fake_sensor.SensorDeviceClass = SensorDeviceClass
+    fake_sensor.SensorEntity = SensorEntity
+    fake_const = types.ModuleType("homeassistant.const")
+    fake_const.CURRENCY_EURO = "€"
+    fake_update_coordinator = types.ModuleType(
+        "homeassistant.helpers.update_coordinator"
+    )
+    fake_update_coordinator.CoordinatorEntity = CoordinatorEntity
+    fake_coordinator = types.ModuleType("custom_components.finanzplaner.coordinator")
+    fake_coordinator.FinanzplanerCoordinator = type("FakeCoordinator", (), {})
+    modules = {
+        "homeassistant.components.sensor": fake_sensor,
+        "homeassistant.const": fake_const,
+        "homeassistant.helpers.update_coordinator": fake_update_coordinator,
+        "custom_components.finanzplaner.coordinator": fake_coordinator,
+    }
+    with patch.dict(sys.modules, modules):
+        sys.modules.pop("custom_components.finanzplaner.sensor", None)
+        return importlib.import_module("custom_components.finanzplaner.sensor")
+
+
 class ReminderEntityTests(unittest.TestCase):
     def test_binary_sensor_is_on_for_due_active_profiles_only(self):
         module = _load_binary_sensor_module()
@@ -117,6 +154,64 @@ class ReminderEntityTests(unittest.TestCase):
         self.assertEqual(sensor.extra_state_attributes["due_profile_ids"], ["feed-profile-fio"])
         self.assertEqual(sensor.extra_state_attributes["due_profile_count"], 1)
         self.assertEqual(sensor.extra_state_attributes["next_purchase_date"], today.isoformat())
+
+
+class FinanceSensorContractTests(unittest.TestCase):
+    def test_finance_sensor_exposes_report_metrics(self):
+        module = _load_sensor_module()
+
+        self.assertGreaterEqual(
+            {key for key, _, _ in module.SENSORS},
+            {
+                "planned_income",
+                "planned_expenses",
+                "planned_savings",
+                "forecast",
+                "unresolved_amount",
+                "household_balance",
+                "next_major_payment",
+            },
+        )
+
+    def test_finance_sensor_reads_report_metric_from_coordinator_overview(self):
+        module = _load_sensor_module()
+        from custom_components.finanzplaner.core import overview_values
+
+        coordinator = SimpleNamespace(
+            data={
+                "overview": overview_values(
+                    {
+                        "plan_items": [
+                            {"direction": "income", "amount": 1200, "due_date": "2026-09-30"},
+                            {"direction": "expense", "amount": 300, "due_date": "2026-09-05"},
+                            {"direction": "saving", "amount": 100, "due_date": "2026-09-10"},
+                        ],
+                        "bookings": [
+                            {"booking_date": "2026-09-03", "amount": 800, "status": "resolved"},
+                            {"booking_date": "2026-09-04", "amount": -25, "status": "unresolved"},
+                        ],
+                    },
+                    "2026-09",
+                )
+            }
+        )
+
+        income = module.FinanceSensor(coordinator, "entry", "planned_income", "", "€")
+        expenses = module.FinanceSensor(coordinator, "entry", "planned_expenses", "", "€")
+        savings = module.FinanceSensor(coordinator, "entry", "planned_savings", "", "€")
+        forecast = module.FinanceSensor(coordinator, "entry", "forecast", "", "€")
+        unresolved = module.FinanceSensor(coordinator, "entry", "unresolved_amount", "", "€")
+        balance = module.FinanceSensor(coordinator, "entry", "household_balance", "", "€")
+        payment = module.FinanceSensor(coordinator, "entry", "next_major_payment", "", "")
+
+        self.assertEqual(income.native_value, 1200.0)
+        self.assertEqual(expenses.native_value, 300.0)
+        self.assertEqual(savings.native_value, 100.0)
+        self.assertEqual(forecast.native_value, 1575.0)
+        self.assertEqual(unresolved.native_value, 25.0)
+        self.assertEqual(balance.native_value, 775.0)
+        self.assertEqual(payment.native_value, "2026-09-30")
+        self.assertEqual(payment._attr_device_class, module.SensorDeviceClass.DATE)
 
 
 class ReminderServiceTests(unittest.TestCase):

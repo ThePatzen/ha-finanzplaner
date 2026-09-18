@@ -1,4 +1,4 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const BREAKDOWN_URL = "/api/finanzplaner/overview/breakdown";
@@ -13,6 +13,8 @@ const RESOLVED_URL = "/api/finanzplaner/bookings/resolved";
 const APPLY_RULES_URL = "/api/finanzplaner/bookings/apply-rules";
 const RULES_URL = "/api/finanzplaner/rules";
 const BOOKINGS_URL = "/api/finanzplaner/bookings";
+const IMPORTS_URL = "/api/finanzplaner/imports";
+const REPORT_URL = "/api/finanzplaner/report";
 const BOOKING_EXPORT_URL = "/api/finanzplaner/bookings/export";
 const IMPORT_URL = "/api/finanzplaner/import";
 const EXCEL_PREVIEW_URL = "/api/finanzplaner/excel/preview";
@@ -1058,6 +1060,11 @@ class FinanzplanerPanel extends HTMLElement {
     this._data = fallbackOverview;
     this._view = "overview";
     this._comparisonDimension = "categories";
+    this._reportView = "month";
+    this._report = null;
+    this._reportLoading = false;
+    this._reportLoadFailed = false;
+    this._reportRequest = null;
     this._breakdownSelection = null;
     this._breakdown = null;
     this._breakdownLoading = false;
@@ -1074,6 +1081,10 @@ class FinanzplanerPanel extends HTMLElement {
     this._planItemErrors = new Map();
     this._planItemEditorId = null;
     this._bookings = [];
+    this._bookingTotal = 0;
+    this._bookingHistoryFilters = { q: "", from: "", to: "", status: "", account_id: "", target: "", category_id: "", area_id: "", project_id: "" };
+    this._imports = [];
+    this._importsLoading = false;
     this._reviewLoading = false;
     this._reviewLoadFailed = false;
     this._resolvedBookings = [];
@@ -1092,6 +1103,10 @@ class FinanzplanerPanel extends HTMLElement {
     this._exportingBookings = false;
     this._ruleApplying = false;
     this._unresolvingBookings = new Set();
+    this._resolvedEditingBookings = new Set();
+    this._resolvedEditTriggers = new Map();
+    this._repairSubmitting = new Set();
+    this._repairErrors = new Map();
     this._rules = [];
     this._rulesLoading = false;
     this._rulesLoadFailed = false;
@@ -1154,6 +1169,7 @@ class FinanzplanerPanel extends HTMLElement {
     window.addEventListener("beforeunload", this._handleBeforeUnload);
     this._render();
     this._loadOverview();
+    this._loadReport("month");
     this._loadRules().catch(() => {}).finally(() => {
       if (this.isConnected && ["rules", "review"].includes(this._view)) this._render();
     });
@@ -1227,6 +1243,54 @@ class FinanzplanerPanel extends HTMLElement {
     const labels = { sender: "Absender", counterparty: "Zahlungsempfänger", recipient: "Empfänger", booking_accounts: "Konten der Buchung" };
     if (Object.hasOwn(labels, key)) return labels[key];
     return String(key).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  _reportRange(view) {
+    const year = this._month.getFullYear();
+    const month = this._month.getMonth();
+    const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    if (view === "year" || view === "cashflow") return { from: `${year}-01-01`, to: `${year}-12-31` };
+    return { from: `${year}-${String(month + 1).padStart(2, "0")}-01`, to: iso(new Date(year, month + 1, 0)) };
+  }
+
+  async _loadReport(view = this._reportView) {
+    if (!["month", "year", "cashflow"].includes(view)) return;
+    const range = this._reportRange(view);
+    const request = { view, ...range };
+    this._reportRequest = request;
+    this._reportView = view;
+    this._reportLoading = true;
+    this._reportLoadFailed = false;
+    this._report = null;
+    if (this.isConnected) this._render();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, reportRequestUrl(REPORT_URL, range.from, range.to, view));
+      const result = await readApiResponse(response);
+      if (this._reportRequest !== request) return;
+      if (!response.ok) throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+      this._report = result.report || null;
+    } catch (error) {
+      if (this._reportRequest !== request) return;
+      this._reportLoadFailed = true;
+      this._message = error.message || "Der Bericht konnte nicht geladen werden.";
+    } finally {
+      if (this._reportRequest === request) {
+        this._reportLoading = false;
+        if (this.isConnected) this._render();
+      }
+    }
+  }
+
+  _reportTemplate() {
+    if (this._reportLoading) return `<section class="surface report-card" aria-live="polite"><h3>Bericht</h3><p class="empty-state" role="status">${this._reportView === "cashflow" ? "Cashflow" : this._reportView === "year" ? "Jahresbericht" : "Monatsbericht"} wird geladen …</p></section>`;
+    if (this._reportLoadFailed) return `<section class="surface report-card" aria-live="assertive"><h3>Bericht</h3><p class="empty-state" role="alert">${escapeHtml(this._message || "Der Bericht konnte nicht geladen werden.")}</p><button class="table-edit-button" type="button" data-report-retry>Erneut laden</button></section>`;
+    if (!this._report || (this._reportView === "cashflow" && !this._report.cashflow?.length)) return `<section class="surface report-card"><h3>Bericht</h3><p class="empty-state">Für diesen Zeitraum liegen noch keine Berichtsdaten vor.</p></section>`;
+    if (this._reportView === "cashflow") {
+      const rows = (this._report.cashflow || []).map((entry) => `<tr><th scope="row">${escapeHtml(entry.month)}</th><td class="table-number">${formatEuro(entry.income)}</td><td class="table-number">${formatEuro(entry.expenses)}</td><td class="table-number">${formatEuro(entry.savings)}</td><td class="table-number">${formatEuro(entry.actual)}</td></tr>`).join("");
+      return `<section class="surface report-card" aria-labelledby="report-heading"><h3 id="report-heading">Cashflow</h3><div class="management-table-wrap" tabindex="0" role="region" aria-label="Cashflow, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Monatlicher Cashflow</caption><thead><tr><th scope="col">Monat</th><th scope="col">Einnahmen</th><th scope="col">Ausgaben</th><th scope="col">Rücklagen</th><th scope="col">Ist</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    }
+    const rows = Object.entries(this._report).filter(([key]) => ["plan", "forecast", "actual", "variance", "unresolved_total"].includes(key));
+    return `<section class="surface report-card" aria-labelledby="report-heading"><h3 id="report-heading">${this._reportView === "year" ? "Jahresbericht" : "Monatsbericht"}</h3><div class="management-table-wrap" tabindex="0" role="region" aria-label="Berichtswerte, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Berichtswerte für den ausgewählten Zeitraum</caption><thead><tr><th scope="col">Wert</th><th scope="col">Betrag</th></tr></thead><tbody>${rows.map(([key, value]) => `<tr><th scope="row">${escapeHtml({ plan: "Plan", forecast: "Prognose", actual: "Ist", variance: "Abweichung", unresolved_total: "Offener Betrag" }[key] || key)}</th><td class="table-number">${formatEuro(value)}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
 
   _bookingAccountInlineTemplate(accounts, side, className = "booking-account-inline") {
@@ -1526,6 +1590,9 @@ class FinanzplanerPanel extends HTMLElement {
       label: rule.label || "", active: rule.active !== false,
       priority: String(rule.priority ?? 100), account_id: rule.account_id || "",
       counterparty: rule.counterparty || "", purpose_contains: rule.purpose_contains || "",
+      direction: rule.direction || "", counterparty_account: rule.counterparty_account || "",
+      amount_min: rule.amount_min == null ? "" : String(rule.amount_min),
+      amount_max: rule.amount_max == null ? "" : String(rule.amount_max),
       allocations: (rule.allocations || [{ target: "household", share_percent: 100 }]).map((row) => ({
         target: row.target || "", share_percent: String(row.share_percent ?? ""),
         area_id: row.area_id || "", category_id: row.category_id || "",
@@ -1591,7 +1658,16 @@ class FinanzplanerPanel extends HTMLElement {
     if (counterparty.length > 160) errors.counterparty = "Bitte höchstens 160 Zeichen eingeben.";
     const account = String(draft.account_id || "").trim();
     const purpose = String(draft.purpose_contains || "").trim().replace(/\s+/gu, " ");
-    if (!account && !counterparty && !purpose) errors.conditions = "Eine Regel benötigt mindestens eine Bedingung.";
+    const direction = String(draft.direction || "");
+    const counterpartyAccount = String(draft.counterparty_account || "").trim();
+    const amountMin = draft.amount_min === "" ? null : Number(draft.amount_min);
+    const amountMax = draft.amount_max === "" ? null : Number(draft.amount_max);
+    if (!account && !counterparty && !purpose && !counterpartyAccount && !direction && amountMin == null && amountMax == null) errors.conditions = "Eine Regel benötigt mindestens eine Bedingung.";
+    if (direction && !["income", "expense"].includes(direction)) errors.direction = "Bitte Einnahme oder Ausgabe wählen.";
+    if (counterpartyAccount.length > 80) errors.counterparty_account = "Bitte höchstens 80 Zeichen eingeben.";
+    if (amountMin != null && (!Number.isFinite(amountMin) || amountMin < 0)) errors.amount_min = "Bitte einen positiven Mindestbetrag eingeben.";
+    if (amountMax != null && (!Number.isFinite(amountMax) || amountMax < 0)) errors.amount_max = "Bitte einen positiven Höchstbetrag eingeben.";
+    if (amountMin != null && amountMax != null && amountMin > amountMax) errors.amount_max = "Der Höchstbetrag muss mindestens dem Mindestbetrag entsprechen.";
     const priority = Number(draft.priority);
     if (String(draft.priority).trim() === "" || !Number.isSafeInteger(priority) || priority < 0 || priority > 1000) errors.priority = "Bitte eine ganze Zahl von 0 bis 1000 eingeben.";
     if (draft.account_id && !this._accounts.some((account) => account.id === draft.account_id && account.active !== false)) errors.account_id = "Konto fehlt oder ist archiviert. Bitte ein aktives Konto oder alle Konten wählen.";
@@ -1780,24 +1856,29 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   async _loadReviewData() {
-    const [bookingResponse, personsResponse, petsResponse, catalogsResponse] = await Promise.all([
-      fetchWithHomeAssistantAuth(this._hass, REVIEW_URL),
+    const historyUrl = bookingHistoryRequestUrl(BOOKINGS_URL, { ...this._bookingHistoryFilters, status: this._bookingHistoryFilters.status || "unresolved" });
+    const [bookingResponse, personsResponse, petsResponse, catalogsResponse, importsResponse] = await Promise.all([
+      fetchWithHomeAssistantAuth(this._hass, historyUrl),
       fetchWithHomeAssistantAuth(this._hass, PERSONS_URL),
       fetchWithHomeAssistantAuth(this._hass, PETS_URL),
       fetchWithHomeAssistantAuth(this._hass, CATALOGS_URL),
+      fetchWithHomeAssistantAuth(this._hass, IMPORTS_URL),
     ]);
-    const [bookingResult, personsResult, petsResult, catalogsResult] = await Promise.all([
+    const [bookingResult, personsResult, petsResult, catalogsResult, importsResult] = await Promise.all([
       readApiResponse(bookingResponse),
       readApiResponse(personsResponse),
       readApiResponse(petsResponse),
       readApiResponse(catalogsResponse),
+      readApiResponse(importsResponse),
     ]);
-    if (!bookingResponse.ok || !petsResponse.ok || !catalogsResponse.ok) {
-      const failedResult = !bookingResponse.ok ? bookingResult : !petsResponse.ok ? petsResult : catalogsResult;
-      const failedResponse = !bookingResponse.ok ? bookingResponse : !petsResponse.ok ? petsResponse : catalogsResponse;
+    if (!bookingResponse.ok || !petsResponse.ok || !catalogsResponse.ok || !importsResponse.ok) {
+      const failedResult = !bookingResponse.ok ? bookingResult : !petsResponse.ok ? petsResult : !catalogsResponse.ok ? catalogsResult : importsResult;
+      const failedResponse = !bookingResponse.ok ? bookingResponse : !petsResponse.ok ? petsResponse : !catalogsResponse.ok ? catalogsResponse : importsResponse;
       throw new Error(apiErrorMessage(failedResult, `HTTP ${failedResponse.status}`));
     }
     this._bookings = bookingResult.bookings || [];
+    this._bookingTotal = Number.isFinite(Number(bookingResult.total)) ? Number(bookingResult.total) : this._bookings.length;
+    this._imports = importsResult.imports || [];
     this._persons = personsResponse.ok ? (personsResult.persons || []) : [];
     this._pets = petsResponse.ok ? (petsResult.pets || []) : [];
     this._catalogs = catalogsResult.catalogs || { categories: [], areas: [], projects: [] };
@@ -3332,7 +3413,7 @@ class FinanzplanerPanel extends HTMLElement {
       });
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(allocationErrorMessage(response, result));
-      const original = this._bookings.find((booking) => String(booking.id) === bookingId);
+      const original = [...this._bookings, ...this._resolvedBookings].find((booking) => String(booking.id) === bookingId);
       const confirmed = result?.booking || { ...original, id: bookingId, amount: total, allocations };
       this._confirmedBookings.set(bookingId, { ...confirmed, status: "resolved", allocations: (confirmed.allocations || allocations).map((row) => ({ ...row })) });
     } catch (error) {
@@ -3351,12 +3432,15 @@ class FinanzplanerPanel extends HTMLElement {
     this._allocationDrafts.delete(bookingId);
     this._allocationOriginalDrafts.delete(bookingId);
     this._acceptedSuggestions.delete(bookingId);
-    this._bookings = this._bookings.filter((booking) => String(booking.id) !== bookingId);
+    const editingResolved = this._resolvedEditingBookings.has(bookingId);
+    this._resolvedEditingBookings.delete(bookingId);
+    if (!editingResolved) this._bookings = this._bookings.filter((booking) => String(booking.id) !== bookingId);
     this._message = "Buchung zugeordnet und aus der Prüfliste entfernt.";
     this._render();
     let reviewRefreshFailed = false;
     try {
-      await this._loadReviewData();
+      if (editingResolved) await this._loadResolvedBookings();
+      else await this._loadReviewData();
     } catch {
       reviewRefreshFailed = true;
     }
@@ -3366,6 +3450,34 @@ class FinanzplanerPanel extends HTMLElement {
       : "Buchung zugeordnet und aus der Prüfliste entfernt.";
     this._render();
     [...this.shadowRoot.querySelectorAll("[data-rule-from-booking]")].find((button) => button.dataset.ruleFromBooking === bookingId)?.focus();
+  }
+
+  async _repairMissingTarget(button) {
+    const bookingId = String(button.dataset.repairBooking || "");
+    const from = String(button.dataset.repairFrom || "");
+    const container = button.closest("[data-target-repair-form]");
+    const to = container?.querySelector("[data-repair-to]")?.value || "";
+    if (!bookingId || !from || !to || to === from || this._repairSubmitting.has(bookingId)) return;
+    this._repairSubmitting.add(bookingId);
+    this._repairErrors.delete(bookingId);
+    this._message = "Personenziel wird repariert …";
+    this._render();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, `${BOOKINGS_URL}/${encodeURIComponent(bookingId)}/repair-targets`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(repairTargetsPayload([{ from, to }])),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Das Personenziel konnte nicht repariert werden."));
+      if (result.booking) this._resolvedBookings = this._resolvedBookings.map((booking) => String(booking.id) === bookingId ? result.booking : booking);
+      this._message = "Personenziel repariert. Betrag und fachliche Zuordnungen bleiben erhalten.";
+    } catch (error) {
+      this._repairErrors.set(bookingId, error.message || "Das Personenziel konnte nicht repariert werden.");
+      this._message = this._repairErrors.get(bookingId);
+    } finally {
+      this._repairSubmitting.delete(bookingId);
+      this._render();
+    }
   }
 
   async _unresolveBooking(bookingId) {
@@ -3591,6 +3703,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._month = new Date(this._month.getFullYear(), this._month.getMonth() + delta, 1);
     this._clearBreakdown();
     this._loadOverview();
+    if (this._reportView) this._loadReport(this._reportView);
     this._render();
   }
 
@@ -3653,6 +3766,10 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelector("[data-feedback-close]")?.addEventListener("click", () => this._dismissFeedback());
     this.shadowRoot.querySelector("[data-action='previous-month']")?.addEventListener("click", () => this._shiftMonth(-1));
     this.shadowRoot.querySelector("[data-action='next-month']")?.addEventListener("click", () => this._shiftMonth(1));
+    this.shadowRoot.querySelectorAll("[data-report-view]").forEach((button) => button.addEventListener("click", () => {
+      this._loadReport(button.dataset.reportView).then(() => this.shadowRoot.querySelector(`[data-report-view="${button.dataset.reportView}"]`)?.focus());
+    }));
+    this.shadowRoot.querySelector("[data-report-retry]")?.addEventListener("click", () => this._loadReport(this._reportView));
     this.shadowRoot.querySelectorAll("[data-action='review']").forEach((button) => button.addEventListener("click", () => this._openReview()));
     this.shadowRoot.querySelectorAll("[data-action='resolved']").forEach((button) => button.addEventListener("click", () => this._openResolvedBookings()));
     this.shadowRoot.querySelectorAll("[data-action='apply-rules']").forEach((button) => button.addEventListener("click", () => this._applyRules()));
@@ -3663,6 +3780,18 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-rule-from-booking]").forEach((button) => button.addEventListener("click", () => this._openRuleFromBooking(button.dataset.ruleFromBooking)));
     this.shadowRoot.querySelectorAll("[data-accept-suggestion]").forEach((button) => button.addEventListener("click", () => this._acceptSuggestion(button.dataset.acceptSuggestion)));
     this.shadowRoot.querySelectorAll("[data-unresolve-booking]").forEach((button) => button.addEventListener("click", () => this._unresolveBooking(button.dataset.unresolveBooking)));
+    this.shadowRoot.querySelectorAll("[data-edit-resolved-booking]").forEach((button) => button.addEventListener("click", () => {
+      this._resolvedEditTriggers.set(button.dataset.editResolvedBooking, button);
+      this._openResolvedAllocationEditor(button.dataset.editResolvedBooking);
+    }));
+    this.shadowRoot.querySelectorAll("[data-cancel-resolved-edit]").forEach((button) => button.addEventListener("click", () => {
+      const bookingId = button.dataset.cancelResolvedEdit;
+      this._resolvedEditingBookings.delete(bookingId);
+      this._render();
+      (this.shadowRoot.querySelector(`[data-edit-resolved-booking="${CSS.escape(bookingId)}"]`) || this._resolvedEditTriggers.get(bookingId))?.focus();
+      this._resolvedEditTriggers.delete(bookingId);
+    }));
+    this.shadowRoot.querySelectorAll("[data-repair-target]").forEach((button) => button.addEventListener("click", () => this._repairMissingTarget(button)));
     this.shadowRoot.querySelectorAll("[data-booking-details]").forEach((button) => button.addEventListener("click", () => this._openBookingDetails(button.dataset.bookingDetails, button)));
     const bookingDetailDialog = this.shadowRoot.querySelector("[data-booking-detail-dialog]");
     bookingDetailDialog?.addEventListener("click", (event) => {
@@ -3676,6 +3805,11 @@ class FinanzplanerPanel extends HTMLElement {
       if (this._bookingDetailRequest || this._bookingDetail || this._bookingDetailLoading || this._bookingDetailError || this._bookingDetailTrigger) this._closeBookingDetails();
     });
     this.shadowRoot.querySelectorAll("[data-booking-select], [data-booking-select-all]").forEach((input) => input.addEventListener("change", (event) => this._updateBookingSelection(event)));
+    this.shadowRoot.querySelector("[data-booking-history-filter]")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      for (const input of event.currentTarget.querySelectorAll("[data-booking-filter]")) this._bookingHistoryFilters[input.dataset.bookingFilter] = input.value;
+      this._openReview();
+    });
     this.shadowRoot.querySelectorAll("[data-export-bookings]").forEach((button) => button.addEventListener("click", () => this._exportSelectedBookings(button.dataset.bookingView)));
     this.shadowRoot.querySelectorAll("[data-delete-bookings]").forEach((button) => button.addEventListener("click", () => this._deleteSelectedBookings(button.dataset.bookingView)));
     const ruleForm = this.shadowRoot.querySelector("[data-rule-form]");
@@ -3907,6 +4041,7 @@ class FinanzplanerPanel extends HTMLElement {
     const content = `<main class="main" id="content" tabindex="-1">
       ${this._toolbarTemplate()}
       <section class="hero" id="overview" aria-labelledby="overview-title">
+        <div class="report-switcher" role="group" aria-label="Berichtszeitraum"><span>Bericht</span><button type="button" data-report-view="month" aria-pressed="${this._reportView === "month"}">Monat</button><button type="button" data-report-view="year" aria-pressed="${this._reportView === "year"}">Jahr</button><button type="button" data-report-view="cashflow" aria-pressed="${this._reportView === "cashflow"}">Cashflow</button></div>
         <div class="heading-line"><h2 id="overview-title">Planung · Prognose · Ist</h2><p>${monthLabel(this._month)} · Alle Beträge in Euro</p></div>
         <div class="metric-grid">
           <article class="metric" data-reveal style="--reveal-order: 1"><p class="metric-label">Planung</p><p class="metric-value">${formatEuro(data.plan)}</p><p class="metric-caption">geplantes Ergebnis</p></article>
@@ -3920,6 +4055,7 @@ class FinanzplanerPanel extends HTMLElement {
         <section class="surface trend-card" data-reveal style="--reveal-order: 6" aria-labelledby="trend-heading"><div class="section-heading"><h3 id="trend-heading">Monatsverlauf</h3><p>Einnahmen und Ausgaben kumuliert · ${monthLabel(this._month)}</p></div><div class="chart-wrap">${chartMarkup(data.trend)}${trendTable(data.trend)}</div><div class="chart-legend" aria-hidden="true"><span class="legend-item"><i class="legend-line legend-line--plan"></i>Planung (kumuliert)</span><span class="legend-item"><i class="legend-line legend-line--forecast"></i>Prognose (kumuliert)</span><span class="legend-item"><i class="legend-line"></i>Ist (kumuliert)</span><span class="legend-item"><i class="legend-dot legend-dot--plan"></i>Geplante Zahlung</span><span class="legend-item"><i class="legend-dot"></i>Gebuchte Zahlung</span></div></section>
         <aside class="surface review-card" data-reveal style="--reveal-order: 7" aria-labelledby="review-heading"><h3 class="review-heading" id="review-heading"><span class="warning-badge">${icon("warning", 18)}</span>Ungeklärte Buchungen</h3><p class="review-count">${escapeHtml(data.unresolved_count)}</p><p class="review-label">Buchungen in Prüfung</p><button class="review-action" type="button" data-action="review">Buchungen prüfen ${icon("arrowRight", 19)}</button><div class="review-amount"><p class="review-amount-label">Offener Betrag</p><p class="review-amount-value">${formatEuro(data.unresolved_total)}</p><p class="review-amount-note">Die zur Klärung nicht einberechneten Beträge.</p></div>${last ? `<div class="last-review">${icon("file", 19)}<span>Letzte ungeklärte Buchung<br><strong>${formatDate(last.date || last.booking_date)} · ${formatEuro(last.amount)}</strong></span></div>` : ""}</aside>
       </div>
+      ${this._reportTemplate()}
       ${this._comparisonTemplate(data)}
       <div class="bottom-grid">
         <section class="surface bottom-card" aria-labelledby="household-heading" data-reveal style="--reveal-order: 8"><h3 id="household-heading">Haushaltsübersicht</h3><p class="subline">${monthLabel(this._month)}</p><div class="metric-strip"><div class="mini-metric mini-metric--positive"><span class="mini-metric-icon">${icon("income", 25)}</span><p class="mini-metric-label">Einnahmen</p><p class="mini-metric-value">${formatEuro(household.income)}</p><p class="mini-metric-caption">${planShareCaption(household.income, household.income_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--negative"><span class="mini-metric-icon">${icon("expense", 25)}</span><p class="mini-metric-label">Ausgaben</p><p class="mini-metric-value">${formatEuro(household.expenses)}</p><p class="mini-metric-caption">${planShareCaption(household.expenses, household.expenses_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--negative"><span class="mini-metric-icon">${icon("savings", 25)}</span><p class="mini-metric-label">Rücklagen</p><p class="mini-metric-value">${formatEuro(household.savings)}</p><p class="mini-metric-caption">${planShareCaption(household.savings, household.savings_plan, "kein Planwert")}</p></div><div class="mini-metric mini-metric--available"><span class="mini-metric-icon">${icon("coins", 25)}</span><p class="mini-metric-label">Verfügbar</p><p class="mini-metric-value">${formatEuro(household.available)}</p><p class="mini-metric-caption">bisheriger Saldo</p></div></div></section>
@@ -4470,6 +4606,10 @@ class FinanzplanerPanel extends HTMLElement {
           ${field("account_id", "Konto", { options: this._ruleReferenceOptions(this._accounts, draft.account_id, "Alle Konten"), help: "Ein Konto begrenzt die Regel auf diese Zahlungsquelle." })}
           ${field("counterparty", "Zahlungsempfänger (optional)", { constraints: 'maxlength="160"', help: "Wird der Zahlungsempfänger weggelassen, matcht die Regel über die übrigen Bedingungen." })}
           ${field("purpose_contains", "Verwendungszweck enthält (optional)", { constraints: 'maxlength="160"', help: "Leer lassen, wenn die Regel für jeden Verwendungszweck gelten soll." })}
+          ${field("direction", "Richtung (optional)", { options: '<option value="">Alle Richtungen</option><option value="income">Einnahme</option><option value="expense">Ausgabe</option>' })}
+          ${field("counterparty_account", "Gegenparteikonto (maskiert, optional)", { constraints: 'maxlength="80"', help: "Nur die maskierte Kontoreferenz wird angezeigt." })}
+          ${field("amount_min", "Mindestbetrag (optional)", { type: "number", constraints: 'min="0" step="0.01" inputmode="decimal"' })}
+          ${field("amount_max", "Höchstbetrag (optional)", { type: "number", constraints: 'min="0" step="0.01" inputmode="decimal"' })}
           ${field("priority", "Priorität", { type: "number", constraints: 'required min="0" max="1000" step="1"', help: "0 bis 1000; eine höhere Zahl hat Vorrang. Gleiche Priorität kann einen Regelkonflikt ergeben." })}
         </div><p class="rule-error" data-rule-conditions-error id="rule-conditions-error" aria-live="polite"></p></fieldset>
         <fieldset class="rule-fieldset" aria-describedby="rule-share-summary rule-allocations-error"${disabled}><legend>Aufteilungsvorlage</legend>
@@ -4528,6 +4668,18 @@ class FinanzplanerPanel extends HTMLElement {
     const body = groupsMarkup || `<tbody><tr><td colspan="6">Noch keine Regeln angelegt. Mit „Regel anlegen“ legst du Bedingungen und eine Aufteilungsvorlage für künftige Vorschläge fest.</td></tr></tbody>`;
     return `<div class="management-list-toolbar"><p>${this._rules.filter((rule) => rule.active !== false).length} aktive Regeln · Deaktivierte Regeln bleiben erhalten.</p><button class="table-new-button" type="button" data-open-rule-editor="new"${disabled}>Regel anlegen ${icon("plus", 17)}</button></div>
       <div class="management-table-wrap" tabindex="0" role="region" aria-label="Regelübersicht, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Regeln für Buchungsvorschläge</caption><thead><tr><th scope="col">Regelname</th><th scope="col">Status</th><th scope="col">Priorität</th><th scope="col">Zahlungsempfänger</th><th scope="col">Aufteilung</th><th scope="col">Aktionen</th></tr></thead>${body}</table></div>`;
+  }
+
+  _openResolvedAllocationEditor(bookingId) {
+    const id = String(bookingId);
+    const booking = this._resolvedBookings.find((item) => String(item.id) === id);
+    if (!booking) return;
+    this._resolvedEditingBookings.add(id);
+    const rows = (booking.allocations || []).map((row) => ({ ...row, amount_input: Number(row.amount).toFixed(2) }));
+    this._allocationDrafts.set(id, rows);
+    this._allocationOriginalDrafts.set(id, rows.map((row) => ({ ...row })));
+    this._render();
+    this._allocationForm(id)?.querySelector('[data-allocation-index="0"][data-allocation-field="target"]')?.focus();
   }
 
   _rulesTemplate() {
@@ -4629,16 +4781,19 @@ class FinanzplanerPanel extends HTMLElement {
       const source = resolvedBookingSourceLabel(booking);
       const sourceClass = matchedRule ? "" : " resolved-rule-source--manual";
       const allocations = Array.isArray(booking.allocations) && booking.allocations.length
-        ? `<ul>${booking.allocations.map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row))}</li>`).join("")}</ul>`
+        ? `<ul>${booking.allocations.map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row))}${row.target_status === "missing" ? `<span class="booking-detail-empty">Person fehlt</span><div class="target-repair-form" data-target-repair-form><label for="repair-${escapeHtml(bookingId)}-${escapeHtml(row.target)}">Ersatzziel<select id="repair-${escapeHtml(bookingId)}-${escapeHtml(row.target)}" data-repair-to required>${this._personOptions()}</select></label><button class="table-edit-button" type="button" data-repair-target data-repair-booking="${escapeHtml(bookingId)}" data-repair-from="${escapeHtml(row.target)}"${this._repairSubmitting.has(bookingId) ? " disabled" : ""}>${this._repairSubmitting.has(bookingId) ? "Wird repariert …" : "Personenziel reparieren"}</button>${this._repairErrors.get(bookingId) ? `<p class="booking-detail-error" role="alert">${escapeHtml(this._repairErrors.get(bookingId))}</p>` : ""}</div>` : ""}</li>`).join("")}</ul>`
         : "Keine Aufteilung gespeichert";
+      const resolvedEditor = this._resolvedEditingBookings.has(bookingId)
+        ? `<form data-assignment-form data-booking-id="${escapeHtml(bookingId)}" data-booking-total="${Math.abs(Number(booking.amount) || 0)}">${this._allocationEditorTemplate(booking, `resolved-${bookingId}`)}<button type="button" class="table-edit-button" data-cancel-resolved-edit="${escapeHtml(bookingId)}">Abbrechen</button></form>`
+        : "";
       return `<tr>
         <td class="selection-cell"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="resolved" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label></td>
         <th scope="row"><span class="resolved-booking-sender">Absender: ${escapeHtml(sender || "Nicht vorhanden")}${senderAccountMarkup}</span><span class="resolved-booking-counterparty">Zahlungsempfänger: ${escapeHtml(counterparty || "Nicht vorhanden")}${recipientAccountMarkup}</span><span class="resolved-booking-date">${escapeHtml(formatDate(booking.booking_date))}</span></th>
         <td><span class="resolved-booking-purpose">${escapeHtml(purpose || "Kein Verwendungszweck")}</span></td>
         <td class="table-number">${formatEuro(booking.amount)}</td>
-        <td>${allocations}</td>
+        <td>${allocations}${resolvedEditor}</td>
         <td><span class="resolved-rule-source${sourceClass}">${escapeHtml(source)}</span>${matchedRule?.reason ? `<span class="resolved-rule-reason">${escapeHtml(matchedRule.reason)}</span>` : ""}</td>
-        <td class="table-actions"><button class="table-edit-button" type="button" data-booking-details="${escapeHtml(bookingId)}" aria-label="Details für ${escapeHtml(counterparty || "Buchung")} anzeigen">Details</button><button class="table-edit-button" type="button" data-unresolve-booking="${escapeHtml(bookingId)}"${this._unresolvingBookings.has(bookingId) ? " disabled" : ""}>${this._unresolvingBookings.has(bookingId) ? "Wird geändert …" : "Zuordnung rückgängig"}</button></td>
+        <td class="table-actions"><button class="table-edit-button" type="button" data-booking-details="${escapeHtml(bookingId)}" aria-label="Details für ${escapeHtml(counterparty || "Buchung")} anzeigen">Details</button><button class="table-edit-button" type="button" data-edit-resolved-booking="${escapeHtml(bookingId)}">Bearbeiten</button><button class="table-edit-button" type="button" data-unresolve-booking="${escapeHtml(bookingId)}"${this._unresolvingBookings.has(bookingId) ? " disabled" : ""}>${this._unresolvingBookings.has(bookingId) ? "Wird geändert …" : "Zuordnung rückgängig"}</button></td>
       </tr>`;
     }).join("");
     const body = this._resolvedLoading
@@ -4653,6 +4808,9 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _reviewTemplate() {
+    const filterStrip = `<form class="booking-history-filters" data-booking-history-filter aria-label="Buchungshistorie filtern"><label for="booking-filter-q">Suche<input id="booking-filter-q" data-booking-filter="q" type="search" value="${escapeHtml(this._bookingHistoryFilters.q)}" placeholder="Gegenpartei, Verwendungszweck …"></label><label for="booking-filter-from">Von<input id="booking-filter-from" data-booking-filter="from" type="date" value="${escapeHtml(this._bookingHistoryFilters.from)}"></label><label for="booking-filter-to">Bis<input id="booking-filter-to" data-booking-filter="to" type="date" value="${escapeHtml(this._bookingHistoryFilters.to)}"></label><label for="booking-filter-status">Status<select id="booking-filter-status" data-booking-filter="status"><option value="unresolved"${this._bookingHistoryFilters.status !== "resolved" ? " selected" : ""}>Ungeklärt</option><option value="resolved"${this._bookingHistoryFilters.status === "resolved" ? " selected" : ""}>Übernommen</option></select></label><label for="booking-filter-account">Konto<select id="booking-filter-account" data-booking-filter="account_id"><option value="">Alle Konten</option>${this._accounts.map((account) => `<option value="${escapeHtml(account.id)}"${this._bookingHistoryFilters.account_id === account.id ? " selected" : ""}>${escapeHtml(account.label || account.id)}</option>`).join("")}</select></label><label for="booking-filter-category">Kategorie<select id="booking-filter-category" data-booking-filter="category_id"><option value="">Alle Kategorien</option>${(this._catalogs.categories || []).map((entry) => `<option value="${escapeHtml(entry.id)}"${this._bookingHistoryFilters.category_id === entry.id ? " selected" : ""}>${escapeHtml(entry.label || entry.name)}</option>`).join("")}</select></label><button class="table-edit-button" type="submit">Filter anwenden</button></form>`;
+    const importHistory = `<section class="import-history" aria-labelledby="import-history-heading"><h3 id="import-history-heading">Importhistorie</h3>${this._imports.length ? `<div class="management-table-wrap" tabindex="0" role="region" aria-label="Importhistorie, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Importhistorie ohne Quelldateien</caption><thead><tr><th scope="col">Datei</th><th scope="col">Format</th><th scope="col">Zeitpunkt</th><th scope="col">Buchungen</th><th scope="col">Duplikate</th></tr></thead><tbody>${this._imports.map((item) => `<tr><th scope="row">${escapeHtml(item.filename || "Import")}</th><td>${escapeHtml(item.format || "—")}</td><td>${escapeHtml(item.imported_at || "—")}</td><td class="table-number">${escapeHtml(item.accepted_count ?? 0)}</td><td class="table-number">${escapeHtml(item.duplicate_count ?? 0)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="empty-state">Noch keine Importläufe vorhanden.</p>`}</section>`;
+    const bookingCount = !this._reviewLoading && !this._reviewLoadFailed ? `<p class="booking-result-count" role="status">${this._bookingTotal} Buchungen gefunden</p>` : "";
     const bookingList = this._reviewLoading ? `<p class="empty-state" role="status">Buchungen werden geladen …</p>`
       : this._reviewLoadFailed ? `<div class="empty-state"><p>Die Prüfliste konnte nicht geladen werden.</p><button class="table-edit-button" type="button" data-action="review">Erneut laden</button></div>`
         : this._bookings.length ? `${this._bookingSelectionToolbar("review", this._bookings, "review-bookings")}<ul id="review-bookings" class="booking-list" aria-label="Ungeklärte Buchungen">${this._bookings.map((booking, index) => {
@@ -4675,7 +4833,7 @@ class FinanzplanerPanel extends HTMLElement {
         : `<strong>Erkanntes Konto: ${escapeHtml(accountReference || "nicht zugeordnet")}</strong>`;
       return `<li><form class="booking-row${selected ? " booking-row--selected" : ""}" data-assignment-form data-booking-id="${escapeHtml(booking.id)}" data-booking-total="${total}"><label class="booking-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_bookings" value="${escapeHtml(bookingId)}" type="checkbox" data-booking-select data-booking-view="review" data-booking-id="${escapeHtml(bookingId)}"${selected ? " checked" : ""}><span class="visually-hidden">${escapeHtml(counterparty || "Buchung")} auswählen</span></label><time class="booking-date" datetime="${escapeHtml(booking.booking_date)}">${formatDate(booking.booking_date)}</time><span class="booking-purpose">${senderMarkup}<span class="booking-counterparty">${counterpartyMarkup}</span>${purposeMarkup}</span><span class="booking-account">${accountMarkup}</span><span class="booking-amount">${formatEuro(booking.amount)}</span><button class="table-edit-button" type="button" data-booking-details="${escapeHtml(bookingId)}" aria-label="Details für ${escapeHtml(counterparty || "Buchung")} anzeigen">Details</button>${this._bookingRuleHintTemplate(booking, index)}${this._allocationEditorTemplate(booking, index)}</form></li>`;
     }).join("")}</ul>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Ungeklärte Buchungen</h2><p>Ordne jede Buchung einer Person oder dem Haushalt zu und teile den Betrag bei Bedarf centgenau auf.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Buchungshistorie</h2><p>Historische und ungeklärte Buchungen filtern, prüfen und nachvollziehbar zuordnen.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${filterStrip}${bookingCount}${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}${importHistory}</div></main>`;
     return this._shellTemplate(content);
   }
 }

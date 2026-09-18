@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.11.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
+Version 0.12.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -120,11 +120,19 @@ In `Übernommene Buchungen` kannst du sämtliche automatisch und manuell überno
 
 In `Buchungen prüfen` und `Übernommene Buchungen` kannst du Buchungen per Checkbox markieren. `Alle auswählen` markiert die aktuell sichtbare Liste; `Auswahl löschen` entfernt die markierten Buchungen nach einer Sicherheitsbestätigung dauerhaft.
 
+Die `Buchungshistorie` in `Buchungen prüfen` lässt sich über Suche (`q` für Gegenpartei, Verwendungszweck, Referenz oder Absender), Zeitraum (`from`/`to`), Status, Konto sowie Kategorie filtern. Die Ansicht zeigt zusätzlich die `Importhistorie` mit Dateiname, Format, Zeitpunkt, Anzahl übernommener Buchungen und Duplikaten; Quelldateien werden dort nicht angezeigt.
+
 Regeln und Vorschläge verarbeitet Finanzplaner lokal in Home Assistant. Vollständige Kontoreferenzen bleiben im lokalen Speicher; Oberfläche und API zeigen nur maskierte Kontodaten.
+
+Regeln können neben Konto, Zahlungsempfänger und Verwendungszweck auch die `Richtung` (`Einnahme` oder `Ausgabe`), ein maskiertes `Gegenkonto` (`counterparty_account`) sowie eine inklusive `Betragsspanne` mit `Mindestbetrag` (`amount_min`) und `Höchstbetrag` (`amount_max`) enthalten. Eine Regel benötigt mindestens eine dieser Bedingungen; die Betragsgrenzen werden gegen den absoluten Buchungsbetrag geprüft.
 
 ## Buchungen aufteilen
 
 Nicht eindeutig regelbare Buchungen werden in `Buchungen prüfen` bewusst bestätigt. Dort lässt sich der Betrag centgenau auf eine oder mehrere Personen beziehungsweise `Haushalt` verteilen. Jede Zeile kann zusätzlich Tier, Bereich, Kategorie und Projekt tragen; eine gemeinsame Futterausgabe wird beispielsweise als Ziel `Haushalt` mit Tier `Fio` und Bereich `Haustiere` gespeichert. Finanzplaner akzeptiert die Aufteilung erst, wenn die positiven Teilbeträge den absoluten Buchungsbetrag exakt abdecken. Auch automatisch übernommene Buchungen bleiben in der Ansicht `Übernommene Buchungen` nachvollziehbar und können dort wieder zur Prüfung geöffnet werden; Benachrichtigungen werden nicht ungefragt verschickt.
+
+In der Übersicht stehen die Berichtsmodi `Monat`, `Jahr` und `Cashflow` zur Verfügung. `Monat` ist die standardmäßige Einzelperiodenansicht, `Jahr` fasst den gewählten Jahreszeitraum zusammen und `Cashflow` zeigt die monatliche Reihe mit Einnahmen, Ausgaben, Rücklagen und Ist-Werten.
+
+Wenn eine gespeicherte Aufteilung auf eine nicht mehr vorhandene Home-Assistant-Person verweist, kennzeichnet die Oberfläche das Ziel mit `Person fehlt`. Über `Personenziel reparieren` wird dieses Ziel für die betroffene Buchung durch ein verfügbares Ersatzziel ersetzt; die Reparatur wird erst nach erfolgreicher serverseitiger Prüfung gespeichert.
 
 ## Excel-Plan übernehmen
 
@@ -149,6 +157,8 @@ python3 -m compileall -q custom_components
 ```
 
 Der Markenlink `Home Assistant` führt aus dem Panel zurück zur normalen Home-Assistant-Oberfläche und berücksichtigt auch Installationen unter einem URL-Unterpfad.
+
+Die Integration stellt unter anderem die Sensoren `Geplanter Restbetrag`, `Tatsächlicher Restbetrag`, `Geplante Einnahmen`, `Geplante Ausgaben`, `Geplante Rücklagen`, `Prognose`, `Ungeklärter Betrag`, `Haushaltssaldo`, `Nächste größere Zahlung`, `Ungeklärte Buchungen` und `Nächster Futterkauf` bereit.
 
 ## Versionierung
 

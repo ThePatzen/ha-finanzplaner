@@ -61,6 +61,93 @@ class AllocationRulesTests(unittest.TestCase):
 
 
 class ForecastTests(unittest.TestCase):
+    def _report_data(self):
+        return {
+            "plan_items": [{"active": True, "direction": "income", "amount": 1200, "frequency_months": None, "due_date": "2026-01-15"}],
+            "bookings": [
+                {"booking_date": "2026-01-15", "amount": 1200, "status": "resolved", "account_id": "account-main", "allocations": [{"amount": 1200, "target": "person.alex", "pet_id": "pet-fio"}]},
+                {"booking_date": "2026-02-15", "amount": -50, "status": "unresolved", "account_id": "account-main", "allocations": []},
+            ],
+            "accounts": [{"id": "account-main", "label": "Girokonto"}],
+            "pets": [{"id": "pet-fio", "name": "Fio"}],
+            "catalogs": {"categories": [], "areas": [], "projects": []},
+        }
+
+    def test_overview_period_and_cashflow_series_cover_year_without_double_counting(self):
+        core = load_core()
+        data = self._report_data()
+
+        period = core.overview_period(data, date(2026, 1, 1), date(2026, 12, 31))
+        self.assertEqual(period["actual"], 1200.00)
+        self.assertEqual(period["unresolved_count"], 1)
+        series = core.cashflow_series(data, date(2026, 1, 1), date(2026, 12, 31))
+        self.assertEqual([entry["month"] for entry in series], [f"2026-{month:02d}" for month in range(1, 13)])
+
+    def test_overview_report_exposes_person_account_and_pet_dimensions(self):
+        core = load_core()
+        report = core.overview_report(self._report_data(), date(2026, 1, 1), date(2026, 12, 31))
+        self.assertIn("persons", report["dimensions"])
+        self.assertIn("accounts", report["dimensions"])
+        self.assertIn("pets", report["dimensions"])
+
+    def test_cashflow_series_includes_zero_months_in_requested_range(self):
+        core = load_core()
+        series = core.cashflow_series({"bookings": []}, date(2026, 1, 1), date(2026, 3, 31))
+        self.assertEqual([entry["month"] for entry in series], ["2026-01", "2026-02", "2026-03"])
+
+    def test_overview_report_catalog_dimensions_span_the_full_period(self):
+        core = load_core()
+        data = {
+            "catalogs": {"categories": [{"id": "food", "label": "Futter"}], "areas": [], "projects": []},
+            "bookings": [
+                {"booking_date": "2026-01-10", "amount": -10, "status": "resolved", "allocations": [{"amount": 10, "category_id": "food"}]},
+                {"booking_date": "2026-02-10", "amount": -20, "status": "resolved", "allocations": [{"amount": 20, "category_id": "food"}]},
+            ],
+        }
+        report = core.overview_report(data, date(2026, 1, 1), date(2026, 2, 28))
+        category = next(item for item in report["dimensions"]["categories"] if item["key"] == "food")
+        self.assertEqual(category["actual"], -30.0)
+
+    def test_overview_report_accounts_use_booking_account_totals(self):
+        core = load_core()
+        report = core.overview_report({
+            "accounts": [{"id": "account-main", "label": "Girokonto"}],
+            "bookings": [{"booking_date": "2026-01-10", "amount": -25, "status": "resolved", "account_id": "account-main", "allocations": [{"amount": 25, "account_id": "wrong-account"}]}],
+        }, date(2026, 1, 1), date(2026, 1, 31))
+        account = next(item for item in report["dimensions"]["accounts"] if item["key"] == "account-main")
+        self.assertEqual(account["actual"], -25.0)
+
+    def test_overview_report_accounts_include_resolved_booking_without_allocations(self):
+        core = load_core()
+        report = core.overview_report({
+            "accounts": [{"id": "account-main", "label": "Girokonto"}],
+            "bookings": [{"booking_date": "2026-01-10", "amount": -40, "status": "resolved", "account_id": "account-main", "allocations": []}],
+        }, date(2026, 1, 1), date(2026, 1, 31))
+        account = next(item for item in report["dimensions"]["accounts"] if item["key"] == "account-main")
+        self.assertEqual(account["actual"], -40.0)
+
+    def test_overview_report_person_labels_accept_entity_id(self):
+        core = load_core()
+        report = core.overview_report({
+            "persons": [{"entity_id": "person.alex", "name": "Alex"}],
+            "bookings": [{"booking_date": "2026-01-10", "amount": -25, "status": "resolved", "allocations": [{"amount": 25, "target": "person.alex"}]}],
+        }, date(2026, 1, 1), date(2026, 1, 31))
+        person = next(item for item in report["dimensions"]["persons"] if item["key"] == "person.alex")
+        self.assertEqual(person["name"], "Alex")
+
+    def test_overview_period_excludes_unresolved_and_counts_feed_once(self):
+        core = load_core()
+        period = core.overview_period({
+            "bookings": [
+                {"booking_date": "2026-01-10", "amount": -10, "status": "resolved"},
+                {"booking_date": "2026-01-11", "amount": -99, "status": "unresolved"},
+            ],
+            "feed_profiles": [{"active": True, "expected_cost": 7, "interval_weeks": 4, "last_purchase_date": "2025-12-15"}],
+        }, date(2026, 1, 1), date(2026, 2, 28))
+        self.assertEqual(period["actual"], -10.0)
+        self.assertEqual(period["unresolved_count"], 1)
+        self.assertEqual(period["feed_forecast_total"], -7.0)
+
     def test_signed_plan_amount_uses_direction_for_positive_imports(self):
         core = load_core()
 
@@ -89,7 +176,15 @@ class ForecastTests(unittest.TestCase):
         overview = core.overview_values(
             {
                 "plan_items": [
-                    {"active": True, "amount": 120, "remaining_amount": 20},
+                    {
+                        "active": True,
+                        "direction": "income",
+                        "amount": 200,
+                        "remaining_amount": 20,
+                        "due_date": "2026-09-20",
+                    },
+                    {"active": True, "direction": "expense", "amount": 40},
+                    {"active": True, "direction": "saving", "amount": 40},
                     {"active": False, "amount": 999, "remaining_amount": 999},
                 ],
                 "bookings": [
@@ -105,6 +200,23 @@ class ForecastTests(unittest.TestCase):
         self.assertEqual(overview["actual_balance"], -110.0)
         self.assertEqual(overview["unresolved_bookings"], 1)
         self.assertEqual(overview["unresolved_total"], 10.0)
+
+        self.assertEqual(overview["planned_income"], 200.0)
+        self.assertEqual(overview["planned_expenses"], 40.0)
+        self.assertEqual(overview["planned_savings"], 40.0)
+        self.assertEqual(overview["forecast"], -170.0)
+        self.assertEqual(overview["household_balance"], -110.0)
+        self.assertEqual(overview["next_major_payment"], "2026-09-20")
+
+    def test_overview_uses_unresolved_total_as_the_open_amount_contract(self):
+        core = load_core()
+
+        overview = core.overview_values(
+            {"bookings": [{"booking_date": "2026-09-10", "amount": -12.34, "status": "unresolved"}]},
+            "2026-09",
+        )
+
+        self.assertEqual(overview["unresolved_total"], 12.34)
 
     def test_plan_items_are_scheduled_by_rhythm_and_due_date(self):
         core = load_core()

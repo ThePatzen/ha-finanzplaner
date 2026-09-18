@@ -220,6 +220,37 @@ class BookingAllocationViewTests(unittest.TestCase):
         self.assertEqual(result["booking"]["account"], "…5678")
         self.assertEqual(booking["account"], "AT123456789012345678")
 
+    def test_custom_view_keeps_missing_historical_target_and_projects_status(self):
+        booking = self.coordinator.store.data["bookings"][0]
+        booking["status"] = "resolved"
+        booking["allocations"] = [{"target": "person.removed", "amount": 100.00}]
+
+        result = asyncio.run(
+            self.http.BookingAllocationsView().post(
+                self._request(
+                    {"allocations": [{"target": "person.removed", "amount": 100.00}]}
+                ),
+                "booking-1",
+            )
+        )
+
+        self.assertEqual(booking["allocations"][0]["target"], "person.removed")
+        allocation = result["booking"]["allocations"][0]
+        self.assertEqual(allocation["target_status"], "missing")
+        self.assertNotIn("target_label", allocation)
+
+    def test_legacy_view_projects_live_target_label_and_status(self):
+        result = asyncio.run(
+            self.http.BookingAssignmentView().post(
+                self._request({"targets": ["person.alex"]}),
+                "booking-1",
+            )
+        )
+
+        allocation = result["booking"]["allocations"][0]
+        self.assertEqual(allocation["target_status"], "available")
+        self.assertEqual(allocation["target_label"], "person.alex")
+
     def test_invalid_custom_payload_does_not_mutate_or_save(self):
         before = deepcopy(self.coordinator.store.data)
 

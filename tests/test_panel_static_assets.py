@@ -20,7 +20,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
             / "manifest.json"
         )
         version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-        self.assertEqual(version, "0.11.0")
+        self.assertEqual(version, "0.12.0")
         build_path = getattr(
             const, "panel_static_path", lambda _version: "/api/finanzplaner/static"
         )(version)
@@ -28,7 +28,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
 
         self.assertEqual(
             urljoin(panel_url, "panel-utils.mjs"),
-            "https://ha.example/api/finanzplaner/static/0.11.0/panel-utils.mjs",
+            f"https://ha.example/api/finanzplaner/static/{version}/panel-utils.mjs",
         )
 
     def test_booking_lists_use_shared_detail_dialog_and_raw_data_action(self) -> None:
@@ -98,6 +98,36 @@ class PanelStaticAssetsTest(unittest.TestCase):
             'content.querySelector("[data-booking-raw-toggle]")?.focus()',
             source,
         )
+
+    def test_resolved_rows_offer_edit_action_and_missing_target_marker(self) -> None:
+        source = (Path(__file__).parents[1] / "custom_components" / "finanzplaner" / "frontend" / "panel.js").read_text(encoding="utf-8")
+        self.assertIn("data-edit-resolved-booking", source)
+        self.assertIn("Person fehlt", source)
+
+    def test_resolved_allocation_editor_manages_focus_on_open_and_cancel(self) -> None:
+        source = (Path(__file__).parents[1] / "custom_components" / "finanzplaner" / "frontend" / "panel.js").read_text(encoding="utf-8")
+        self.assertIn("this._resolvedEditTriggers", source)
+        self.assertIn("[data-allocation-field=\"target\"]", source)
+        self.assertIn("this._resolvedEditTriggers.get(bookingId)", source)
+
+    def test_report_switcher_loads_report_endpoint_and_renders_states(self) -> None:
+        source = (Path(__file__).parents[1] / "custom_components" / "finanzplaner" / "frontend" / "panel.js").read_text(encoding="utf-8")
+        self.assertIn('const REPORT_URL = "/api/finanzplaner/report"', source)
+        self.assertIn("reportRequestUrl(REPORT_URL", source)
+        self.assertIn("_reportLoading", source)
+        self.assertIn("_reportLoadFailed", source)
+        self.assertIn("Cashflow", source)
+        self.assertIn("<table", source)
+
+    def test_filter_result_count_is_visible(self) -> None:
+        source = (Path(__file__).parents[1] / "custom_components" / "finanzplaner" / "frontend" / "panel.js").read_text(encoding="utf-8")
+        self.assertIn("Buchungen gefunden", source)
+
+    def test_missing_target_repair_uses_repair_endpoint_and_payload_helper(self) -> None:
+        source = (Path(__file__).parents[1] / "custom_components" / "finanzplaner" / "frontend" / "panel.js").read_text(encoding="utf-8")
+        self.assertIn("repairTargetsPayload", source)
+        self.assertIn("/repair-targets", source)
+        self.assertIn("data-repair-target", source)
 
     def test_booking_detail_loading_and_legacy_states_have_visible_close_or_notice(self) -> None:
         panel_path = (

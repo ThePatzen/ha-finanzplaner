@@ -25,6 +25,32 @@ export function bookingDetailsRequestUrl(baseUrl, bookingId) {
   return String(baseUrl).replace(/\/$/, "") + "/" + encodeURIComponent(String(bookingId)) + "/details";
 }
 
+export function bookingHistoryRequestUrl(baseUrl, filters = {}) {
+  const order = ["q", "from", "to", "status", "account_id", "target", "category_id", "area_id", "project_id", "limit", "offset"];
+  const params = new URLSearchParams();
+  order.forEach((key) => {
+    const value = filters?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") params.set(key, String(value).trim());
+  });
+  const query = params.toString();
+  return `${String(baseUrl).replace(/\/$/, "")}${query ? `?${query}` : ""}`;
+}
+
+export function reportRequestUrl(baseUrl, from, to, view = "month") {
+  const params = new URLSearchParams({ from: String(from), to: String(to), view: String(view) });
+  return `${String(baseUrl).replace(/\/$/, "")}?${params.toString()}`;
+}
+
+export function reportRangeLabel(view, from, to) {
+  const start = new Date(`${from}T00:00:00`);
+  if (view === "year") return `Jahr ${start.getFullYear()}`;
+  return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(start);
+}
+
+export function repairTargetsPayload(repairs = []) {
+  return { repairs: repairs.map(({ from, to }) => ({ from: String(from || ""), to: String(to || "") })) };
+}
+
 export function bookingDetailRawJson(detail) {
   return JSON.stringify(detail, null, 2);
 }
@@ -107,6 +133,10 @@ export function rulePayloadFromForm(form) {
     account_id: form.account_id || null,
     counterparty: form.counterparty.trim(),
     purpose_contains: form.purpose_contains.trim() || null,
+    direction: form.direction || null,
+    counterparty_account: form.counterparty_account?.trim() || null,
+    amount_min: form.amount_min === "" || form.amount_min == null ? null : Number(form.amount_min),
+    amount_max: form.amount_max === "" || form.amount_max == null ? null : Number(form.amount_max),
     allocations: form.allocations.map((row) => ({ ...row })),
   };
 }

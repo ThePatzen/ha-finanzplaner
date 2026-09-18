@@ -14,6 +14,21 @@ def load_core():
 
 
 class RuleMatchingTests(unittest.TestCase):
+    def test_rule_matches_direction_counterparty_account_and_amount_range(self):
+        result = load_core().rule_suggestion(
+            {"account_id": "account-main", "amount": -42.50,
+             "counterparty": "Supermarkt", "counterparty_account": "AT123",
+             "purpose": "Einkauf", "direction": "expense"},
+            [{"id": "r1", "label": "Einkauf", "active": True, "priority": 10,
+              "account_id": "account-main", "counterparty": "Supermarkt",
+              "counterparty_account": "AT123", "direction": "expense",
+              "amount_min": 40, "amount_max": 50,
+              "allocations": [{"target": "household", "share_percent": 100}]}],
+            accounts={"account-main": {}}, valid_targets={"household"},
+            catalogs={"areas": [], "categories": [], "projects": []}, pets={},
+        )
+        self.assertEqual(result["status"], "suggested")
+
     def test_exact_counterparty_and_account_create_one_suggestion(self):
         core = load_core()
         rules = [{

@@ -29,6 +29,7 @@ from .core import (
     normalize_account_reference,
     overview_breakdown,
     overview_details,
+    overview_report,
     overview_values,
     parse_allocation_payload,
     parse_camt053,
@@ -77,6 +78,7 @@ _OPAQUE_ID_FIELDS = frozenset({
 _ACCOUNT_FIELD_NAMES = frozenset({
     "account",
     "account_reference",
+    "counterparty_account",
     "account_number",
     "account_no",
     "accountnumber",
@@ -303,6 +305,7 @@ def _booking_accounts_payload(
 def _booking_response_projection(
     booking: dict[str, Any],
     accounts: dict[str, dict[str, object]] | None = None,
+    hass: Any | None = None,
 ) -> dict[str, Any]:
     """Return booking data suitable for list and import-preview responses."""
 
@@ -316,6 +319,33 @@ def _booking_response_projection(
         booking_accounts = _booking_accounts_payload(accounts, booking)
         if booking_accounts is not None:
             projected["booking_accounts"] = booking_accounts
+    if hass is not None:
+        live_people = {
+            state.entity_id: str(
+                getattr(state, "attributes", {}).get("friendly_name") or getattr(state, "name", None) or state.entity_id
+            )
+            for state in hass.states.async_all()
+            if state.domain == "person"
+        }
+        allocations = projected.get("allocations")
+        if isinstance(allocations, list):
+            projected["allocations"] = [
+                {
+                    **allocation,
+                    "target_status": (
+                        "household" if allocation.get("target") == "household"
+                        else "available" if allocation.get("target") in live_people
+                        else "missing"
+                    ),
+                    **(
+                        {"target_label": live_people[allocation["target"]]}
+                        if allocation.get("target") in live_people
+                        else {}
+                    ),
+                }
+                if isinstance(allocation, dict) else allocation
+                for allocation in allocations
+            ]
     return projected
 
 
@@ -462,6 +492,10 @@ def rule_payload(
             "priority",
             "account_id",
             "counterparty",
+            "counterparty_account",
+            "direction",
+            "amount_min",
+            "amount_max",
             "purpose_contains",
             "allocations",
             "created_at",
@@ -695,11 +729,16 @@ def _append_rule(
     rules.append(rule)
 
 
-def _allocation_records(allocations: object) -> list[dict[str, object]]:
+def _allocation_records(allocations: object, hass: Any | None = None) -> list[dict[str, object]]:
     """Serialize validated allocation dataclasses for persistent bookings."""
 
     if not isinstance(allocations, list):
         return []
+    live_people = {
+        state.entity_id: str(getattr(state, "attributes", {}).get("friendly_name") or getattr(state, "name", None) or state.entity_id)
+        for state in hass.states.async_all()
+        if state.domain == "person"
+    } if hass is not None else {}
     return [
         {
             "target": allocation.target,
@@ -713,6 +752,7 @@ def _allocation_records(allocations: object) -> list[dict[str, object]]:
             "pet_id": allocation.pet_id,
             "pet_name": allocation.pet_name,
             "pet_type": allocation.pet_type,
+            **({"target_label": live_people[allocation.target]} if allocation.target in live_people else {}),
         }
         for allocation in allocations
     ]
@@ -763,7 +803,7 @@ def _apply_rule_to_booking(
             "reason": f"Die automatische Zuordnung wurde nicht übernommen: {exc}",
         }
 
-    booking["allocations"] = _allocation_records(allocations)
+    booking["allocations"] = _allocation_records(allocations, hass)
     booking["status"] = "resolved"
     booking["matched_rule"] = {
         "rule_id": suggestion.get("rule_id"),
@@ -1994,7 +2034,7 @@ class UnresolvedBookingsView(HomeAssistantView):
             account = accounts.get(account_id) if isinstance(account_id, str) else None
             account_label = account.get("label") if isinstance(account, dict) else None
             projected.append({
-                **_booking_response_projection(booking, accounts),
+                **_booking_response_projection(booking, accounts, request.app["hass"]),
                 "account_label": account_label if isinstance(account_label, str) else None,
                 **suggestion,
             })
@@ -2117,10 +2157,164 @@ class ResolvedBookingsView(HomeAssistantView):
         accounts = _rule_accounts(coordinator) if coordinator is not None else None
         return self.json(_response_payload({
             "bookings": [
-                _booking_response_projection(booking, accounts)
+                _booking_response_projection(booking, accounts, request.app["hass"])
                 for booking in resolved
             ]
         }))
+
+
+def _strict_query_date(value: object, field: str) -> date | None:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        raise web.HTTPBadRequest(text=f"{field} muss ein Datum im Format YYYY-MM-DD sein.")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=f"{field} muss ein Datum im Format YYYY-MM-DD sein.") from exc
+
+
+def _query_int(request: web.Request, field: str, default: int, minimum: int = 0) -> int:
+    raw = request.query.get(field)
+    if raw in (None, ""):
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text=f"{field} ist ungültig.") from exc
+    if value < minimum:
+        raise web.HTTPBadRequest(text=f"{field} ist ungültig.")
+    return value
+
+
+def _booking_matches(
+    booking: dict[str, Any],
+    query: Any,
+    accounts: dict[str, dict[str, object]] | None = None,
+) -> bool:
+    start = _strict_query_date(query.get("from"), "from")
+    end = _strict_query_date(query.get("to"), "to")
+    if start and end and start > end:
+        raise web.HTTPBadRequest(text="Der Zeitraum ist ungültig.")
+    try:
+        booking_date = date.fromisoformat(str(booking.get("booking_date")))
+    except ValueError:
+        return False
+    if start and booking_date < start or end and booking_date > end:
+        return False
+    for field in ("account_id", "status"):
+        value = query.get(field)
+        if value and booking.get(field) != value:
+            return False
+    search = str(query.get("q", "")).strip().casefold()
+    account = accounts.get(booking.get("account_id")) if accounts else None
+    searchable = ("purpose", "reference", "counterparty", "sender")
+    search_text = " ".join(
+        str(booking.get(field, "")) for field in searchable
+    )
+    if account:
+        search_text += f" {account.get('label', '')}"
+    if search and search not in search_text.casefold():
+        return False
+    allocation_filters = {field: query.get(field) for field in ("target", "category_id", "area_id", "project_id")}
+    allocation_filters = {key: value for key, value in allocation_filters.items() if value}
+    if allocation_filters:
+        allocations = booking.get("allocations", [])
+        if not any(isinstance(item, dict) and all(item.get(key) == value for key, value in allocation_filters.items()) for item in allocations if isinstance(allocations, list)):
+            return False
+    return True
+
+
+class BookingHistoryView(HomeAssistantView):
+    url = "/api/finanzplaner/bookings"
+    name = "api:finanzplaner:bookings:history"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        bookings = coordinator.store.data.get("bookings", []) if coordinator else []
+        if not isinstance(bookings, list):
+            bookings = []
+        limit = _query_int(request, "limit", 100, 1)
+        offset = _query_int(request, "offset", 0)
+        accounts = _rule_accounts(coordinator) if coordinator else None
+        matching = [
+            item for item in bookings
+            if isinstance(item, dict)
+            and _booking_matches(item, request.query, accounts)
+        ]
+        return self.json(_response_payload({
+            "bookings": [_booking_response_projection(item, accounts, request.app["hass"]) for item in matching[offset:offset + limit]],
+            "total": len(matching), "limit": limit, "offset": offset,
+            "filters": {key: value for key, value in request.query.items() if key in {"q", "from", "to", "account_id", "target", "category_id", "area_id", "project_id", "status"}},
+        }))
+
+
+class ImportHistoryView(HomeAssistantView):
+    url = "/api/finanzplaner/imports"
+    name = "api:finanzplaner:imports"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        imports = coordinator.store.data.get("imports", []) if coordinator else []
+        projected = [{key: value for key, value in item.items() if key not in {"content_base64", "original_uploads"}} for item in imports if isinstance(item, dict)]
+        return self.json(_response_payload({"imports": projected}))
+
+
+class ReportView(HomeAssistantView):
+    url = "/api/finanzplaner/report"
+    name = "api:finanzplaner:report"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        start = _strict_query_date(request.query.get("from"), "from")
+        end = _strict_query_date(request.query.get("to"), "to")
+        view = request.query.get("view", "month")
+        if start is None or end is None or start > end or view not in {"month", "year", "cashflow"}:
+            raise web.HTTPBadRequest(text="Zeitraum oder Reportansicht ist ungültig.")
+        report = overview_report(coordinator.store.data, start, end)
+        if view == "cashflow":
+            report = {"cashflow": report["cashflow"]}
+        return self.json(_response_payload({"report": report, "from": start.isoformat(), "to": end.isoformat(), "view": view}))
+
+
+class BookingTargetRepairView(HomeAssistantView):
+    url = "/api/finanzplaner/bookings/{booking_id}/repair-targets"
+    name = "api:finanzplaner:booking:repair-targets"
+    requires_auth = True
+
+    async def post(self, request: web.Request, booking_id: str) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        booking = next((item for item in coordinator.store.data.get("bookings", []) if isinstance(item, dict) and item.get("id") == booking_id), None)
+        if booking is None:
+            raise web.HTTPNotFound(text="Buchung nicht gefunden.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Reparatur ist kein gültiges JSON.") from exc
+        repairs = payload.get("repairs") if isinstance(payload, dict) else None
+        if not isinstance(repairs, list) or not repairs:
+            raise web.HTTPBadRequest(text="Reparaturen müssen als Liste übermittelt werden.")
+        valid_targets = _valid_plan_targets(request.app["hass"])
+        replacements = []
+        for repair in repairs:
+            if not isinstance(repair, dict) or not isinstance(repair.get("from"), str) or repair.get("to") not in valid_targets:
+                raise web.HTTPBadRequest(text="Mindestens ein Reparaturziel ist ungültig.")
+            replacements.append((repair["from"], repair["to"]))
+        for allocation in booking.get("allocations", []):
+            if isinstance(allocation, dict):
+                for source, target in replacements:
+                    if allocation.get("target") == source:
+                        allocation["target"] = target
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"booking": _booking_response_projection(booking, hass=request.app["hass"])}))
 
 
 class BookingDeleteView(HomeAssistantView):
@@ -2265,7 +2459,7 @@ class BookingAssignmentView(HomeAssistantView):
             )
         except (TypeError, ValueError) as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
-        booking["allocations"] = _allocation_records(allocations)
+        booking["allocations"] = _allocation_records(allocations, request.app["hass"])
         for allocation in booking["allocations"]:
             ensure_catalog_entries(coordinator.store.data, allocation)
         booking["status"] = "resolved"
@@ -2273,7 +2467,7 @@ class BookingAssignmentView(HomeAssistantView):
         await coordinator.store.async_save()
         await coordinator.async_refresh()
         return self.json(
-            _response_payload({"booking": _booking_response_projection(booking)})
+            _response_payload({"booking": _booking_response_projection(booking, hass=request.app["hass"])})
         )
 
 
@@ -2323,6 +2517,11 @@ class BookingAllocationsView(HomeAssistantView):
                 if state.domain == "person"
             ),
         }
+        valid_targets.update(
+            allocation.get("target")
+            for allocation in booking.get("allocations", [])
+            if isinstance(allocation, dict) and isinstance(allocation.get("target"), str)
+        )
         try:
             allocation_payload = [
                 _catalog_link_payload(coordinator, item, allow_archived=True)
@@ -2337,7 +2536,7 @@ class BookingAllocationsView(HomeAssistantView):
         except (TypeError, ValueError) as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
 
-        booking["allocations"] = _allocation_records(allocations)
+        booking["allocations"] = _allocation_records(allocations, request.app["hass"])
         for allocation in booking["allocations"]:
             ensure_catalog_entries(coordinator.store.data, allocation)
         booking["status"] = "resolved"
@@ -2345,7 +2544,7 @@ class BookingAllocationsView(HomeAssistantView):
         await coordinator.store.async_save()
         await coordinator.async_refresh()
         return self.json(
-            _response_payload({"booking": _booking_response_projection(booking)})
+            _response_payload({"booking": _booking_response_projection(booking, hass=request.app["hass"])})
         )
 
 
@@ -2378,7 +2577,7 @@ class BookingUnresolveView(HomeAssistantView):
         await coordinator.store.async_save()
         await coordinator.async_refresh_data()
         return self.json(
-            _response_payload({"booking": _booking_response_projection(booking)})
+            _response_payload({"booking": _booking_response_projection(booking, hass=request.app["hass"])})
         )
 
 

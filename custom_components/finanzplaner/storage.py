@@ -242,6 +242,18 @@ def _normalize_rules(data: dict[str, Any]) -> None:
 
     if not isinstance(data.get("rules"), list):
         data["rules"] = []
+        return
+    for rule in data["rules"]:
+        if not isinstance(rule, dict):
+            continue
+        rule.setdefault("counterparty_account", None)
+        if isinstance(rule["counterparty_account"], str):
+            rule["counterparty_account"] = normalize_account_reference(rule["counterparty_account"])
+        else:
+            rule["counterparty_account"] = None
+        rule.setdefault("direction", None)
+        rule.setdefault("amount_min", None)
+        rule.setdefault("amount_max", None)
 
 
 def _catalog_source_values(data: dict[str, Any], kind: str) -> list[str]:

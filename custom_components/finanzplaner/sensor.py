@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.const import CURRENCY_EURO
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -16,6 +16,13 @@ from .core import feed_profile_forecast
 SENSORS = (
     ("planned_balance", "Geplanter Restbetrag", "€"),
     ("actual_balance", "Tatsächlicher Restbetrag", "€"),
+    ("planned_income", "Geplante Einnahmen", "€"),
+    ("planned_expenses", "Geplante Ausgaben", "€"),
+    ("planned_savings", "Geplante Rücklagen", "€"),
+    ("forecast", "Prognose", "€"),
+    ("unresolved_amount", "Ungeklärter Betrag", "€"),
+    ("household_balance", "Haushaltssaldo", "€"),
+    ("next_major_payment", "Nächste größere Zahlung", ""),
     ("unresolved_bookings", "Ungeklärte Buchungen", ""),
     ("next_feed_purchase", "Nächster Futterkauf", ""),
 )
@@ -47,6 +54,8 @@ class FinanceSensor(CoordinatorEntity[FinanzplanerCoordinator], SensorEntity):
         self._attr_name = name
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_native_unit_of_measurement = CURRENCY_EURO if unit == "€" else None
+        if key == "next_major_payment":
+            self._attr_device_class = SensorDeviceClass.DATE
 
     @property
     def native_value(self) -> float | int | str | None:
@@ -54,6 +63,10 @@ class FinanceSensor(CoordinatorEntity[FinanzplanerCoordinator], SensorEntity):
             forecast = self._next_feed_forecast()
             return forecast.get("next_purchase_date") if forecast else None
         overview = self.coordinator.data.get("overview", {}) if self.coordinator.data else {}
+        if self._key == "next_major_payment":
+            return overview.get(self._key)
+        if self._key == "unresolved_amount":
+            return overview.get("unresolved_total", 0)
         return overview.get(self._key, 0)
 
     @property

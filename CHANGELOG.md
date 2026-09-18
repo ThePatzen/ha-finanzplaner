@@ -10,8 +10,15 @@ Das Projekt verwendet Semantic Versioning:
 
 ## Unreleased
 
+## [0.12.0] – 2026-09-18
+
 - Bank-spezifische CAMT-Kontoreferenzen aus `DbtrAgt` und `CdtrAgt` werden bei internen Überweisungen erkannt, damit Absender- und Empfängerkonto auch in übernommenen Buchungen korrekt angezeigt werden.
 - Die Regelansicht gruppiert Regeln nach Konto; die Konto-Spalte entfällt. Innerhalb der Gruppen werden Regeln wie beim Matching nach absteigender Priorität und danach alphabetisch nach Regelname sortiert.
+- Die Buchungshistorie kann nach Suche, Zeitraum, Status, Konto und Kategorie gefiltert werden; die Importhistorie zeigt Dateiname, Format, Zeitpunkt sowie Buchungs- und Duplikatanzahl.
+- Regeln unterstützen Richtung, maskiertes Gegenkonto und eine inklusive Betragsspanne mit Mindest- und Höchstbetrag.
+- Die Übersicht bietet die Berichtsmodi `month`, `year` und `cashflow`; die Monatsansicht bleibt der Standard.
+- Fehlende Home-Assistant-Personenziele werden als `Person fehlt` markiert und können mit einem verfügbaren Ersatzziel repariert werden.
+- Die Übersichtssensoren umfassen Plan-/Ist-Restbetrag, geplante Einnahmen, Ausgaben und Rücklagen, Prognose, ungeklärten Betrag, Haushaltssaldo, nächste größere Zahlung, ungeklärte Buchungen und nächsten Futterkauf.
 
 ## [0.11.0] – 2026-09-18
 
@@ -169,6 +176,7 @@ Erste vorbereitete vertikale Version:
 [0.3.4]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.3.4
 [0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
+[0.12.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.12.0
 [0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0
 [0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0
 [0.9.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.9.0

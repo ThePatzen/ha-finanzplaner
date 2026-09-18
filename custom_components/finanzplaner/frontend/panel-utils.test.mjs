@@ -617,6 +617,31 @@ test("rule overview groups by account and sorts by matching priority then label"
   assert.ok(markup.indexOf(">Gemeinsames Girokonto</th>") < markup.indexOf(">Rücklagen</th>"));
 });
 
+test("bookingHistoryRequestUrl serializes populated filters in deterministic order", () => {
+  assert.equal(
+    utils.bookingHistoryRequestUrl("/api/finanzplaner/bookings", {
+      q: "rent", from: "2026-01-01", to: "2026-01-31", status: "resolved",
+      account_id: "account-main", category_id: "cat-1",
+    }),
+    "/api/finanzplaner/bookings?q=rent&from=2026-01-01&to=2026-01-31&status=resolved&account_id=account-main&category_id=cat-1",
+  );
+});
+
+test("reportRangeLabel and repairTargetsPayload keep report and repair contracts pure", () => {
+  assert.equal(utils.reportRangeLabel("month", "2026-01-01", "2026-01-31"), "Januar 2026");
+  assert.equal(utils.reportRangeLabel("year", "2026-01-01", "2026-12-31"), "Jahr 2026");
+  assert.deepEqual(utils.repairTargetsPayload([{ from: "person.old", to: "person.new" }]), {
+    repairs: [{ from: "person.old", to: "person.new" }],
+  });
+});
+
+test("reportRequestUrl uses the API report contract and omits no range", () => {
+  assert.equal(
+    utils.reportRequestUrl("/api/finanzplaner/report", "2026-01-01", "2026-01-31", "month"),
+    "/api/finanzplaner/report?from=2026-01-01&to=2026-01-31&view=month",
+  );
+});
+
 test("review exposes rule reapplication and the resolved booking navigation", () => {
   assert.match(panelSource, /const APPLY_RULES_URL = "\/api\/finanzplaner\/bookings\/apply-rules"/);
   assert.match(panelSource, /const RESOLVED_URL = "\/api\/finanzplaner\/bookings\/resolved"/);
@@ -869,6 +894,18 @@ test("loaded details clear on dimension and month changes", async () => {
   panel._shiftMonth(1);
   assert.equal(panel._breakdown, null);
   assert.doesNotMatch(panel.markup, /Tierladen/);
+});
+
+test("month changes reload the active report and the overview", () => {
+  const panel = comparisonTestPanel();
+  panel._reportView = "year";
+  const loads = [];
+  panel._loadOverview = () => loads.push("overview");
+  panel._loadReport = (view) => loads.push(`report:${view}`);
+
+  panel._shiftMonth(1);
+
+  assert.deepEqual(loads, ["overview", "report:year"]);
 });
 
 test("empty live comparison stays empty and demo data has an explicit projection", () => {
