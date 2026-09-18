@@ -2235,7 +2235,7 @@ class BookingHistoryView(HomeAssistantView):
         bookings = coordinator.store.data.get("bookings", []) if coordinator else []
         if not isinstance(bookings, list):
             bookings = []
-        limit = _query_int(request, "limit", 100, 1)
+        limit = _query_int(request, "limit", 100, 0)
         offset = _query_int(request, "offset", 0)
         accounts = _rule_accounts(coordinator) if coordinator else None
         matching = [
@@ -2243,8 +2243,9 @@ class BookingHistoryView(HomeAssistantView):
             if isinstance(item, dict)
             and _booking_matches(item, request.query, accounts)
         ]
+        page = matching[offset:] if limit == 0 else matching[offset:offset + limit]
         return self.json(_response_payload({
-            "bookings": [_booking_response_projection(item, accounts, request.app["hass"]) for item in matching[offset:offset + limit]],
+            "bookings": [_booking_response_projection(item, accounts, request.app["hass"]) for item in page],
             "total": len(matching), "limit": limit, "offset": offset,
             "filters": {key: value for key, value in request.query.items() if key in {"q", "from", "to", "account_id", "target", "category_id", "area_id", "project_id", "status"}},
         }))

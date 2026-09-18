@@ -71,6 +71,7 @@ Zusätzlich enthalten:
 - aus bestätigten Buchungen vorbelegte Regeln lassen sich vor der ausdrücklichen Speicherung korrigieren; der Server validiert den bearbeiteten Entwurf
 - Regelbedingungen unterstützen zusätzlich Richtung (`income`/`expense`), maskiertes Gegenkonto (`counterparty_account`) und eine inklusive Betragsspanne (`amount_min`/`amount_max`)
 - die Buchungshistorie unterstützt Suche, Zeitraum, Status, Konto und Kategorie; die Importhistorie zeigt Dateiname, Format, Zeitpunkt, Buchungs- und Duplikatanzahl ohne Quelldateien
+- Prüfliste und Übernahmesicht verwenden die gleichen Buchungshistorie-Filter sowie blätterbare Seiten mit wählbarer Seitengröße einschließlich „Alle“
 - Berichte unterstützen die Modi `month`, `year` und `cashflow`; `month` bleibt die Standardansicht
 - fehlende Home-Assistant-Personenziele werden als „Person fehlt“ markiert und können über ein verfügbares Ersatzziel repariert werden
 

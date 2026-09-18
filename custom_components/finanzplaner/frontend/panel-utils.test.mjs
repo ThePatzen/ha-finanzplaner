@@ -157,6 +157,10 @@ test("rulePayloadFromForm trims text and keeps null filters", () => {
     account_id: "account-giro",
     counterparty: "Supermarkt AG",
     purpose_contains: null,
+    direction: null,
+    counterparty_account: null,
+    amount_min: null,
+    amount_max: null,
     allocations: [{ target: "household", share_percent: 100 }],
   });
 });
@@ -621,9 +625,9 @@ test("bookingHistoryRequestUrl serializes populated filters in deterministic ord
   assert.equal(
     utils.bookingHistoryRequestUrl("/api/finanzplaner/bookings", {
       q: "rent", from: "2026-01-01", to: "2026-01-31", status: "resolved",
-      account_id: "account-main", category_id: "cat-1",
+      account_id: "account-main", category_id: "cat-1", limit: 0, offset: 0,
     }),
-    "/api/finanzplaner/bookings?q=rent&from=2026-01-01&to=2026-01-31&status=resolved&account_id=account-main&category_id=cat-1",
+    "/api/finanzplaner/bookings?q=rent&from=2026-01-01&to=2026-01-31&status=resolved&account_id=account-main&category_id=cat-1&limit=0&offset=0",
   );
 });
 

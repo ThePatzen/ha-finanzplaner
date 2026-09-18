@@ -8,7 +8,9 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
-## Unreleased
+## [0.13.0] – 2026-09-18
+
+- Prüfliste und Übernahmesicht teilen sich übersichtlich angeordnete Filter; beide Ansichten unterstützen blätterbare Seiten, wählbare Seitengrößen und „Alle“.
 
 ## [0.12.0] – 2026-09-18
 
@@ -177,6 +179,7 @@ Erste vorbereitete vertikale Version:
 [0.4.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.4.0
 [0.12.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.12.0
+[0.13.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.13.0
 [0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0
 [0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0
 [0.9.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.9.0

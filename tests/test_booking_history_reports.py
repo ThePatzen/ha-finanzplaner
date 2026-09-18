@@ -135,6 +135,14 @@ class BookingHistoryReportsTests(unittest.TestCase):
         self.assertEqual(len(response["bookings"]), 1)
         self.assertNotIn("source_data", response["bookings"][0])
 
+    def test_booking_history_zero_limit_returns_all_matching_bookings(self):
+        response = asyncio.run(self.http.BookingHistoryView().get(
+            Request(self.hass, {"status": "resolved", "limit": "0"})
+        ))
+        self.assertEqual(response["limit"], 0)
+        self.assertEqual(response["total"], 2)
+        self.assertEqual([booking["id"] for booking in response["bookings"]], ["booking-1", "booking-2"])
+
     def test_booking_history_q_searches_configured_account_labels(self):
         response = asyncio.run(self.http.BookingHistoryView().get(
             Request(self.hass, {"q": "rücklagen"})

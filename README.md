@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.12.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
+Version 0.13.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -32,6 +32,7 @@ und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserung
 - interne CAMT-Überweisungen zeigen bei passender Kontoreferenz beide konfigurierten Konten richtungsrichtig an
 - priorisierte Regelübernahmen nur bei eindeutigen Treffern, mit sichtbarer Zuordnungsquelle und Rückgängig-Funktion
 - Prüfliste mit erneutem Regel-Lauf sowie separate Ansicht für sämtliche übernommene Buchungen
+- Buchungshistorie und Übernahmesicht mit gemeinsamen Filtern, blätterbarer Seitennavigation und Seitengröße inklusive „Alle“
 - Buchungen lassen sich in der Prüfliste und der Übernahmesicht per Checkbox einzeln oder vollständig auswählen und dauerhaft löschen
 - Budget-Ist-Vergleich für Bereiche, Kategorien und Projekte mit Inline-Details zu Planposten und Buchungen
 - erkannte Konten in ungeklärten Buchungen mit Kontonamen und maskierter Referenz

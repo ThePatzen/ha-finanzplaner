@@ -20,7 +20,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
             / "manifest.json"
         )
         version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-        self.assertEqual(version, "0.12.0")
+        self.assertEqual(version, "0.13.0")
         build_path = getattr(
             const, "panel_static_path", lambda _version: "/api/finanzplaner/static"
         )(version)
@@ -65,6 +65,21 @@ class PanelStaticAssetsTest(unittest.TestCase):
         )
         self.assertEqual(len(details_button.findall(resolved.group(1))), 1)
         self.assertEqual(len(details_button.findall(review.group(1))), 1)
+
+    def test_booking_lists_expose_shared_filters_and_pagination_controls(self) -> None:
+        panel_path = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        )
+        source = panel_path.read_text(encoding="utf-8")
+
+        self.assertGreaterEqual(source.count("data-booking-history-filter"), 2)
+        self.assertIn("data-booking-page-size", source)
+        self.assertIn('value="0"', source)
+        self.assertIn(">Alle</option>", source)
 
     def test_booking_detail_empty_objects_use_missing_value_fallback(self) -> None:
         panel_path = (
