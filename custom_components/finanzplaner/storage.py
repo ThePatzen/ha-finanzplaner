@@ -316,6 +316,9 @@ def _normalize_catalogs(data: dict[str, Any]) -> None:
                 "created_at": candidate.get("created_at"),
                 "updated_at": candidate.get("updated_at"),
             }
+            if kind == "categories":
+                parent_id = candidate.get("parent_id")
+                item["parent_id"] = parent_id.strip() if isinstance(parent_id, str) and parent_id.strip() else None
             item["id"] = item["id"] or catalog_id_for_label(kind, label)
             if item["id"] in used_ids:
                 item["id"] = catalog_id_for_label(kind, f"{label}:{len(used_ids)}")
@@ -333,6 +336,12 @@ def _normalize_catalogs(data: dict[str, Any]) -> None:
                 "created_at": now_iso,
                 "updated_at": now_iso,
             }
+        if kind == "categories":
+            category_by_id = {item["id"]: item for item in normalized.values()}
+            for item in category_by_id.values():
+                parent = category_by_id.get(item.get("parent_id"))
+                if parent is None or parent is item or parent.get("parent_id"):
+                    item["parent_id"] = None
         catalogs[kind] = sorted(
             normalized.values(), key=lambda item: (item["label"].casefold(), item["id"])
         )
@@ -426,15 +435,16 @@ def ensure_catalog_entries(data: dict[str, Any], values: dict[str, object]) -> N
             for entry in entries
         ):
             continue
-        entries.append(
-            {
-                "id": catalog_id_for_label(kind, label),
-                "label": label,
-                "active": True,
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            }
-        )
+        entry = {
+            "id": catalog_id_for_label(kind, label),
+            "label": label,
+            "active": True,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        if kind == "categories":
+            entry["parent_id"] = None
+        entries.append(entry)
         entries.sort(key=lambda item: (str(item.get("label", "")).casefold(), str(item.get("id", ""))))
     _link_catalog_references(data)
 

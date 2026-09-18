@@ -81,6 +81,12 @@ test("keeps the accessible chart summary from spilling into the visible card", (
   assert.match(panelSource, /\.visually-hidden\s*\{[^}]*margin:\s*-1px[^}]*clip:\s*rect\(0\s+0\s+0\s+0\)/s);
 });
 
+test("supports one-level category parents in the editor and selectors", () => {
+  assert.match(panelSource, /parent_id/);
+  assert.match(panelSource, /Übergeordnete Kategorie/);
+  assert.match(panelSource, /Unterkategorie/);
+});
+
 test("returns from a root-hosted panel to the HA base route", () => {
   assert.equal(
     utils.homeAssistantPath("https://ha.example/finanzplaner?view=review#booking"),

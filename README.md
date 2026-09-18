@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.14.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
+Version 0.15.0 umfasst die automatische Übernahme eindeutiger Buchungsregeln, die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -21,6 +21,7 @@ und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserung
 - eigene Tierprofile mit optionalem Tier-Typ und historischer Snapshot-Zuordnung
 - Futterprofile je Tier mit Kaufkosten, Verbrauchsintervall und nächster Kaufprognose
 - Stammdatenverwaltung für Kategorien, Bereiche und Projekte mit stabilen IDs und Namens-Snapshots
+- Kategorien können optional eine Unterkategorie-Ebene wie „Shopping“ → „Amazon“ und „Zalando“ enthalten
 - breite Verwaltungsansichten mit ausgenutzter Inhaltsbreite und konsistenter Button-Ausrichtung
 - tabellarische Übersichten für alle Verwaltungsbereiche mit nachgelagerter Editieransicht
 - automationstauglicher HA-Status `Futterkauf fällig` und Service zum Bestätigen eines Kaufs
@@ -89,6 +90,9 @@ umbenennen, archivieren und wieder aktivieren. Beim Umbenennen bleiben
 bestehende Verknüpfungen über ihre stabile ID erhalten; gespeicherte Namen
 bleiben als historische Snapshots verfügbar. Archivierte Einträge werden für
 neue Zuordnungen nicht angeboten, bleiben in alten Buchungen aber sichtbar.
+Kategorien können zusätzlich einer Hauptkategorie zugeordnet werden. Die
+Verschachtelung ist auf eine Ebene begrenzt; bestehende Kategorien bleiben
+automatisch Hauptkategorien.
 
 ## Konten und Bankimport
 

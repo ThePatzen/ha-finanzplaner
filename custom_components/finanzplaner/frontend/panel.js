@@ -574,10 +574,11 @@ const styles = `
   .catalog-section-header span { color: var(--fp-muted); font-family: var(--fp-data); font-size: 0.72rem; }
   .catalog-entry-list { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
   .catalog-entry-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.45rem; padding: 0.6rem; border: 1px solid var(--fp-line); background: rgb(255 254 249 / 0.72); }
+  .catalog-entry-form--category { grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.8fr) auto; }
   .catalog-entry-form--archived { background: rgb(247 247 244 / 0.7); }
   .catalog-field { min-inline-size: 0; display: grid; gap: 0.25rem; color: var(--fp-muted); font-size: 0.7rem; font-weight: 800; }
-  .catalog-field input { inline-size: 100%; min-block-size: 2.75rem; min-inline-size: 0; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-control-border); border-radius: 0.4rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
-  .catalog-field input:user-invalid { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
+  .catalog-field input, .catalog-field select { inline-size: 100%; min-block-size: 2.75rem; min-inline-size: 0; padding: 0.5rem 0.6rem; border: 1px solid var(--fp-control-border); border-radius: 0.4rem; color: var(--fp-ink); background: var(--fp-paper-strong); font-size: 1rem; }
+  .catalog-field input:user-invalid, .catalog-field select:user-invalid { border-color: var(--fp-coral); background: var(--fp-coral-soft); }
   .catalog-entry-actions { display: flex; align-items: center; gap: 0.35rem; }
   .catalog-entry-actions button { min-block-size: 2.75rem; padding: 0.5rem 0.65rem; border: 1px solid var(--fp-navy); border-radius: 0.4rem; color: var(--fp-paper); background: var(--fp-navy); font-size: 0.75rem; font-weight: 800; }
   .catalog-entry-actions button:hover { background: var(--fp-navy-deep); }
@@ -825,7 +826,7 @@ const styles = `
     .feed-profile-card-header, .feed-profile-card-actions { align-items: stretch; flex-direction: column; }
     .feed-profile-save, .feed-profile-archive, .feed-profile-purchase { inline-size: 100%; }
     .catalogs-grid { grid-template-columns: 1fr; }
-    .catalog-entry-form { grid-template-columns: 1fr; }
+    .catalog-entry-form, .catalog-entry-form--category { grid-template-columns: 1fr; }
     .catalog-entry-actions { flex-direction: column; align-items: stretch; }
     .catalog-entry-actions button { inline-size: 100%; }
     .management-list-toolbar { align-items: stretch; flex-direction: column; }
@@ -2333,6 +2334,7 @@ class FinanzplanerPanel extends HTMLElement {
     return {
       label: entry.label || "",
       active: entry.active !== false,
+      parent_id: entry.parent_id || null,
     };
   }
 
@@ -2348,7 +2350,7 @@ class FinanzplanerPanel extends HTMLElement {
     };
     for (const kind of ["categories", "areas", "projects"]) {
       const newKey = this._catalogKey(kind, "new");
-      if (!this._catalogDrafts.has(newKey)) this._catalogDrafts.set(newKey, { label: "", active: true });
+      if (!this._catalogDrafts.has(newKey)) this._catalogDrafts.set(newKey, { label: "", active: true, parent_id: null });
       for (const entry of this._catalogEntries(kind)) {
         const key = this._catalogKey(kind, String(entry.id));
         if (!this._catalogDrafts.has(key)) this._catalogDrafts.set(key, this._catalogDraftFromEntry(entry));
@@ -2399,6 +2401,7 @@ class FinanzplanerPanel extends HTMLElement {
     return {
       label: form.querySelector("[data-catalog-field='label']")?.value || "",
       active: Boolean(form.querySelector("[data-catalog-field='active']")?.checked),
+      parent_id: form.querySelector("[data-catalog-field='parent_id']")?.value || null,
     };
   }
 
@@ -2410,7 +2413,7 @@ class FinanzplanerPanel extends HTMLElement {
     const key = this._catalogKey(kind, entryId);
     const draft = this._captureCatalogDraft(form);
     const entry = this._catalogEntries(kind).find((candidate) => String(candidate.id) === entryId);
-    const baseline = entryId === "new" ? { label: "", active: true } : this._catalogDraftFromEntry(entry || {});
+    const baseline = entryId === "new" ? { label: "", active: true, parent_id: null } : this._catalogDraftFromEntry(entry || {});
     this._catalogDrafts.set(key, draft);
     this._setSaveButtonState(form, !this._draftsEqual(draft, baseline), this._catalogSubmissions.has(key));
     this._catalogErrors.delete(key);
@@ -2420,7 +2423,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _catalogPayload(draft) {
-    return { label: draft.label, active: draft.active !== false };
+    return { label: draft.label, active: draft.active !== false, parent_id: draft.parent_id || null };
   }
 
   async _handleCatalogSave(event) {
@@ -2436,7 +2439,7 @@ class FinanzplanerPanel extends HTMLElement {
     }
     const draft = this._captureCatalogDraft(form);
     const entry = this._catalogEntries(kind).find((candidate) => String(candidate.id) === entryId);
-    const baseline = entryId === "new" ? { label: "", active: true } : this._catalogDraftFromEntry(entry || {});
+    const baseline = entryId === "new" ? { label: "", active: true, parent_id: null } : this._catalogDraftFromEntry(entry || {});
     if (this._draftsEqual(draft, baseline)) return;
     this._catalogDrafts.set(key, draft);
     const button = form.querySelector("[type='submit']");
@@ -2513,8 +2516,19 @@ class FinanzplanerPanel extends HTMLElement {
 
   _catalogOptions(kind, selectedLabel, emptyLabel = "Keine Auswahl") {
     const selected = String(selectedLabel || "");
-    const entries = this._catalogEntries(kind)
-      .filter((entry) => entry.active !== false || String(entry.label || "") === selected || String(entry.id || "") === selected)
+    const allEntries = this._catalogEntries(kind);
+    const visibleIds = new Set(
+      allEntries
+        .filter((entry) => entry.active !== false || String(entry.label || "") === selected || String(entry.id || "") === selected)
+        .map((entry) => String(entry.id)),
+    );
+    if (kind === "categories") {
+      allEntries.forEach((entry) => {
+        if (visibleIds.has(String(entry.id)) && entry.parent_id) visibleIds.add(String(entry.parent_id));
+      });
+    }
+    const entries = allEntries
+      .filter((entry) => visibleIds.has(String(entry.id)))
       .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), "de"));
     const selectedEntry = entries.find((entry) => String(entry.id || "") === selected || String(entry.label || "") === selected);
     const selectedId = selectedEntry ? String(selectedEntry.id) : selected;
@@ -2522,11 +2536,37 @@ class FinanzplanerPanel extends HTMLElement {
     if (selected && !selectedEntry) {
       options.push(`<option value="" data-catalog-label="${escapeHtml(selected)}" selected>Nicht mehr verfügbar: ${escapeHtml(selected)}</option>`);
     }
-    options.push(...entries.map((entry) => {
+    const entryById = new Map(allEntries.map((entry) => [String(entry.id), entry]));
+    const topLevel = entries.filter((entry) => {
+      const parent = entryById.get(String(entry.parent_id || ""));
+      return kind !== "categories" || !entry.parent_id || !parent;
+    });
+    const orderedEntries = topLevel.flatMap((parent) => [
+      parent,
+      ...(kind === "categories"
+        ? entries
+          .filter((entry) => String(entry.parent_id || "") === String(parent.id))
+          .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), "de"))
+        : []),
+    ]);
+    options.push(...orderedEntries.map((entry) => {
       const label = entry.active === false ? `${entry.label} (archiviert)` : entry.label;
-      return `<option value="${escapeHtml(entry.id)}" data-catalog-label="${escapeHtml(entry.label)}"${String(entry.id) === selectedId ? " selected" : ""}>${escapeHtml(label)}</option>`;
+      const displayLabel = kind === "categories" && entry.parent_id ? `Unterkategorie · ${label}` : label;
+      return `<option value="${escapeHtml(entry.id)}" data-catalog-label="${escapeHtml(entry.label)}"${String(entry.id) === selectedId ? " selected" : ""}>${escapeHtml(displayLabel)}</option>`;
     }));
     return options.join("");
+  }
+
+  _catalogParentOptions(selectedParentId, entryId) {
+    const selected = String(selectedParentId || "");
+    const parents = this._catalogEntries("categories")
+      .filter((entry) => String(entry.id) !== String(entryId) && !entry.parent_id)
+      .filter((entry) => entry.active !== false || String(entry.id) === selected)
+      .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), "de"));
+    return [
+      `<option value=""${selected ? "" : " selected"}>Hauptkategorie</option>`,
+      ...parents.map((entry) => `<option value="${escapeHtml(entry.id)}"${String(entry.id) === selected ? " selected" : ""}>${escapeHtml(entry.label)}</option>`),
+    ].join("");
   }
 
   _newPlanItemDraft() {
@@ -3217,7 +3257,7 @@ class FinanzplanerPanel extends HTMLElement {
       const kind = key.slice(0, separator);
       const entryId = key.slice(separator + 1);
       const entry = this._catalogEntries(kind).find((candidate) => String(candidate.id) === entryId);
-      const baseline = entryId === "new" ? { label: "", active: true } : this._catalogDraftFromEntry(entry || {});
+      const baseline = entryId === "new" ? { label: "", active: true, parent_id: null } : this._catalogDraftFromEntry(entry || {});
       if (!this._draftsEqual(draft, baseline)) return true;
     }
     for (const [accountId, draft] of this._accountDrafts) {
@@ -4491,7 +4531,7 @@ class FinanzplanerPanel extends HTMLElement {
   _catalogEntryFormTemplate(kind, entry, index, isNew = false) {
     const entryId = isNew ? "new" : String(entry.id);
     const key = this._catalogKey(kind, entryId);
-    const baseline = isNew ? { label: "", active: true } : this._catalogDraftFromEntry(entry);
+    const baseline = isNew ? { label: "", active: true, parent_id: null } : this._catalogDraftFromEntry(entry);
     const draft = this._catalogDrafts.get(key) || baseline;
     const hasChanges = !this._draftsEqual(draft, baseline);
     const active = draft.active !== false;
@@ -4501,8 +4541,11 @@ class FinanzplanerPanel extends HTMLElement {
     const action = isNew
       ? `${CATALOGS_URL}/${kind}`
       : `${CATALOGS_URL}/${kind}/${encodeURIComponent(entryId)}`;
-    return `<form class="catalog-entry-form${active ? "" : " catalog-entry-form--archived"}" action="${escapeHtml(action)}" method="post" data-catalog-form data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-labelledby="${fieldId}-heading"${this._catalogSubmissions.has(key) ? " aria-busy=\"true\"" : ""}>
-      <label class="catalog-field" for="${fieldId}"><span id="${fieldId}-heading">Bezeichnung</span><input id="${fieldId}" name="label" data-catalog-field="label" type="text" value="${escapeHtml(draft.label || "")}" maxlength="120" autocomplete="off" required></label>
+    const parentField = kind === "categories"
+      ? `<label class="catalog-field catalog-field--parent" for="${fieldId}-parent"><span>Übergeordnete Kategorie</span><select id="${fieldId}-parent" name="parent_id" data-catalog-field="parent_id">${this._catalogParentOptions(draft.parent_id, entryId)}</select></label>`
+      : "";
+    return `<form class="catalog-entry-form${kind === "categories" ? " catalog-entry-form--category" : ""}${active ? "" : " catalog-entry-form--archived"}" action="${escapeHtml(action)}" method="post" data-catalog-form data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-labelledby="${fieldId}-heading"${this._catalogSubmissions.has(key) ? " aria-busy=\"true\"" : ""}>
+      <label class="catalog-field" for="${fieldId}"><span id="${fieldId}-heading">Bezeichnung</span><input id="${fieldId}" name="label" data-catalog-field="label" type="text" value="${escapeHtml(draft.label || "")}" maxlength="120" autocomplete="off" required></label>${parentField}
       <div class="catalog-entry-actions"><label class="account-toggle" for="${fieldId}-active"><input id="${fieldId}-active" name="active" data-catalog-field="active" type="checkbox"${active ? " checked" : ""}>Aktiv</label>${!isNew && active ? `<button class="catalog-archive" type="button" data-catalog-archive data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}">Archivieren</button>` : ""}<button class="catalog-save" type="submit"${this._catalogSubmissions.has(key) || !hasChanges ? " disabled" : ""}>${isNew ? "Anlegen" : "Speichern"}</button></div>
       <p class="catalog-entry-status${error ? " catalog-entry-status--error" : ""}" id="${statusId}" data-catalog-save-status aria-live="polite">${escapeHtml(error)}</p>
     </form>`;
@@ -4511,11 +4554,19 @@ class FinanzplanerPanel extends HTMLElement {
   _catalogOverviewTemplate() {
     const kinds = ["categories", "areas", "projects"];
     const kind = kinds.includes(this._catalogOverviewKind) ? this._catalogOverviewKind : kinds[0];
-    const entries = this._catalogEntries(kind);
+    const entries = this._catalogEntries(kind).slice().sort((left, right) => {
+      if (kind !== "categories") return String(left.label || "").localeCompare(String(right.label || ""), "de");
+      const leftParent = left.parent_id ? this._catalogEntries(kind).find((entry) => String(entry.id) === String(left.parent_id)) : null;
+      const rightParent = right.parent_id ? this._catalogEntries(kind).find((entry) => String(entry.id) === String(right.parent_id)) : null;
+      return String(leftParent?.label || left.label || "").localeCompare(String(rightParent?.label || right.label || ""), "de")
+        || (leftParent ? 1 : 0) - (rightParent ? 1 : 0)
+        || String(left.label || "").localeCompare(String(right.label || ""), "de");
+    });
     const rows = entries.map((entry) => {
       const entryId = String(entry.id);
       const label = entry.label || "Stammdateneintrag";
-      return `<tr><th scope="row">${escapeHtml(label)}</th><td><span class="plan-item-status${entry.active !== false ? "" : " plan-item-status--archived"}">${planItemStatus(entry.active !== false)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-label="${escapeHtml(label)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
+      const visibleLabel = kind === "categories" && entry.parent_id ? `Unterkategorie · ${label}` : label;
+      return `<tr><th scope="row">${escapeHtml(visibleLabel)}</th><td><span class="plan-item-status${entry.active !== false ? "" : " plan-item-status--archived"}">${planItemStatus(entry.active !== false)}</span></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-catalog-editor data-catalog-kind="${escapeHtml(kind)}" data-catalog-id="${escapeHtml(entryId)}" aria-label="${escapeHtml(label)} bearbeiten">Bearbeiten ${icon("chevronRight", 16)}</button></td></tr>`;
     }).join("");
     const activeCount = entries.filter((entry) => entry.active !== false).length;
     const navigation = kinds.map((candidate) => `<button id="catalog-kind-nav-${candidate}" class="catalog-kind-nav${candidate === kind ? " catalog-kind-nav--active" : ""}" type="button" role="tab" aria-selected="${candidate === kind ? "true" : "false"}" aria-controls="catalog-overview-panel" data-catalog-kind-nav="${candidate}">${catalogKindLabel(candidate)}</button>`).join("");
@@ -4669,7 +4720,20 @@ class FinanzplanerPanel extends HTMLElement {
     if (selected && (!current || current.active === false)) {
       options.push(`<option value="${escapeHtml(selected)}" selected disabled>${escapeHtml(current?.label || current?.name || selected)} (${current ? "archiviert" : "fehlt"}) – bitte ersetzen</option>`);
     }
-    options.push(...(entries || []).filter((entry) => entry.active !== false).map((entry) => `<option value="${escapeHtml(entry.id)}"${selected === entry.id ? " selected" : ""}>${escapeHtml(entry.label || entry.name || entry.id)}</option>`));
+    const activeEntries = (entries || []).filter((entry) => entry.active !== false);
+    const entryById = new Map(activeEntries.map((entry) => [String(entry.id), entry]));
+    const topLevel = activeEntries.filter((entry) => !entry.parent_id || !entryById.has(String(entry.parent_id)));
+    const orderedEntries = topLevel.flatMap((parent) => [
+      parent,
+      ...activeEntries
+        .filter((entry) => String(entry.parent_id || "") === String(parent.id))
+        .sort((left, right) => String(left.label || "").localeCompare(String(right.label || ""), "de")),
+    ]);
+    options.push(...orderedEntries.map((entry) => {
+      const label = entry.label || entry.name || entry.id;
+      const displayLabel = entry.parent_id ? `Unterkategorie · ${label}` : label;
+      return `<option value="${escapeHtml(entry.id)}"${selected === entry.id ? " selected" : ""}>${escapeHtml(displayLabel)}</option>`;
+    }));
     return options.join("");
   }
 
@@ -4871,8 +4935,7 @@ class FinanzplanerPanel extends HTMLElement {
   _bookingHistoryFilterTemplate(view) {
     const status = view === "resolved" ? "resolved" : "unresolved";
     const accounts = Array.isArray(this._accounts) ? this._accounts : [];
-    const categories = Array.isArray(this._catalogs?.categories) ? this._catalogs.categories : [];
-    return `<form class="booking-history-filters" data-booking-history-filter aria-label="Buchungshistorie filtern"><div class="booking-history-filter-grid"><label class="booking-history-filter-field booking-history-filter-field--search" for="booking-filter-q-${view}"><span>Suche</span><input id="booking-filter-q-${view}" data-booking-filter="q" type="search" value="${escapeHtml(this._bookingHistoryFilters.q)}" placeholder="Gegenpartei, Verwendungszweck …"></label><label class="booking-history-filter-field" for="booking-filter-from-${view}"><span>Von</span><input id="booking-filter-from-${view}" data-booking-filter="from" type="date" value="${escapeHtml(this._bookingHistoryFilters.from)}"></label><label class="booking-history-filter-field" for="booking-filter-to-${view}"><span>Bis</span><input id="booking-filter-to-${view}" data-booking-filter="to" type="date" value="${escapeHtml(this._bookingHistoryFilters.to)}"></label><label class="booking-history-filter-field" for="booking-filter-status-${view}"><span>Status</span><select id="booking-filter-status-${view}" data-booking-filter="status"><option value="unresolved"${status === "unresolved" ? " selected" : ""}>Ungeklärt</option><option value="resolved"${status === "resolved" ? " selected" : ""}>Übernommen</option></select></label><label class="booking-history-filter-field" for="booking-filter-account-${view}"><span>Konto</span><select id="booking-filter-account-${view}" data-booking-filter="account_id"><option value="">Alle Konten</option>${accounts.map((account) => `<option value="${escapeHtml(account.id)}"${this._bookingHistoryFilters.account_id === account.id ? " selected" : ""}>${escapeHtml(account.label || account.id)}</option>`).join("")}</select></label><label class="booking-history-filter-field" for="booking-filter-category-${view}"><span>Kategorie</span><select id="booking-filter-category-${view}" data-booking-filter="category_id"><option value="">Alle Kategorien</option>${categories.map((entry) => `<option value="${escapeHtml(entry.id)}"${this._bookingHistoryFilters.category_id === entry.id ? " selected" : ""}>${escapeHtml(entry.label || entry.name)}</option>`).join("")}</select></label></div><div class="booking-history-filter-actions"><button class="table-edit-button" type="button" data-booking-filter-reset>Zurücksetzen</button><button class="table-new-button" type="submit">Filter anwenden</button></div></form>`;
+    return `<form class="booking-history-filters" data-booking-history-filter aria-label="Buchungshistorie filtern"><div class="booking-history-filter-grid"><label class="booking-history-filter-field booking-history-filter-field--search" for="booking-filter-q-${view}"><span>Suche</span><input id="booking-filter-q-${view}" data-booking-filter="q" type="search" value="${escapeHtml(this._bookingHistoryFilters.q)}" placeholder="Gegenpartei, Verwendungszweck …"></label><label class="booking-history-filter-field" for="booking-filter-from-${view}"><span>Von</span><input id="booking-filter-from-${view}" data-booking-filter="from" type="date" value="${escapeHtml(this._bookingHistoryFilters.from)}"></label><label class="booking-history-filter-field" for="booking-filter-to-${view}"><span>Bis</span><input id="booking-filter-to-${view}" data-booking-filter="to" type="date" value="${escapeHtml(this._bookingHistoryFilters.to)}"></label><label class="booking-history-filter-field" for="booking-filter-status-${view}"><span>Status</span><select id="booking-filter-status-${view}" data-booking-filter="status"><option value="unresolved"${status === "unresolved" ? " selected" : ""}>Ungeklärt</option><option value="resolved"${status === "resolved" ? " selected" : ""}>Übernommen</option></select></label><label class="booking-history-filter-field" for="booking-filter-account-${view}"><span>Konto</span><select id="booking-filter-account-${view}" data-booking-filter="account_id"><option value="">Alle Konten</option>${accounts.map((account) => `<option value="${escapeHtml(account.id)}"${this._bookingHistoryFilters.account_id === account.id ? " selected" : ""}>${escapeHtml(account.label || account.id)}</option>`).join("")}</select></label><label class="booking-history-filter-field" for="booking-filter-category-${view}"><span>Kategorie</span><select id="booking-filter-category-${view}" data-booking-filter="category_id">${this._catalogOptions("categories", this._bookingHistoryFilters.category_id, "Alle Kategorien")}</select></label></div><div class="booking-history-filter-actions"><button class="table-edit-button" type="button" data-booking-filter-reset>Zurücksetzen</button><button class="table-new-button" type="submit">Filter anwenden</button></div></form>`;
   }
 
   _bookingResultCountTemplate(view) {

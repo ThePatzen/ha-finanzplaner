@@ -41,6 +41,7 @@ from .core import (
     rule_payload_from_booking,
     rule_suggestion,
     validate_pet_payload,
+    validate_category_parent_id,
     validate_catalog_payload,
     validate_feed_profile_payload,
     validate_plan_item_payload,
@@ -73,7 +74,7 @@ _OPAQUE_ID_PATTERN = re.compile(
 )
 _OPAQUE_ID_FIELDS = frozenset({
     "id", "rule_id", "account_id", "booking_id", "category_id", "area_id",
-    "project_id", "pet_id", "feed_profile_id", "conflicts",
+    "project_id", "parent_id", "pet_id", "feed_profile_id", "conflicts",
 })
 _ACCOUNT_FIELD_NAMES = frozenset({
     "account",
@@ -1329,6 +1330,34 @@ def _catalog_kind(kind: str) -> str:
     return kind
 
 
+def _validate_catalog_values(
+    coordinator: FinanzplanerCoordinator,
+    kind: str,
+    values: dict[str, object],
+    *,
+    entry_id: str | None = None,
+) -> dict[str, object]:
+    """Validate catalog-specific relationships after field normalization."""
+
+    if kind != "categories":
+        if values.get("parent_id") is not None:
+            raise ValueError("Nur Kategorien können einer übergeordneten Kategorie zugeordnet werden.")
+        values.pop("parent_id", None)
+        return values
+
+    categories = _catalog_entries(coordinator, "categories")
+    values["parent_id"] = validate_category_parent_id(
+        values.get("parent_id"), categories, entry_id=entry_id
+    )
+    if entry_id and values["parent_id"]:
+        has_children = any(
+            entry.get("parent_id") == entry_id for entry in categories if entry.get("id") != entry_id
+        )
+        if has_children:
+            raise ValueError("Eine Kategorie mit Unterkategorien kann nicht selbst Unterkategorie werden.")
+    return values
+
+
 def _materialize_catalog_entry(
     values: dict[str, object], *, entry_id: str, now_iso: str
 ) -> dict[str, object]:
@@ -1374,7 +1403,9 @@ class CatalogEntriesView(HomeAssistantView):
         try:
             kind = _catalog_kind(kind)
             payload = await request.json()
-            values = validate_catalog_payload(payload)
+            values = _validate_catalog_values(
+                coordinator, kind, validate_catalog_payload(payload)
+            )
         except (TypeError, ValueError) as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
 
@@ -1434,8 +1465,18 @@ class CatalogEntryView(HomeAssistantView):
             raise web.HTTPNotFound(text="Stammdateneintrag nicht gefunden.")
         try:
             payload = await request.json()
-            values = validate_catalog_payload(
-                {"label": entry.get("label", ""), "active": entry.get("active", True), **payload}
+            values = _validate_catalog_values(
+                coordinator,
+                kind,
+                validate_catalog_payload(
+                    {
+                        "label": entry.get("label", ""),
+                        "active": entry.get("active", True),
+                        "parent_id": entry.get("parent_id"),
+                        **payload,
+                    }
+                ),
+                entry_id=entry_id,
             )
         except (TypeError, ValueError) as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc

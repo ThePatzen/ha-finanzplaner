@@ -20,7 +20,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
             / "manifest.json"
         )
         version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-        self.assertEqual(version, "0.14.0")
+        self.assertEqual(version, "0.15.0")
         build_path = getattr(
             const, "panel_static_path", lambda _version: "/api/finanzplaner/static"
         )(version)

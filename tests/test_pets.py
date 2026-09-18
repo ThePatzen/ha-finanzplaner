@@ -14,6 +14,7 @@ from custom_components.finanzplaner.core import (
     feed_profile_forecast,
     feed_profile_month_values,
     parse_allocation_payload,
+    validate_category_parent_id,
     validate_pet_payload,
     validate_catalog_payload,
     validate_feed_profile_payload,
@@ -161,10 +162,43 @@ class CatalogDomainTests(unittest.TestCase):
     def test_catalog_payload_is_strict_and_normalized(self):
         self.assertEqual(
             validate_catalog_payload({"label": "  Hunde  ", "active": True}),
-            {"label": "Hunde", "active": True},
+            {"label": "Hunde", "active": True, "parent_id": None},
+        )
+        self.assertEqual(
+            validate_catalog_payload({"label": "Amazon", "parent_id": "catalog-category-shopping"}),
+            {"label": "Amazon", "active": True, "parent_id": "catalog-category-shopping"},
         )
         with self.assertRaisesRegex(ValueError, "unbekanntes Feld"):
             validate_catalog_payload({"label": "Hunde", "color": "red"})
+
+    def test_category_parents_are_one_level_and_migrated(self):
+        shopping_id = catalog_id_for_label("categories", "Shopping")
+        migrated = migrate_store_data(
+            {
+                "version": 2,
+                "catalogs": {
+                    "categories": [
+                        {"id": shopping_id, "label": "Shopping"},
+                        {"id": "category-amazon", "label": "Amazon", "parent_id": shopping_id},
+                    ]
+                },
+            },
+            "Testhaushalt",
+        )
+
+        categories = {entry["id"]: entry for entry in migrated["catalogs"]["categories"]}
+        self.assertIsNone(categories[shopping_id].get("parent_id"))
+        self.assertEqual(categories["category-amazon"].get("parent_id"), shopping_id)
+
+        with self.assertRaisesRegex(ValueError, "bekannte übergeordnete Kategorie"):
+            validate_category_parent_id("missing", migrated["catalogs"]["categories"])
+        with self.assertRaisesRegex(ValueError, "kann keine weitere Unterkategorie"):
+            validate_category_parent_id(
+                "category-amazon",
+                migrated["catalogs"]["categories"],
+                entry_id="category-zalando",
+            )
+
 
 
 class PetDomainTests(unittest.TestCase):
@@ -649,6 +683,38 @@ class PetApiTests(unittest.TestCase):
                             "area": "Tierbedarf",
                         }
                     )
+                )
+            )
+
+    def test_category_api_keeps_parent_on_partial_update_and_rejects_nested_parent(self):
+        shopping = asyncio.run(
+            self.http.CatalogEntriesView().post(
+                self._request({"label": "Shopping", "active": True}),
+                "categories",
+            )
+        )["catalog"]
+        amazon = asyncio.run(
+            self.http.CatalogEntriesView().post(
+                self._request({"label": "Amazon", "active": True, "parent_id": shopping["id"]}),
+                "categories",
+            )
+        )["catalog"]
+        self.assertEqual(amazon["parent_id"], shopping["id"])
+
+        renamed = asyncio.run(
+            self.http.CatalogEntryView().post(
+                self._request({"label": "Amazon Prime"}),
+                "categories",
+                amazon["id"],
+            )
+        )["catalog"]
+        self.assertEqual(renamed["parent_id"], shopping["id"])
+
+        with self.assertRaises(self.bad_request):
+            asyncio.run(
+                self.http.CatalogEntriesView().post(
+                    self._request({"label": "Marketplace", "parent_id": amazon["id"]}),
+                    "categories",
                 )
             )
 

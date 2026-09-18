@@ -57,6 +57,7 @@ Zusätzlich enthalten:
 - bestätigte Futterkäufe verschieben das letzte Kaufdatum; erwartete Käufe werden einmalig in der Monatsprognose berücksichtigt
 - Futter-Erinnerungsstatus als automationstauglicher Binary-Sensor und HA-Service zur Kaufbestätigung
 - lokal verwaltete Stammdaten für Kategorien, Bereiche und Projekte mit stabilen IDs und historischen Namens-Snapshots
+- Kategorien können optional genau eine Unterkategorie-Ebene besitzen, zum Beispiel „Shopping“ mit „Amazon“ und „Zalando“
 - Regelverwaltung für Buchungsvorschläge mit aktiven und deaktivierten Regeln, Priorität und Aufteilungsvorlage
 - Die Regelübersicht gruppiert Regeln nach Konto; je Konto werden sie wie beim Matching nach absteigender Priorität und anschließend alphabetisch nach Regelname sortiert.
 - Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim optionalen Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung.

@@ -39,7 +39,7 @@ PLAN_ITEM_FIELDS = frozenset(
 )
 
 CATALOG_KINDS = ("categories", "areas", "projects")
-CATALOG_FIELDS = frozenset({"label", "active"})
+CATALOG_FIELDS = frozenset({"label", "active", "parent_id"})
 CATALOG_VALUE_FIELDS = {
     "categories": "category",
     "areas": "area",
@@ -158,7 +158,41 @@ def validate_catalog_payload(
         if not isinstance(active, bool):
             raise ValueError("Der Aktivstatus muss ein boolescher Wert sein.")
         normalized["active"] = active
+    if not partial or "parent_id" in payload:
+        parent_id = payload.get("parent_id")
+        if parent_id in (None, ""):
+            normalized["parent_id"] = None
+        elif not isinstance(parent_id, str) or not parent_id.strip():
+            raise ValueError("Die übergeordnete Kategorie-ID muss als Text angegeben werden.")
+        else:
+            normalized["parent_id"] = parent_id.strip()
     return normalized
+
+
+def validate_category_parent_id(
+    parent_id: object,
+    categories: list[dict[str, object]],
+    *,
+    entry_id: str | None = None,
+) -> str | None:
+    """Validate an optional one-level category parent and return its ID."""
+
+    if parent_id in (None, ""):
+        return None
+    if not isinstance(parent_id, str) or not parent_id.strip():
+        raise ValueError("Die übergeordnete Kategorie-ID muss als Text angegeben werden.")
+    parent_id = parent_id.strip()
+    if entry_id and parent_id == entry_id:
+        raise ValueError("Eine Kategorie kann nicht ihre eigene übergeordnete Kategorie sein.")
+    parent = next(
+        (entry for entry in categories if isinstance(entry, dict) and entry.get("id") == parent_id),
+        None,
+    )
+    if parent is None:
+        raise ValueError("Die übergeordnete Kategorie verweist nicht auf eine bekannte übergeordnete Kategorie.")
+    if parent.get("parent_id"):
+        raise ValueError("Eine Unterkategorie kann keine weitere Unterkategorie sein.")
+    return parent_id
 
 
 def _positive_interval(value: object, label: str) -> float:

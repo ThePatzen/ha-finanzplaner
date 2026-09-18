@@ -1,7 +1,7 @@
 {
   "domain": "finanzplaner",
   "name": "Finanzplaner",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "documentation": "https://github.com/ThePatzen/ha-finanzplaner",
   "issue_tracker": "https://github.com/ThePatzen/ha-finanzplaner/issues",
   "codeowners": ["@ThePatzen"],
