@@ -32,6 +32,7 @@ Richte die Umsetzung an diesen Dokumenten aus und halte sie bei relevanten Ände
 ## GitHub- und Release-Befehle
 
 - GitHub-Befehle wie `gh`, `git push`, `git fetch`, `git pull`, `git ls-remote` und das Anlegen oder Veröffentlichen von Releases müssen immer außerhalb der Sandbox mit expliziter Freigabe ausgeführt werden.
+- Release Notes müssen als korrekt gerendertes Markdown erscheinen: echte Zeilenumbrüche und Leerzeilen verwenden, niemals Escape-Sequenzen wie `\\n` wörtlich in den Release-Text schreiben. Vor dem Veröffentlichen Überschrift, Listen und Absätze auf saubere Darstellung prüfen.
 
 ## Verbindliche Frontend-Regel
 
