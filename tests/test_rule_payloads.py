@@ -875,6 +875,48 @@ class RuleViewTests(unittest.TestCase):
         self.assertEqual(resolved["bookings"][0]["sender"], "Absender resolved")
         self.assertEqual(details["booking"]["sender"], "Absender unresolved")
 
+    def test_resolved_booking_details_fill_missing_parties_from_internal_accounts(self):
+        self.coordinator.store.data["accounts"].append({
+            "id": "account-savings",
+            "label": "Tagesgeldkonto",
+            "iban": "AT999999999999999999",
+            "account_reference": "AT999999999999999999",
+            "bank": "Testbank",
+            "owner_targets": [],
+            "active": True,
+        })
+        camt_source = self.http.parse_camt053_records(
+            """<Document><BkToCstmrStmt><Stmt>
+              <Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+              <Ntry><Amt Ccy="EUR">15.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+                <BookgDt><Dt>2026-09-17</Dt></BookgDt><NtryDtls><TxDtls>
+                  <RltdPties>
+                    <DbtrAcct><Id><IBAN>AT123456789012345678</IBAN></Id></DbtrAcct>
+                    <CdtrAcct><Id><IBAN>AT999999999999999999</IBAN></Id></CdtrAcct>
+                  </RltdPties>
+                </TxDtls></NtryDtls></Ntry>
+            </Stmt></BkToCstmrStmt></Document>"""
+        )[0].source_data
+        camt_source["format"] = "CAMT.053"
+        source_snapshot = deepcopy(camt_source)
+        self.coordinator.store.data["bookings"][0].update(
+            counterparty="",
+            sender=None,
+            amount=-15.0,
+            source_data=camt_source,
+        )
+
+        result = asyncio.run(
+            self.http.BookingDetailsView().get(self._request(), "booking-resolved")
+        )
+
+        self.assertEqual(result["booking"]["sender"], "Gemeinsames Girokonto")
+        self.assertEqual(result["booking"]["counterparty"], "Tagesgeldkonto")
+        self.assertEqual(
+            self.coordinator.store.data["bookings"][0]["source_data"],
+            source_snapshot,
+        )
+
     def test_internal_camt_transfer_exposes_both_configured_accounts(self):
         self.coordinator.store.data["accounts"].append({
             "id": "account-savings",

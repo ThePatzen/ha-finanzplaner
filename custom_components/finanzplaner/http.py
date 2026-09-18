@@ -2064,6 +2064,25 @@ def _booking_detail_reason(
     return "Für diese Buchung liegt kein gültiger Prüfgrund vor."
 
 
+def _booking_detail_projection(
+    booking: dict[str, object],
+    booking_accounts: dict[str, dict[str, object]] | None,
+) -> dict[str, object]:
+    """Project display fallbacks without changing the stored source data."""
+
+    projected = dict(booking)
+    if not isinstance(booking_accounts, dict):
+        return projected
+    for field, account_key in (("sender", "sender"), ("counterparty", "recipient")):
+        if str(projected.get(field) or "").strip():
+            continue
+        account = booking_accounts.get(account_key)
+        label = account.get("label") if isinstance(account, dict) else None
+        if isinstance(label, str) and label.strip():
+            projected[field] = label
+    return projected
+
+
 def _booking_details_payload(
     coordinator: FinanzplanerCoordinator,
     hass: Any,
@@ -2091,9 +2110,10 @@ def _booking_details_payload(
     return {
         "booking": {
             **{
-                key: value for key, value in booking.items() if key != "source_data"
+                key: value
+                for key, value in _booking_detail_projection(booking, booking_accounts).items()
+                if key != "source_data"
             },
-            "sender": booking.get("sender"),
             "booking_accounts": booking_accounts,
         },
         "account": account_payload(account) if isinstance(account, dict) else None,
