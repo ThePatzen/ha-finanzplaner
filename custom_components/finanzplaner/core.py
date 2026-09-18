@@ -1721,20 +1721,52 @@ def overview_report(
     return {**overview_period(data, start, end), "dimensions": dimensions, "cashflow": cashflow_series(data, start, end)}
 
 
-def _overview_catalog_labels(data: dict[str, object], kind: str) -> dict[str, str]:
-    """Return stable catalog IDs and their current labels for an overview."""
-
+def _overview_catalog_entries(
+    data: dict[str, object], kind: str
+) -> dict[str, dict[str, object]]:
     catalogs = data.get("catalogs")
     entries = catalogs.get(kind, []) if isinstance(catalogs, dict) else []
     if not isinstance(entries, list):
         return {}
     return {
-        str(entry.get("id")): str(entry.get("label")).strip()
+        str(entry.get("id")): entry
         for entry in entries
-        if isinstance(entry, dict)
-        and entry.get("id")
-        and isinstance(entry.get("label"), str)
-        and entry.get("label", "").strip()
+        if isinstance(entry, dict) and entry.get("id")
+    }
+
+
+def _overview_catalog_label(entry: dict[str, object]) -> str:
+    label = entry.get("label")
+    return label.strip() if isinstance(label, str) else ""
+
+
+def _overview_catalog_path(
+    entry: dict[str, object], entries: dict[str, dict[str, object]]
+) -> str:
+    label = _overview_catalog_label(entry)
+    parent = entries.get(str(entry.get("parent_id")))
+    parent_label = _overview_catalog_label(parent) if parent else ""
+    return f"{parent_label} → {label}" if parent_label else label
+
+
+def _overview_catalog_labels(data: dict[str, object], kind: str) -> dict[str, str]:
+    """Return stable catalog IDs and their display paths for an overview."""
+
+    entries = _overview_catalog_entries(data, kind)
+    return {
+        identifier: _overview_catalog_path(entry, entries)
+        for identifier, entry in entries.items()
+        if _overview_catalog_label(entry)
+    }
+
+
+def _overview_catalog_names(data: dict[str, object], kind: str) -> dict[str, str]:
+    """Return stable catalog IDs and their unqualified labels."""
+
+    return {
+        identifier: _overview_catalog_label(entry)
+        for identifier, entry in _overview_catalog_entries(data, kind).items()
+        if _overview_catalog_label(entry)
     }
 
 
@@ -1782,6 +1814,9 @@ def _overview_comparison_dimension(
     values: dict[str, object],
     kind: str,
     labels: dict[str, str],
+    names: dict[str, str] | None = None,
+    *,
+    category_grouping: str = "structure",
 ) -> tuple[str, str]:
     """Return the stable comparison key and display label for one dimension."""
 
@@ -1790,7 +1825,13 @@ def _overview_comparison_dimension(
     if identifier in (None, ""):
         return "__unassigned__", "Nicht zugeordnet"
     key = str(identifier)
-    return key, _overview_dimension_label(values.get(field), identifier, labels)
+    display_name = _overview_dimension_label(values.get(field), identifier, labels)
+    if kind == "categories" and category_grouping == "name":
+        name = _overview_dimension_label(
+            values.get(field), identifier, names or labels
+        )
+        return f"category-name:{name.casefold()}", name
+    return key, display_name
 
 
 def _overview_comparison_values(
@@ -1862,10 +1903,14 @@ def overview_comparison(
     month: str,
     *,
     today: date | None = None,
+    category_grouping: str = "structure",
 ) -> dict[str, list[dict[str, object]]]:
     """Project monthly plan, forecast and actual values by catalog dimension."""
 
+    if category_grouping not in {"structure", "name"}:
+        raise ValueError("Die Kategoriegruppierung ist ungültig.")
     labels = {kind: _overview_catalog_labels(data, kind) for kind in CATALOG_KINDS}
+    names = {kind: _overview_catalog_names(data, kind) for kind in CATALOG_KINDS}
     groups: dict[str, dict[str, _OverviewComparisonGroup]] = {
         kind: {} for kind in CATALOG_KINDS
     }
@@ -1877,7 +1922,13 @@ def overview_comparison(
                 continue
             plan, scheduled = plan_item_month_values(item, month)
             for kind in CATALOG_KINDS:
-                key, name = _overview_comparison_dimension(item, kind, labels[kind])
+                key, name = _overview_comparison_dimension(
+                    item,
+                    kind,
+                    labels[kind],
+                    names[kind],
+                    category_grouping=category_grouping if kind == "categories" else "structure",
+                )
                 values = _overview_comparison_values(groups[kind], key, name)
                 values["name"] = name
                 values["plan"] += _money(plan)
@@ -1909,7 +1960,11 @@ def overview_comparison(
                     signed_share = share if amount >= 0 else -share
                     for kind in CATALOG_KINDS:
                         key, name = _overview_comparison_dimension(
-                            allocation, kind, labels[kind]
+                            allocation,
+                            kind,
+                            labels[kind],
+                            names[kind],
+                            category_grouping=category_grouping if kind == "categories" else "structure",
                         )
                         values = _overview_comparison_values(groups[kind], key, name)
                         values["name"] = name
@@ -1956,6 +2011,8 @@ def overview_breakdown(
     month: str,
     dimension: str,
     key: str,
+    *,
+    category_grouping: str = "structure",
 ) -> dict[str, object]:
     """Return the records contributing to one monthly comparison entry."""
 
@@ -1964,7 +2021,11 @@ def overview_breakdown(
     if not normalized_key:
         raise ValueError("Bitte einen Vergleichsschlüssel angeben.")
 
-    comparison = overview_comparison(data, month)
+    comparison = overview_comparison(
+        data,
+        month,
+        category_grouping=category_grouping,
+    )
     entry = next(
         (
             value
@@ -1977,16 +2038,31 @@ def overview_breakdown(
         raise ValueError("Der Vergleichseintrag ist nicht verfügbar.")
 
     labels = _overview_catalog_labels(data, kind)
+    names = _overview_catalog_names(data, kind)
+    active_grouping = category_grouping if kind == "categories" else "structure"
     plan_items: list[dict[str, object]] = []
+    source_categories: dict[str, str] = {}
     stored_plan_items = data.get("plan_items", [])
     if isinstance(stored_plan_items, list):
         for item in stored_plan_items:
             if not isinstance(item, dict) or not item.get("active", True):
                 continue
-            item_key, _ = _overview_comparison_dimension(item, kind, labels)
+            item_key, item_name = _overview_comparison_dimension(
+                item,
+                kind,
+                labels,
+                names,
+                category_grouping=active_grouping,
+            )
             plan, scheduled = plan_item_month_values(item, month)
             if item_key == normalized_key and (plan or scheduled):
                 plan_items.append(dict(item))
+                if active_grouping == "name" and kind == "categories":
+                    identifier = item.get("category_id")
+                    if identifier not in (None, ""):
+                        source_categories[str(identifier)] = labels.get(
+                            str(identifier), item_name
+                        )
 
     month_start, month_end = _month_window(month)
     bookings: list[dict[str, object]] = []
@@ -2014,11 +2090,21 @@ def overview_breakdown(
                     if share == 0:
                         continue
                     allocated += share
-                    allocation_key, _ = _overview_comparison_dimension(
-                        allocation, kind, labels
+                    allocation_key, allocation_name = _overview_comparison_dimension(
+                        allocation,
+                        kind,
+                        labels,
+                        names,
+                        category_grouping=active_grouping,
                     )
                     if allocation_key == normalized_key:
                         matched += share if amount >= 0 else -share
+                        if active_grouping == "name" and kind == "categories":
+                            identifier = allocation.get("category_id")
+                            if identifier not in (None, ""):
+                                source_categories[str(identifier)] = labels.get(
+                                    str(identifier), allocation_name
+                                )
 
             if normalized_key == "__unassigned__":
                 remainder = max(Decimal("0.00"), abs(amount) - allocated)
@@ -2026,7 +2112,7 @@ def overview_breakdown(
             if matched:
                 bookings.append({**dict(booking), "matched_amount": float(_money(matched))})
 
-    return {
+    result = {
         "month": month,
         "dimension": kind,
         "key": normalized_key,
@@ -2034,6 +2120,14 @@ def overview_breakdown(
         "plan_items": plan_items,
         "bookings": bookings,
     }
+    if active_grouping == "name" and kind == "categories":
+        result["source_categories"] = [
+            {"key": key_value, "name": name}
+            for key_value, name in sorted(
+                source_categories.items(), key=lambda item: (item[1].casefold(), item[0])
+            )
+        ]
+    return result
 
 
 def _overview_breakdown(
@@ -2185,6 +2279,7 @@ def overview_details(
     month: str,
     *,
     today: date | None = None,
+    category_grouping: str = "structure",
 ) -> dict[str, object]:
     """Calculate the detailed live dashboard contract for one month."""
 
@@ -2264,7 +2359,12 @@ def overview_details(
         },
         "areas": _overview_breakdown(area_groups, limit=6),
         "categories": _overview_breakdown(category_groups, limit=6),
-        "comparison": overview_comparison(data, month, today=today),
+        "comparison": overview_comparison(
+            data,
+            month,
+            today=today,
+            category_grouping=category_grouping,
+        ),
         "trend": {
             "planned": planned_values,
             "forecast": forecast_values,

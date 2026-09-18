@@ -1009,7 +1009,18 @@ def _demo_overview() -> dict[str, Any]:
     }
 
 
-def _overview(data: dict[str, Any], month: str | None) -> dict[str, Any]:
+def _category_grouping(request: web.Request) -> str:
+    value = request.query.get("category_grouping")
+    if value in (None, "", "structure"):
+        return "structure"
+    if value == "name":
+        return "name"
+    raise ValueError("Die Kategoriegruppierung ist ungültig.")
+
+
+def _overview(
+    data: dict[str, Any], month: str | None, category_grouping: str = "structure"
+) -> dict[str, Any]:
     if not data.get("plan_items") and not data.get("bookings") and not data.get("feed_profiles"):
         result = _demo_overview()
         if month:
@@ -1024,7 +1035,7 @@ def _overview(data: dict[str, Any], month: str | None) -> dict[str, Any]:
         "demo": False,
         "month": month_value,
         **values,
-        **overview_details(data, month_value),
+        **overview_details(data, month_value, category_grouping=category_grouping),
         "last_unresolved": unresolved[-1] if unresolved else None,
     }
 
@@ -1039,7 +1050,15 @@ class OverviewView(HomeAssistantView):
     async def get(self, request: web.Request) -> web.Response:
         coordinator = _coordinator(request.app["hass"])
         data = coordinator.data if coordinator and coordinator.data else {}
-        return self.json(_response_payload(_overview(data, request.query.get("month"))))
+        try:
+            category_grouping = _category_grouping(request)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+        return self.json(
+            _response_payload(
+                _overview(data, request.query.get("month"), category_grouping)
+            )
+        )
 
 
 class OverviewBreakdownView(HomeAssistantView):
@@ -1059,11 +1078,21 @@ class OverviewBreakdownView(HomeAssistantView):
             raise web.HTTPBadRequest(text="Bitte eine gültige Dimension angeben.")
         if not isinstance(key, str) or not key.strip():
             raise web.HTTPBadRequest(text="Bitte einen Vergleichsschlüssel angeben.")
+        try:
+            category_grouping = _category_grouping(request)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
 
         coordinator = _coordinator(request.app["hass"])
         data = coordinator.data if coordinator and coordinator.data else {}
         try:
-            breakdown = overview_breakdown(data, month, dimension, key)
+            breakdown = overview_breakdown(
+                data,
+                month,
+                dimension,
+                key,
+                category_grouping=category_grouping,
+            )
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
         return self.json(

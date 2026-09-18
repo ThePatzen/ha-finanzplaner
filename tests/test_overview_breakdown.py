@@ -172,6 +172,89 @@ class OverviewBreakdownDomainTests(unittest.TestCase):
         self.assertEqual(breakdown["plan_items"], [])
         self.assertEqual(breakdown["bookings"][0]["matched_amount"], -20.0)
 
+    def test_name_grouping_breakdown_returns_all_source_categories(self):
+        core = _load_core()
+        data = {
+            "catalogs": {
+                "categories": [
+                    {"id": "category-house", "label": "Haus"},
+                    {"id": "category-bank", "label": "Bank"},
+                    {
+                        "id": "category-house-fees",
+                        "label": "Gebühren",
+                        "parent_id": "category-house",
+                    },
+                    {
+                        "id": "category-bank-fees",
+                        "label": "Gebühren",
+                        "parent_id": "category-bank",
+                    },
+                ]
+            },
+            "plan_items": [
+                {
+                    "id": "plan-house-fees",
+                    "name": "Hausgebühren",
+                    "active": True,
+                    "direction": "expense",
+                    "amount": 30,
+                    "frequency_months": 1,
+                    "due_day": 5,
+                    "category_id": "category-house-fees",
+                },
+                {
+                    "id": "plan-bank-fees",
+                    "name": "Bankgebühren",
+                    "active": True,
+                    "direction": "expense",
+                    "amount": 20,
+                    "frequency_months": 1,
+                    "due_day": 5,
+                    "category_id": "category-bank-fees",
+                },
+            ],
+            "bookings": [
+                {
+                    "id": "booking-house-fees",
+                    "booking_date": "2026-09-03",
+                    "amount": -10,
+                    "allocations": [
+                        {"amount": 10, "category_id": "category-house-fees"}
+                    ],
+                },
+                {
+                    "id": "booking-bank-fees",
+                    "booking_date": "2026-09-04",
+                    "amount": -40,
+                    "allocations": [
+                        {"amount": 40, "category_id": "category-bank-fees"}
+                    ],
+                },
+            ],
+        }
+
+        breakdown = core.overview_breakdown(
+            data,
+            "2026-09",
+            "categories",
+            "category-name:gebühren",
+            category_grouping="name",
+        )
+
+        self.assertEqual(breakdown["name"], "Gebühren")
+        self.assertEqual(
+            {source["name"] for source in breakdown["source_categories"]},
+            {"Haus → Gebühren", "Bank → Gebühren"},
+        )
+        self.assertEqual(
+            {item["id"] for item in breakdown["plan_items"]},
+            {"plan-house-fees", "plan-bank-fees"},
+        )
+        self.assertEqual(
+            {booking["id"] for booking in breakdown["bookings"]},
+            {"booking-house-fees", "booking-bank-fees"},
+        )
+
 
 class OverviewBreakdownViewTests(unittest.TestCase):
     def setUp(self):
@@ -280,6 +363,50 @@ class OverviewBreakdownViewTests(unittest.TestCase):
         self.assertNotIn("AT123456789012345678", str(result))
         after = json.dumps(self.coordinator.store.data, sort_keys=True, separators=(",", ":"))
         self.assertEqual(after, before)
+
+    def test_get_accepts_name_grouping_and_rejects_unknown_grouping(self):
+        result = asyncio.run(
+            self.http.OverviewBreakdownView().get(
+                self._request(
+                    {
+                        "month": "2026-09",
+                        "dimension": "categories",
+                        "key": "category-name:futter",
+                        "category_grouping": "name",
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(result["key"], "category-name:futter")
+        self.assertEqual(
+            result["source_categories"],
+            [{"key": "category-food", "name": "Futter"}],
+        )
+        with self.assertRaises(self.bad_request):
+            asyncio.run(
+                self.http.OverviewBreakdownView().get(
+                    self._request(
+                        {
+                            "month": "2026-09",
+                            "dimension": "categories",
+                            "key": "category-food",
+                            "category_grouping": "invalid",
+                        }
+                    )
+                )
+            )
+
+    def test_overview_passes_category_grouping_to_comparison(self):
+        result = asyncio.run(
+            self.http.OverviewView().get(
+                self._request(
+                    {"month": "2026-09", "category_grouping": "name"}
+                )
+            )
+        )
+
+        self.assertEqual(result["comparison"]["categories"][0]["key"], "category-name:futter")
 
     def test_async_setup_registers_authenticated_breakdown_view(self):
         registered = []

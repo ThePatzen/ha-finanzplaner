@@ -390,6 +390,80 @@ class ForecastTests(unittest.TestCase):
             [{**expected, "key": "project-fio", "name": "Fio"}],
         )
 
+    def test_category_comparison_can_combine_same_child_names(self):
+        core = load_core()
+        data = {
+            "catalogs": {
+                "categories": [
+                    {"id": "category-house", "label": "Haus"},
+                    {"id": "category-bank", "label": "Bank"},
+                    {
+                        "id": "category-house-fees",
+                        "label": "Gebühren",
+                        "parent_id": "category-house",
+                    },
+                    {
+                        "id": "category-bank-fees",
+                        "label": "Gebühren",
+                        "parent_id": "category-bank",
+                    },
+                ]
+            },
+            "plan_items": [
+                {
+                    "id": "plan-house-fees",
+                    "active": True,
+                    "direction": "expense",
+                    "amount": 30,
+                    "frequency_months": 1,
+                    "due_day": 5,
+                    "category_id": "category-house-fees",
+                },
+                {
+                    "id": "plan-bank-fees",
+                    "active": True,
+                    "direction": "expense",
+                    "amount": 20,
+                    "frequency_months": 1,
+                    "due_day": 5,
+                    "category_id": "category-bank-fees",
+                },
+            ],
+            "bookings": [
+                {
+                    "id": "booking-house-fees",
+                    "booking_date": "2026-09-03",
+                    "amount": -10,
+                    "allocations": [
+                        {"amount": 10, "category_id": "category-house-fees"}
+                    ],
+                },
+                {
+                    "id": "booking-bank-fees",
+                    "booking_date": "2026-09-04",
+                    "amount": -40,
+                    "allocations": [
+                        {"amount": 40, "category_id": "category-bank-fees"}
+                    ],
+                },
+            ],
+        }
+
+        structure = core.overview_comparison(data, "2026-09")
+        combined = core.overview_comparison(
+            data, "2026-09", category_grouping="name"
+        )
+
+        structure_rows = {
+            row["name"]: row for row in structure["categories"]
+        }
+        self.assertEqual(set(structure_rows), {"Haus → Gebühren", "Bank → Gebühren"})
+        self.assertEqual(len(combined["categories"]), 1)
+        self.assertEqual(combined["categories"][0]["key"], "category-name:gebühren")
+        self.assertEqual(combined["categories"][0]["name"], "Gebühren")
+        self.assertEqual(combined["categories"][0]["plan"], -50.0)
+        self.assertEqual(combined["categories"][0]["actual"], -50.0)
+
     def test_overview_comparison_keeps_unassigned_values_and_catalog_keys(self):
         core = load_core()
 
