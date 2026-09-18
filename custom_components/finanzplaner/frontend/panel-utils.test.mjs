@@ -31,6 +31,22 @@ test("bookingDetailsRequestUrl encodes the booking id", () => {
   );
 });
 
+test("groups booking rows by configured account label", () => {
+  const groups = utils.bookingGroups([
+    { id: "booking-2", account_id: "account-savings" },
+    { id: "booking-1", account_id: "account-main" },
+    { id: "booking-3", account_id: "account-savings" },
+  ], [
+    { id: "account-main", label: "Girokonto" },
+    { id: "account-savings", label: "Tagesgeldkonto" },
+  ]);
+
+  assert.deepEqual(groups.map(({ label, bookings }) => [label, bookings.map(({ id }) => id)]), [
+    ["Girokonto", ["booking-1"]],
+    ["Tagesgeldkonto", ["booking-2", "booking-3"]],
+  ]);
+});
+
 test("bookingDetailRawJson creates readable JSON without HTML interpretation", () => {
   const raw = utils.bookingDetailRawJson({ booking: { purpose: "<Bank> & Zusatz" } });
   assert.match(raw, /\n  "booking":/);

@@ -995,6 +995,30 @@ class RuleViewTests(unittest.TestCase):
             "Gemeinsames Girokonto",
         )
 
+    def test_camt_booking_without_counterparty_account_keeps_statement_account(self):
+        camt_source = self.http.parse_camt053_records(
+            """<Document><BkToCstmrStmt><Stmt>
+              <Acct><Id><IBAN>AT123456789012345678</IBAN></Id></Acct>
+              <Ntry><Amt Ccy="EUR">0.04</Amt><CdtDbtInd>CRDT</CdtDbtInd>
+                <BookgDt><Dt>2026-09-17</Dt></BookgDt><NtryDtls><TxDtls>
+                  <RltdPties />
+                </TxDtls></NtryDtls></Ntry>
+            </Stmt></BkToCstmrStmt></Document>"""
+        )[0].source_data
+        camt_source["format"] = "CAMT.053"
+        self.coordinator.store.data["bookings"][0].update(
+            amount=0.04,
+            counterparty="",
+            sender=None,
+            source_data=camt_source,
+        )
+
+        result = asyncio.run(self.http.ResolvedBookingsView().get(self._request()))
+
+        booking_accounts = result["bookings"][0]["booking_accounts"]
+        self.assertIsNone(booking_accounts["sender"])
+        self.assertEqual(booking_accounts["recipient"]["label"], "Gemeinsames Girokonto")
+
 
 class UnresolvedRuleProjectionTests(unittest.TestCase):
     setUp = RuleViewTests.setUp

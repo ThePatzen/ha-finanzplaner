@@ -8,6 +8,11 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.14.0] – 2026-09-18
+
+- Übernommene Buchungen behalten das bekannte Konto des Kontoauszugs auch dann als richtungsrichtiges Absender- oder Empfängerkonto, wenn der CAMT-Satz kein Gegenkonto enthält; unbekannte Gegenkonten werden nicht erfunden.
+- Buchungen und übernommene Buchungen werden in der Oberfläche nach Konto gruppiert.
+
 ## [0.13.1] – 2026-09-18
 
 - Übernommene Buchungsdetails ergänzen fehlende Absender und Zahlungsempfänger aus auflösbaren internen Kontoreferenzen.
@@ -186,6 +191,7 @@ Erste vorbereitete vertikale Version:
 [0.12.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.12.0
 [0.13.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.13.0
 [0.13.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.13.1
+[0.14.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.14.0
 [0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0
 [0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0
 [0.9.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.9.0

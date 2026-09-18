@@ -266,8 +266,8 @@ def _account_for_reference(
 def _booking_accounts_payload(
     accounts: dict[str, dict[str, object]],
     booking: dict[str, Any],
-) -> dict[str, dict[str, object]] | None:
-    """Return configured sender/recipient accounts for an internal CAMT transfer."""
+) -> dict[str, dict[str, object] | None] | None:
+    """Return configured booking-side accounts without inventing a counterparty."""
 
     account_id = booking.get("account_id")
     statement_account = accounts.get(account_id) if isinstance(account_id, str) else None
@@ -280,25 +280,27 @@ def _booking_accounts_payload(
         return None
 
     references = camt_account_references_from_source(booking.get("source_data"))
-    if not references:
-        return None
     try:
         is_debit = float(booking.get("amount", 0)) < 0
     except (TypeError, ValueError):
         return None
     related_key = "Cdtr" if is_debit else "Dbtr"
     related_account = _account_for_reference(accounts, references.get(related_key))
-    if related_account is None or related_account.get("id") == statement_account.get("id"):
-        return None
-
-    sender_account, recipient_account = (
-        (statement_account, related_account)
-        if is_debit
-        else (related_account, statement_account)
-    )
+    if related_account is not None and related_account.get("id") != statement_account.get("id"):
+        sender_account, recipient_account = (
+            (statement_account, related_account)
+            if is_debit
+            else (related_account, statement_account)
+        )
+    else:
+        sender_account, recipient_account = (
+            (statement_account, None)
+            if is_debit
+            else (None, statement_account)
+        )
     return {
-        "sender": account_payload(sender_account),
-        "recipient": account_payload(recipient_account),
+        "sender": account_payload(sender_account) if sender_account is not None else None,
+        "recipient": account_payload(recipient_account) if recipient_account is not None else None,
     }
 
 
@@ -2066,7 +2068,7 @@ def _booking_detail_reason(
 
 def _booking_detail_projection(
     booking: dict[str, object],
-    booking_accounts: dict[str, dict[str, object]] | None,
+    booking_accounts: dict[str, dict[str, object] | None] | None,
 ) -> dict[str, object]:
     """Project display fallbacks without changing the stored source data."""
 

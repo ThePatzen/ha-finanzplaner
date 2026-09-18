@@ -20,7 +20,7 @@ class PanelStaticAssetsTest(unittest.TestCase):
             / "manifest.json"
         )
         version = json.loads(manifest_path.read_text(encoding="utf-8"))["version"]
-        self.assertEqual(version, "0.13.1")
+        self.assertEqual(version, "0.14.0")
         build_path = getattr(
             const, "panel_static_path", lambda _version: "/api/finanzplaner/static"
         )(version)
@@ -80,6 +80,16 @@ class PanelStaticAssetsTest(unittest.TestCase):
         self.assertIn("data-booking-page-size", source)
         self.assertIn('value="0"', source)
         self.assertIn(">Alle</option>", source)
+
+    def test_booking_lists_group_rows_by_account(self) -> None:
+        frontend_path = Path(__file__).parents[1] / "custom_components" / "finanzplaner" / "frontend"
+        source = (frontend_path / "panel.js").read_text(encoding="utf-8")
+        utils_source = (frontend_path / "panel-utils.mjs").read_text(encoding="utf-8")
+        self.assertIn("bookingGroups", source)
+        self.assertIn("bookingGroups(this._resolvedBookings", source)
+        self.assertIn("bookingGroups(this._bookings", source)
+        self.assertIn("scope=\"rowgroup\"", source)
+        self.assertIn("Konto nicht zugeordnet", utils_source)
 
     def test_booking_detail_empty_objects_use_missing_value_fallback(self) -> None:
         panel_path = (
@@ -195,6 +205,19 @@ class PanelStaticAssetsTest(unittest.TestCase):
         self.assertIn('className = "booking-account-inline"', source)
         self.assertIn("booking?.booking_accounts", source)
         self.assertIn("booking.booking_accounts", source)
+
+    def test_booking_details_keep_known_account_when_counterparty_is_missing(self) -> None:
+        source = (
+            Path(__file__).parents[1]
+            / "custom_components"
+            / "finanzplaner"
+            / "frontend"
+            / "panel.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("const sender = accounts?.sender;", source)
+        self.assertIn("const recipient = accounts?.recipient;", source)
+        self.assertNotIn("if (!sender || !recipient) return", source)
 
     def test_booking_selection_toolbar_offers_original_upload_export(self) -> None:
         panel_path = (

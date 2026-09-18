@@ -36,6 +36,35 @@ export function bookingHistoryRequestUrl(baseUrl, filters = {}) {
   return `${String(baseUrl).replace(/\/$/, "")}${query ? `?${query}` : ""}`;
 }
 
+export function bookingGroups(bookings = [], accounts = []) {
+  const accountLabels = new Map(
+    accounts
+      .filter((account) => account?.id !== undefined && account?.id !== null)
+      .map((account) => [String(account.id), String(account.label || account.name || "").trim()]),
+  );
+  const groups = new Map();
+
+  bookings.forEach((booking) => {
+    const accountKey = String(
+      booking?.account_id || booking?.account_reference || booking?.account || "unassigned",
+    );
+    const label = String(
+      booking?.account_label
+        || accountLabels.get(String(booking?.account_id))
+        || booking?.account_reference
+        || booking?.account
+        || "Konto nicht zugeordnet",
+    ).trim() || "Konto nicht zugeordnet";
+    if (!groups.has(accountKey)) groups.set(accountKey, { key: accountKey, label, bookings: [] });
+    groups.get(accountKey).bookings.push(booking);
+  });
+
+  return [...groups.values()].sort(
+    (left, right) => left.label.localeCompare(right.label, "de", { sensitivity: "base" })
+      || left.key.localeCompare(right.key),
+  );
+}
+
 export function reportRequestUrl(baseUrl, from, to, view = "month") {
   const params = new URLSearchParams({ from: String(from), to: String(to), view: String(view) });
   return `${String(baseUrl).replace(/\/$/, "")}?${params.toString()}`;
