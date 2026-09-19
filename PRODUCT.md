@@ -63,10 +63,12 @@ Zusätzlich enthalten:
 - Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim optionalen Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung.
 - optionaler Verwendungszweckfilter, der nur Buchungen mit dem angegebenen Textabschnitt berücksichtigt; jede Regel benötigt mindestens eine Bedingung aus Konto, Zahlungsempfänger oder Verwendungszweckfilter
 - automatische Übernahme nur bei einem eindeutigen, gültigen Treffer mit höchster Priorität; Regeln mit gleicher höchster Priorität bleiben ungeklärt
+- Die Regelübersicht kennzeichnet aktive Regeln mit potenziell überschneidenden Bedingungen gleicher Priorität und nennt die Konfliktpartner.
 - Regelübernahme beim Import und über einen expliziten erneuten Lauf aus der Prüfliste; kein automatisches Nachfassen beim bloßen Anzeigen einer Buchung
 - nachvollziehbare Kennzeichnung der verwendeten Regel und ihres Treffergrunds bei automatisch übernommenen Buchungen
 - Ansicht aller übernommenen Buchungen mit Rückgängig-Funktion, die die Buchung wieder in die Prüfliste verschiebt
 - über Checkboxen auswählbare und dauerhaft löschbare Buchungen in der Prüfliste und der Ansicht übernommener Buchungen
+- Duplikate werden als eigene Buchungen mit Status `duplicate` und Verweis auf die ursprüngliche Buchung gespeichert und in der Prüfliste filterbar angezeigt.
 - Regelvorlage aus einer bestätigten Buchung über „Als Regel speichern“, mit dem vorhandenen Verwendungszweck als vorbefülltem Filter
 - ungültige passende Regeln mit höchster Priorität halten die Buchung mit konkretem Prüfgrund ungeklärt; es erfolgt kein Rückgriff auf niedrigere Prioritäten
 - aus bestätigten Buchungen vorbelegte Regeln lassen sich vor der ausdrücklichen Speicherung korrigieren; der Server validiert den bearbeiteten Entwurf

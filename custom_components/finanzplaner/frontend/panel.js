@@ -1,4 +1,4 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, ruleConflictIds, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const BREAKDOWN_URL = "/api/finanzplaner/overview/breakdown";
@@ -739,6 +739,7 @@ const styles = `
   .rules-view .management-table td, .rules-view .management-table tbody th { min-inline-size: 9rem; max-inline-size: 24rem; overflow-wrap: anywhere; }
   .rules-view .management-table .table-number { min-inline-size: 6rem; }
   .rules-view .management-table ul { margin: 0; padding-inline-start: 1.1rem; }
+  .rule-conflict-note { display: block; margin-block-start: 0.3rem; color: #754400; font-size: 0.78rem; font-weight: 700; }
   .rules-view .management-table .rule-account-group:hover { background: transparent; }
   .rules-view .management-table .rule-account-group th { padding-block: 0.7rem; border-block-start: 0.7rem solid var(--fp-paper); color: var(--fp-navy); background: var(--fp-cyan-soft); font-family: var(--fp-display); font-size: 0.85rem; letter-spacing: 0; text-transform: none; }
   .booking-rule-hint { grid-column: 1 / -1; padding: 0.8rem; background: var(--fp-cyan-soft); border-radius: 0.45rem; overflow-wrap: anywhere; }
@@ -1454,7 +1455,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _bookingDetailStatusLabel(status) {
-    return ({ unresolved: "Manuelle Zuordnung erforderlich", suggested: "Regelvorschlag vorhanden", conflict: "Regelkonflikt", resolved: "Übernommen" })[status] || "Prüfung erforderlich";
+    return ({ unresolved: "Manuelle Zuordnung erforderlich", suggested: "Regelvorschlag vorhanden", conflict: "Regelkonflikt", duplicate: "Duplikat prüfen", resolved: "Übernommen" })[status] || "Prüfung erforderlich";
   }
 
   _bookingDetailValueTemplate(value, path = "Buchungsfeld") {
@@ -1588,7 +1589,7 @@ class FinanzplanerPanel extends HTMLElement {
     if (!(await this._confirmDiscardUnsavedChanges())) return;
     if (this._bookingDetailRequest || this._bookingDetailTrigger) this._closeBookingDetails();
     this._view = "review";
-    this._bookingHistoryFilters.status = "unresolved";
+    this._bookingHistoryFilters.status = "open";
     this._message = "";
     this._selectedReviewBookings.clear();
     this._reviewLoading = true;
@@ -2022,7 +2023,7 @@ class FinanzplanerPanel extends HTMLElement {
     const pageSize = this._bookingHistoryPageSize.review;
     const historyUrl = bookingHistoryRequestUrl(BOOKINGS_URL, {
       ...this._bookingHistoryFilters,
-      status: "unresolved",
+      status: this._bookingHistoryFilters.status || "open",
       limit: pageSize,
       offset: pageSize ? this._bookingHistoryPage.review * pageSize : 0,
     });
@@ -4062,7 +4063,7 @@ class FinanzplanerPanel extends HTMLElement {
     });
     this.shadowRoot.querySelector("[data-booking-filter-reset]")?.addEventListener("click", () => {
       const view = this._view === "resolved" ? "resolved" : "review";
-      this._bookingHistoryFilters = { q: "", from: "", to: "", status: view === "resolved" ? "resolved" : "unresolved", account_id: "", target: "", category_id: "", area_id: "", project_id: "" };
+      this._bookingHistoryFilters = { q: "", from: "", to: "", status: view === "resolved" ? "resolved" : "open", account_id: "", target: "", category_id: "", area_id: "", project_id: "" };
       this._bookingHistoryPage = { review: 0, resolved: 0 };
       if (view === "resolved") this._openResolvedBookings();
       else this._openReview();
@@ -4995,7 +4996,9 @@ class FinanzplanerPanel extends HTMLElement {
       .map((group) => {
         const rows = [...group.rules].sort(compareRules).map((rule) => {
           const invalid = Object.keys(this._ruleValidationErrors(this._ruleDraftFromRule(rule))).length > 0;
-          return `<tr><th scope="row">${escapeHtml(rule.label)}</th><td>${rule.active === false ? "Deaktiviert" : "Aktiv"}${invalid ? " · Angaben prüfen" : ""}</td><td class="table-number">${escapeHtml(rule.priority)}</td><td>${escapeHtml(rule.counterparty)}${rule.purpose_contains ? `<p>Verwendungszweck enthält: ${escapeHtml(rule.purpose_contains)}</p>` : ""}</td><td><ul>${(rule.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row, true))}</li>`).join("")}</ul></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-rule-editor="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} bearbeiten"${disabled}>Bearbeiten</button> <button class="table-edit-button" type="button" data-deactivate-rule="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} deaktivieren"${this._ruleSubmitting || rule.active === false ? " disabled" : ""}>Deaktivieren</button></td></tr>`;
+          const conflictLabels = ruleConflictIds(rule).map((id) => this._rules.find((candidate) => String(candidate.id) === String(id))?.label || `Regel ${id}`);
+          const conflictMarkup = conflictLabels.length ? `<span class="rule-conflict-note">Konflikt mit: ${escapeHtml(conflictLabels.join(", "))}</span>` : "";
+          return `<tr><th scope="row">${escapeHtml(rule.label)}</th><td>${rule.active === false ? "Deaktiviert" : conflictLabels.length ? "Aktiv · Regelkonflikt" : "Aktiv"}${invalid ? " · Angaben prüfen" : ""}${conflictMarkup}</td><td class="table-number">${escapeHtml(rule.priority)}</td><td>${escapeHtml(rule.counterparty)}${rule.purpose_contains ? `<p>Verwendungszweck enthält: ${escapeHtml(rule.purpose_contains)}</p>` : ""}</td><td><ul>${(rule.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row, true))}</li>`).join("")}</ul></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-rule-editor="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} bearbeiten"${disabled}>Bearbeiten</button> <button class="table-edit-button" type="button" data-deactivate-rule="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} deaktivieren"${this._ruleSubmitting || rule.active === false ? " disabled" : ""}>Deaktivieren</button></td></tr>`;
         }).join("");
         return `<tbody><tr class="rule-account-group"><th scope="rowgroup" colspan="6">${escapeHtml(group.label)}</th></tr>${rows}</tbody>`;
       }).join("");
@@ -5027,6 +5030,9 @@ class FinanzplanerPanel extends HTMLElement {
     if (booking.status === "resolved") return "";
     const status = ruleStatusLabel(booking.status);
     const heading = `booking-rule-${index}`;
+    if (booking.status === "duplicate") {
+      return `<section class="booking-rule-hint booking-rule-hint--conflict" aria-labelledby="${heading}"><h3 id="${heading}">${escapeHtml(status)}</h3><p>Diese Buchung wurde bereits importiert. Prüfe die Details und lösche sie, falls sie nicht zusätzlich übernommen werden soll.</p></section>`;
+    }
     if (booking.status === "suggested" && booking.suggestion) {
       const suggestion = booking.suggestion;
       return `<section class="booking-rule-hint" aria-labelledby="${heading}"><h3 id="${heading}">${escapeHtml(status)}: ${escapeHtml(suggestion.rule_label || suggestion.rule_id)}</h3><p>${escapeHtml(suggestion.reason || "Passende Regel gefunden.")}</p><ul>${(suggestion.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row))}</li>`).join("")}</ul><p>Die Übernahme füllt nur den Entwurf. Erst „Aufteilung speichern“ bestätigt die Buchung.</p><button class="table-edit-button" type="button" data-accept-suggestion="${escapeHtml(booking.id)}"${this._allocationSubmissions.has(String(booking.id)) || !suggestion.allocations?.length ? " disabled" : ""}>Vorschlag übernehmen</button></section>`;
@@ -5091,7 +5097,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   _bookingSelectionToolbar(view, bookings, listId) {
     const state = bookingSelectionState(bookings, this._bookingSelectionForView(view));
-    const label = view === "resolved" ? "übernommene Buchungen" : "ungeklärte Buchungen";
+    const label = view === "resolved" ? "übernommene Buchungen" : "offene Buchungen";
     return `<div class="booking-selection-toolbar" data-booking-selection-toolbar data-booking-view="${view}">
       <label class="booking-selection-all" for="${view}-select-all"><input id="${view}-select-all" name="select_all_${view}_bookings" type="checkbox" data-booking-select-all data-booking-view="${view}" aria-controls="${listId}"${state.allSelected ? " checked" : ""}><span>Alle auswählen</span></label>
       <p class="booking-selection-summary" data-booking-selection-summary data-booking-view="${view}" aria-live="polite">${state.selectedCount} von ${bookings.length} ausgewählt</p>
@@ -5102,9 +5108,9 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _bookingHistoryFilterTemplate(view) {
-    const status = view === "resolved" ? "resolved" : "unresolved";
+    const status = view === "resolved" ? "resolved" : (this._bookingHistoryFilters.status || "open");
     const accounts = Array.isArray(this._accounts) ? this._accounts : [];
-    return `<form class="booking-history-filters" data-booking-history-filter aria-label="Buchungshistorie filtern"><div class="booking-history-filter-grid"><label class="booking-history-filter-field booking-history-filter-field--search" for="booking-filter-q-${view}"><span>Suche</span><input id="booking-filter-q-${view}" data-booking-filter="q" type="search" value="${escapeHtml(this._bookingHistoryFilters.q)}" placeholder="Gegenpartei, Verwendungszweck …"></label><label class="booking-history-filter-field" for="booking-filter-from-${view}"><span>Von</span><input id="booking-filter-from-${view}" data-booking-filter="from" type="date" value="${escapeHtml(this._bookingHistoryFilters.from)}"></label><label class="booking-history-filter-field" for="booking-filter-to-${view}"><span>Bis</span><input id="booking-filter-to-${view}" data-booking-filter="to" type="date" value="${escapeHtml(this._bookingHistoryFilters.to)}"></label><label class="booking-history-filter-field" for="booking-filter-status-${view}"><span>Status</span><select id="booking-filter-status-${view}" data-booking-filter="status"><option value="unresolved"${status === "unresolved" ? " selected" : ""}>Ungeklärt</option><option value="resolved"${status === "resolved" ? " selected" : ""}>Übernommen</option></select></label><label class="booking-history-filter-field" for="booking-filter-account-${view}"><span>Konto</span><select id="booking-filter-account-${view}" data-booking-filter="account_id"><option value="">Alle Konten</option>${accounts.map((account) => `<option value="${escapeHtml(account.id)}"${this._bookingHistoryFilters.account_id === account.id ? " selected" : ""}>${escapeHtml(account.label || account.id)}</option>`).join("")}</select></label><label class="booking-history-filter-field" for="booking-filter-category-${view}"><span>Kategorie</span><select id="booking-filter-category-${view}" data-booking-filter="category_id">${this._catalogOptions("categories", this._bookingHistoryFilters.category_id, "Alle Kategorien")}</select></label></div><div class="booking-history-filter-actions"><button class="table-edit-button" type="button" data-booking-filter-reset>Zurücksetzen</button><button class="table-new-button" type="submit">Filter anwenden</button></div></form>`;
+    return `<form class="booking-history-filters" data-booking-history-filter aria-label="Buchungshistorie filtern"><div class="booking-history-filter-grid"><label class="booking-history-filter-field booking-history-filter-field--search" for="booking-filter-q-${view}"><span>Suche</span><input id="booking-filter-q-${view}" data-booking-filter="q" type="search" value="${escapeHtml(this._bookingHistoryFilters.q)}" placeholder="Gegenpartei, Verwendungszweck …"></label><label class="booking-history-filter-field" for="booking-filter-from-${view}"><span>Von</span><input id="booking-filter-from-${view}" data-booking-filter="from" type="date" value="${escapeHtml(this._bookingHistoryFilters.from)}"></label><label class="booking-history-filter-field" for="booking-filter-to-${view}"><span>Bis</span><input id="booking-filter-to-${view}" data-booking-filter="to" type="date" value="${escapeHtml(this._bookingHistoryFilters.to)}"></label><label class="booking-history-filter-field" for="booking-filter-status-${view}"><span>Status</span><select id="booking-filter-status-${view}" data-booking-filter="status"><option value="open"${status === "open" ? " selected" : ""}>Offene Buchungen</option><option value="unresolved"${status === "unresolved" ? " selected" : ""}>Ungeklärt</option><option value="duplicate"${status === "duplicate" ? " selected" : ""}>Duplikat prüfen</option><option value="resolved"${status === "resolved" ? " selected" : ""}>Übernommen</option></select></label><label class="booking-history-filter-field" for="booking-filter-account-${view}"><span>Konto</span><select id="booking-filter-account-${view}" data-booking-filter="account_id"><option value="">Alle Konten</option>${accounts.map((account) => `<option value="${escapeHtml(account.id)}"${this._bookingHistoryFilters.account_id === account.id ? " selected" : ""}>${escapeHtml(account.label || account.id)}</option>`).join("")}</select></label><label class="booking-history-filter-field" for="booking-filter-category-${view}"><span>Kategorie</span><select id="booking-filter-category-${view}" data-booking-filter="category_id">${this._catalogOptions("categories", this._bookingHistoryFilters.category_id, "Alle Kategorien")}</select></label></div><div class="booking-history-filter-actions"><button class="table-edit-button" type="button" data-booking-filter-reset>Zurücksetzen</button><button class="table-new-button" type="submit">Filter anwenden</button></div></form>`;
   }
 
   _bookingResultCountTemplate(view) {
@@ -5208,7 +5214,7 @@ class FinanzplanerPanel extends HTMLElement {
     }).join("");
     const bookingList = this._reviewLoading ? `<p class="empty-state" role="status">Buchungen werden geladen …</p>`
       : this._reviewLoadFailed ? `<div class="empty-state"><p>Die Prüfliste konnte nicht geladen werden.</p><button class="table-edit-button" type="button" data-action="review">Erneut laden</button></div>`
-        : this._bookings.length ? `${this._bookingSelectionToolbar("review", this._bookings, "review-bookings")}<div id="review-bookings" class="booking-account-groups" aria-label="Ungeklärte Buchungen">${bookingGroupsMarkup}</div>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
+        : this._bookings.length ? `${this._bookingSelectionToolbar("review", this._bookings, "review-bookings")}<div id="review-bookings" class="booking-account-groups" aria-label="Offene Buchungen">${bookingGroupsMarkup}</div>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
     const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Buchungshistorie</h2><p>Historische und ungeklärte Buchungen filtern, prüfen und nachvollziehbar zuordnen.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${filterStrip}${bookingCount}${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}${this._bookingPaginationTemplate("review")}${importHistory}</div></main>`;
     return this._shellTemplate(content);
   }

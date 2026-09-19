@@ -791,6 +791,64 @@ def _rule_amount(value: object, label: str) -> float | None:
     return float(amount)
 
 
+def _rule_conditions_overlap(left: dict[str, object], right: dict[str, object]) -> bool:
+    """Prüfe, ob zwei Regelbedingungen dieselbe Buchung treffen können."""
+
+    for field in ("account_id", "counterparty", "counterparty_account", "direction"):
+        left_value = left.get(field)
+        right_value = right.get(field)
+        if left_value in (None, "") or right_value in (None, ""):
+            continue
+        if field == "counterparty":
+            if str(left_value).casefold() != str(right_value).casefold():
+                return False
+        elif field == "counterparty_account":
+            if normalize_account_reference(left_value) != normalize_account_reference(right_value):
+                return False
+        elif left_value != right_value:
+            return False
+
+    left_min = Decimal(str(left.get("amount_min") or 0))
+    right_min = Decimal(str(right.get("amount_min") or 0))
+    left_max = left.get("amount_max")
+    right_max = right.get("amount_max")
+    if left_max is not None and left_min > Decimal(str(left_max)):
+        return False
+    if right_max is not None and right_min > Decimal(str(right_max)):
+        return False
+    if left_max is not None and right_min > Decimal(str(left_max)):
+        return False
+    if right_max is not None and left_min > Decimal(str(right_max)):
+        return False
+    return True
+
+
+def rule_conflict_index(rules: list[dict[str, object]]) -> dict[str, list[str]]:
+    """Indiziere aktive Regeln gleicher Priorität mit möglichen Überschneidungen."""
+
+    candidates: list[tuple[str, int, dict[str, object]]] = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("active") is not True:
+            continue
+        rule_id = rule.get("id")
+        if not isinstance(rule_id, str) or not rule_id:
+            continue
+        try:
+            priority = _rule_priority(rule.get("priority", 100))
+        except ValueError:
+            continue
+        candidates.append((rule_id, priority, rule))
+
+    conflicts: dict[str, set[str]] = {}
+    for index, (left_id, left_priority, left) in enumerate(candidates):
+        for right_id, right_priority, right in candidates[index + 1:]:
+            if left_priority != right_priority or not _rule_conditions_overlap(left, right):
+                continue
+            conflicts.setdefault(left_id, set()).add(right_id)
+            conflicts.setdefault(right_id, set()).add(left_id)
+    return {rule_id: sorted(rule_ids) for rule_id, rule_ids in conflicts.items()}
+
+
 def _active_reference(
     reference_id: str,
     references: dict[str, dict[str, object]],

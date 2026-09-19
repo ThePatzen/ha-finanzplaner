@@ -117,6 +117,8 @@ class BookingHistoryReportsTests(unittest.TestCase):
                  "purpose": "Rent February", "status": "resolved", "account_id": "account-1", "allocations": []},
                 {"id": "booking-3", "booking_date": "2026-02-10", "amount": -5,
                  "purpose": "Food", "status": "unresolved", "account_id": "account-2", "allocations": []},
+                {"id": "booking-4", "booking_date": "2026-02-11", "amount": -5,
+                 "purpose": "Food duplicate", "status": "duplicate", "account_id": "account-1", "allocations": []},
             ],
             "imports": [{"filename": "rent.mt940", "accepted": 2, "content_base64": "secret"}],
             "persons": [], "accounts": [
@@ -142,6 +144,17 @@ class BookingHistoryReportsTests(unittest.TestCase):
         self.assertEqual(response["limit"], 0)
         self.assertEqual(response["total"], 2)
         self.assertEqual([booking["id"] for booking in response["bookings"]], ["booking-1", "booking-2"])
+
+    def test_open_status_includes_unresolved_and_duplicate_bookings(self):
+        response = asyncio.run(self.http.BookingHistoryView().get(
+            Request(self.hass, {"status": "open", "limit": "0"})
+        ))
+
+        self.assertEqual(response["total"], 2)
+        self.assertEqual(
+            [booking["id"] for booking in response["bookings"]],
+            ["booking-3", "booking-4"],
+        )
 
     def test_booking_history_q_searches_configured_account_labels(self):
         response = asyncio.run(self.http.BookingHistoryView().get(

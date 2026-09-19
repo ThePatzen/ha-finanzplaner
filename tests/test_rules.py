@@ -263,6 +263,23 @@ class RuleMatchingTests(unittest.TestCase):
         self.assertEqual(result["status"], "conflict")
         self.assertEqual(result["conflicts"], ["rule-a", "rule-b"])
 
+    def test_rule_conflict_index_lists_active_same_priority_overlaps(self):
+        core = load_core()
+        different = self._rule("rule-different", priority=20, purpose_contains="Miete")
+        different["counterparty"] = "Andere Firma"
+        conflicts = core.rule_conflict_index([
+            self._rule("rule-a", priority=20),
+            self._rule("rule-b", priority=20),
+            self._rule("rule-low", priority=10),
+            different,
+            self._rule("rule-disabled", priority=20, active=False),
+        ])
+
+        self.assertEqual(conflicts, {
+            "rule-a": ["rule-b"],
+            "rule-b": ["rule-a"],
+        })
+
     def test_purpose_filter_rejects_nonmatching_booking(self):
         result = self._suggestion([
             self._rule("rule-purpose", purpose_contains="monat")

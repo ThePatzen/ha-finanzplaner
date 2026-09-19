@@ -8,6 +8,11 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.18.0] – 2026-09-19
+
+- Erneute Bankimporte speichern Duplikate als eigene prüfbare Buchungen mit Status `duplicate` und Originalverweis.
+- Die Regelliste zeigt potenzielle Konflikte aktiver Regeln gleicher Priorität samt Konfliktpartnern.
+
 ## [0.17.0] – 2026-09-18
 
 - Die Navigation bündelt Buchungen, Planung und weitere Bereiche in sieben Hauptpunkten; Konten, Personen, Tiere und Stammdaten sind unter Haushalt → Verwalten erreichbar.
@@ -210,6 +215,7 @@ Erste vorbereitete vertikale Version:
 [0.14.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.14.0
 [0.15.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.15.0
 [0.16.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.16.0
+[0.18.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.18.0
 [0.17.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.17.0
 [0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0
 [0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0

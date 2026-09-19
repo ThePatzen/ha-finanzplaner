@@ -451,8 +451,13 @@ class BankImportViewTests(unittest.TestCase):
         self.assertEqual(second["new_accounts"], 0)
         self.assertEqual(second["unconfigured_accounts"], 0)
         self.assertEqual(len(self.coordinator.store.data["accounts"]), 1)
-        self.assertEqual(len(self.coordinator.store.data["bookings"]), 1)
+        self.assertEqual(len(self.coordinator.store.data["bookings"]), 2)
         self.assertEqual(self.coordinator.store.data["bookings"][0]["id"], booking_id)
+        duplicate = self.coordinator.store.data["bookings"][1]
+        self.assertNotEqual(duplicate["id"], booking_id)
+        self.assertEqual(duplicate["status"], "duplicate")
+        self.assertEqual(duplicate["duplicate_of"], booking_id)
+        self.assertEqual(duplicate["source_data"]["filename"], "statement.sta")
 
     def test_import_deduplicates_spaced_and_compact_iban_forms(self):
         spaced = (
@@ -470,7 +475,8 @@ class BankImportViewTests(unittest.TestCase):
 
         self.assertEqual(result["accepted"], 0)
         self.assertEqual(result["duplicates"], 1)
-        self.assertEqual(len(self.coordinator.store.data["bookings"]), 1)
+        self.assertEqual(len(self.coordinator.store.data["bookings"]), 2)
+        self.assertEqual(self.coordinator.store.data["bookings"][1]["status"], "duplicate")
 
     def test_zip_import_accepts_multiple_bank_files_and_records_file_summaries(self):
         camt = """<?xml version="1.0"?><Document><BkToCstmrStmt><Stmt>

@@ -146,6 +146,7 @@ test("suggestionDraft copies server allocation rows", () => {
 
 test("ruleStatusLabel explains conflict status", () => {
   assert.equal(utils.ruleStatusLabel("conflict"), "Regelkonflikt");
+  assert.equal(utils.ruleStatusLabel("duplicate"), "Duplikat prüfen");
   assert.equal(utils.ruleStatusLabel("other"), "Prüfung erforderlich");
 });
 
@@ -215,6 +216,22 @@ test("conflictRuleIds returns conflict ids and copies the source list", () => {
   assert.deepEqual(ids, ["rule-1"]);
   assert.deepEqual(conflicts, ["rule-1", "rule-2"]);
   assert.deepEqual(utils.conflictRuleIds({ status: "suggested", conflicts }), []);
+});
+
+test("ruleConflictIds returns only listed rule conflict partners", () => {
+  const conflicts = ["rule-1", "rule-2"];
+  const ids = utils.ruleConflictIds({ conflict_rule_ids: conflicts });
+
+  ids.pop();
+
+  assert.deepEqual(ids, ["rule-1"]);
+  assert.deepEqual(conflicts, ["rule-1", "rule-2"]);
+  assert.deepEqual(utils.ruleConflictIds({}), []);
+});
+
+test("review filter exposes duplicate bookings as a dedicated status", () => {
+  assert.match(panelSource, /value="duplicate"[^>]*>Duplikat prüfen/);
+  assert.match(panelSource, /status === "duplicate"/);
 });
 
 test("distributes remainder cents one-by-one across the first rows", () => {
@@ -572,8 +589,8 @@ test("mobile navigation groups work areas into seven primary destinations", () =
   assert.match(panelSource, /\["more", "more", "Mehr"\]/);
   assert.match(panelSource, /_moreNavTemplate\(\)/);
   assert.match(panelSource, /data-action="more"/);
-  assert.match(panelSource, /data-nav="tasks"/);
-  assert.match(panelSource, /data-nav="energy"/);
+  assert.match(panelSource, /const entries = \[\["tasks", "tasks", "Aufgaben"\], \["energy", "energy", "Energie"\]\]/);
+  assert.match(panelSource, /data-nav="\$\{target\}"/);
   assert.doesNotMatch(panelSource, /\["people", "people", "Personen"\]/);
   assert.doesNotMatch(panelSource, /\["pets", "paw", "Tiere"\]/);
   assert.doesNotMatch(panelSource, /\["catalogs", "tags", "Stammdaten"\]/);
@@ -664,6 +681,21 @@ test("rule overview groups by account and sorts by matching priority then label"
   assert.ok(markup.indexOf(">Gemeinsames Girokonto</th>") < markup.indexOf(">Rücklagen</th>"));
 });
 
+test("rule overview shows conflict status and partner labels", () => {
+  const panel = ruleTestPanel();
+  panel._accounts = [{ id: "account-giro", label: "Gemeinsames Girokonto", active: true }];
+  panel._rules = [
+    { id: "rule-a", label: "Supermarkt", priority: 100, account_id: "account-giro", active: true, counterparty: "Supermarkt", allocations: [], conflict_rule_ids: ["rule-b"] },
+    { id: "rule-b", label: "Lebensmittel", priority: 100, account_id: "account-giro", active: true, counterparty: "Supermarkt", allocations: [], conflict_rule_ids: ["rule-a"] },
+  ];
+
+  const markup = panel._rulesOverviewTemplate();
+
+  assert.match(markup, /Aktiv · Regelkonflikt/);
+  assert.match(markup, /Konflikt mit: Supermarkt/);
+  assert.match(markup, /Konflikt mit: Lebensmittel/);
+});
+
 test("bookingHistoryRequestUrl serializes populated filters in deterministic order", () => {
   assert.equal(
     utils.bookingHistoryRequestUrl("/api/finanzplaner/bookings", {
@@ -693,7 +725,7 @@ test("review exposes rule reapplication and the resolved booking navigation", ()
   assert.match(panelSource, /const APPLY_RULES_URL = "\/api\/finanzplaner\/bookings\/apply-rules"/);
   assert.match(panelSource, /const RESOLVED_URL = "\/api\/finanzplaner\/bookings\/resolved"/);
   assert.match(panelSource, /data-action="apply-rules"/);
-  assert.match(panelSource, /\["resolved", "check", "Buchungen"\]/);
+  assert.match(panelSource, /actionButton\("resolved", "Übernommene Buchungen", "check"\)/);
   assert.match(panelSource, /data-unresolve-booking=/);
   assert.match(panelSource, /data-booking-select-all/);
   assert.match(panelSource, /data-delete-bookings/);

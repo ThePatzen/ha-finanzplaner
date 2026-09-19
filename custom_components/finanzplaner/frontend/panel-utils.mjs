@@ -145,6 +145,7 @@ export function ruleStatusLabel(status) {
     unresolved: "Manuelle Zuordnung erforderlich",
     suggested: "Regelvorschlag",
     conflict: "Regelkonflikt",
+    duplicate: "Duplikat prüfen",
   };
   return Object.hasOwn(labels, status) ? labels[status] : "Prüfung erforderlich";
 }
@@ -179,6 +180,12 @@ export function rulePayloadFromForm(form) {
 export function conflictRuleIds(booking) {
   return booking?.status === "conflict"
     ? (booking.conflicts || []).map((ruleId) => ruleId)
+    : [];
+}
+
+export function ruleConflictIds(rule) {
+  return Array.isArray(rule?.conflict_rule_ids)
+    ? rule.conflict_rule_ids.map((ruleId) => ruleId)
     : [];
 }
 

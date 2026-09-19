@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.17.0 umfasst die gebündelte Sieben-Punkte-Navigation, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
+Version 0.18.0 umfasst prüfbare Duplikatbuchungen, sichtbare Regelkonflikte, die gebündelte Sieben-Punkte-Navigation, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -34,6 +34,7 @@ und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserung
 - getrennte Anzeige von CAMT-Absender und Zahlungsempfänger in Buchungen, Prüfliste und Buchungsdetails
 - interne CAMT-Überweisungen zeigen bei passender Kontoreferenz beide konfigurierten Konten richtungsrichtig an
 - priorisierte Regelübernahmen nur bei eindeutigen Treffern, mit sichtbarer Zuordnungsquelle und Rückgängig-Funktion
+- aktive Regelkonflikte gleicher Priorität werden in der Regelliste mit ihren Konfliktpartnern angezeigt
 - Prüfliste mit erneutem Regel-Lauf sowie separate Ansicht für sämtliche übernommene Buchungen
 - Buchungshistorie und Übernahmesicht mit gemeinsamen Filtern, blätterbarer Seitennavigation und Seitengröße inklusive „Alle“
 - Übernommene Buchungsdetails zeigen fehlende Absender und Zahlungsempfänger bei auflösbaren internen Konten; die unveränderten Quelldaten bleiben gespeichert
@@ -117,6 +118,8 @@ Die Regelübersicht gruppiert die Regeln nach Konto und blendet die wiederholte 
 
 Für eine offene Buchung prüft Finanzplaner nur aktive Regeln. Wenn die Regel ein Konto festlegt, muss die Buchung genau diesem Konto entsprechen. Wenn die Regel einen Zahlungsempfänger festlegt, muss auch dieser vollständige Text passen; fehlt die Bedingung, wird sie nicht geprüft. Der optionale Verwendungszweckfilter muss zusätzlich zutreffen. Die Regel mit der höchsten Priorität liefert den Vorschlag. Treffen mehrere Regeln mit gleicher höchster Priorität zu, zeigt die Prüfliste `Regelkonflikt` an; die Buchung wird nicht automatisch übernommen. Ein eindeutiger Treffer wird nur übernommen, wenn seine Aufteilung serverseitig weiterhin gültig ist.
 
+Die Regelliste zeigt zusätzlich aktive Regeln gleicher Priorität, deren Bedingungen dieselbe Buchung treffen könnten, als `Regelkonflikt` und nennt die jeweils betroffenen Regeln. Die Anzeige ist ein Prüfhinweis; die Prioritäts- und Matchingregeln bleiben unverändert.
+
 Regelnamen dürfen bis zu 120 Zeichen enthalten, Zahlungsempfänger und Verwendungszweckfilter jeweils bis zu 160. Die Priorität ist eine ganze Zahl von 0 bis 1000. Jeder Anteil liegt zwischen 0,01 und 100,00 Prozent und hat höchstens zwei Nachkommastellen. Lange Verwendungszwecke einer Buchung verhindern das Matching nicht. Ist eine passende Regel mit höchster Priorität ungültig, bleibt die Buchung mit dem konkreten Prüfgrund ungeklärt; eine niedrigere Regel übernimmt nicht ersatzweise.
 
 Eindeutige Treffer werden beim Bankimport automatisch gespeichert. Die Buchung enthält dabei einen Snapshot aus Regel-ID, Regelname, Treffergrund und Übernahmezeitpunkt. Nach dem Anlegen oder Ändern einer Regel kannst du in `Buchungen prüfen` mit `Regeln erneut anwenden` alle derzeit ungeklärten Buchungen noch einmal auswerten. Bereits übernommene Buchungen werden dabei nicht verändert; Konflikte und ungeklärte Treffer bleiben zur manuellen Prüfung offen.
@@ -130,6 +133,8 @@ In `Übernommene Buchungen` kannst du sämtliche automatisch und manuell überno
 In `Buchungen prüfen` und `Übernommene Buchungen` kannst du Buchungen per Checkbox markieren. `Alle auswählen` markiert die aktuell sichtbare Liste; `Auswahl löschen` entfernt die markierten Buchungen nach einer Sicherheitsbestätigung dauerhaft.
 
 Die `Buchungshistorie` in `Buchungen prüfen` lässt sich über Suche (`q` für Gegenpartei, Verwendungszweck, Referenz oder Absender), Zeitraum (`from`/`to`), Status, Konto sowie Kategorie filtern. Die Ansicht zeigt zusätzlich die `Importhistorie` mit Dateiname, Format, Zeitpunkt, Anzahl übernommener Buchungen und Duplikaten; Quelldateien werden dort nicht angezeigt.
+
+Wird eine bereits bekannte Bankbuchung erneut importiert, bleibt die ursprüngliche Buchung unverändert und der neue Datensatz wird mit Status `duplicate` sowie einem Verweis auf das Original gespeichert. In der Prüfliste erscheinen solche Einträge unter `Duplikat prüfen`; dort können die Details kontrolliert und der Eintrag gelöscht oder ausdrücklich zugeordnet werden.
 
 Regeln und Vorschläge verarbeitet Finanzplaner lokal in Home Assistant. Vollständige Kontoreferenzen bleiben im lokalen Speicher; Oberfläche und API zeigen nur maskierte Kontodaten.
 

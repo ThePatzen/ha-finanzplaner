@@ -38,6 +38,7 @@ from .core import (
     parse_mt940_records,
     plan_item_totals,
     record_feed_profile_purchase,
+    rule_conflict_index,
     rule_payload_from_booking,
     rule_suggestion,
     validate_pet_payload,
@@ -74,7 +75,7 @@ _OPAQUE_ID_PATTERN = re.compile(
 )
 _OPAQUE_ID_FIELDS = frozenset({
     "id", "rule_id", "account_id", "booking_id", "category_id", "area_id",
-    "project_id", "parent_id", "pet_id", "feed_profile_id", "conflicts",
+    "project_id", "parent_id", "pet_id", "feed_profile_id", "conflicts", "conflict_rule_ids", "duplicate_of",
 })
 _ACCOUNT_FIELD_NAMES = frozenset({
     "account",
@@ -380,6 +381,33 @@ def _stored_booking_fingerprints(bookings: object) -> set[str]:
     return fingerprints
 
 
+def _stored_bookings_by_fingerprint(bookings: object) -> dict[str, dict[str, Any]]:
+    """Liefere je Fingerabdruck den ersten Nicht-Duplikat-Datensatz."""
+
+    indexed: dict[str, dict[str, Any]] = {}
+    if not isinstance(bookings, list):
+        return indexed
+    for item in bookings:
+        if not isinstance(item, dict):
+            continue
+        try:
+            booking = Booking(
+                account=str(item.get("account_reference", item.get("account", ""))),
+                booking_date=date.fromisoformat(str(item["booking_date"])),
+                amount=float(item["amount"]),
+                purpose=str(item.get("purpose", "")),
+                reference=str(item.get("reference", "")),
+                counterparty=str(item.get("counterparty", "")),
+                currency=str(item.get("currency", "EUR")),
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        fingerprint = booking_fingerprint(booking)
+        if fingerprint not in indexed or item.get("status") != "duplicate":
+            indexed[fingerprint] = item
+    return indexed
+
+
 def _redact_account_value(value: object) -> object:
     """Keep account context without exposing a full account identifier."""
 
@@ -483,6 +511,7 @@ def account_payload(account: dict[str, object]) -> dict[str, object]:
 def rule_payload(
     rule: dict[str, object],
     account: dict[str, object] | None = None,
+    conflict_rule_ids: list[str] | None = None,
 ) -> dict[str, object]:
     """Return one rule with current, redacted account display data."""
 
@@ -507,6 +536,7 @@ def rule_payload(
         if field in rule
     }
     payload["account"] = account_payload(account) if account is not None else None
+    payload["conflict_rule_ids"] = list(conflict_rule_ids or [])
     return _response_payload(payload)  # type: ignore[return-value]
 
 
@@ -1918,6 +1948,7 @@ class RulesView(HomeAssistantView):
         if coordinator is None:
             return self.json({"rules": []})
         accounts = _rule_accounts(coordinator)
+        conflict_index = rule_conflict_index(_rule_list(coordinator))
         return self.json(
             _response_payload(
                 {
@@ -1927,6 +1958,7 @@ class RulesView(HomeAssistantView):
                             accounts.get(rule.get("account_id"))
                             if isinstance(rule.get("account_id"), str)
                             else None,
+                            conflict_index.get(str(rule.get("id")), []),
                         )
                         for rule in _rule_list(coordinator)
                         if isinstance(rule, dict)
@@ -2309,8 +2341,12 @@ def _booking_matches(
         return False
     for field in ("account_id", "status"):
         value = query.get(field)
-        if value and booking.get(field) != value:
-            return False
+        if value:
+            if field == "status" and value == "open":
+                if booking.get("status") == "resolved":
+                    return False
+            elif booking.get(field) != value:
+                return False
     search = str(query.get("q", "")).strip().casefold()
     account = accounts.get(booking.get("account_id")) if accounts else None
     searchable = ("purpose", "reference", "counterparty", "sender")
@@ -2779,6 +2815,9 @@ class ImportView(HomeAssistantView):
         existing = _stored_booking_fingerprints(
             coordinator.store.data.get("bookings", [])
         )
+        stored_by_fingerprint = _stored_bookings_by_fingerprint(
+            coordinator.store.data.get("bookings", [])
+        )
         accepted = []
         duplicates = 0
         new_account_ids: set[str] = set()
@@ -2806,9 +2845,30 @@ class ImportView(HomeAssistantView):
             source_hash = hashlib.sha256(source_bytes).hexdigest()
             for record_index, parsed_booking in enumerate(parsed):
                 payload = _booking_payload(parsed_booking.booking)
+                payload["source_data"] = {
+                    **parsed_booking.source_data,
+                    "format": format_name,
+                    "filename": source_filename,
+                    "file_sha256": source_hash,
+                    "record_index": record_index,
+                }
                 if payload["id"] in existing:
                     duplicates += 1
                     file_duplicates += 1
+                    original = stored_by_fingerprint.get(payload["id"])
+                    duplicate = {
+                        **payload,
+                        "id": f"duplicate-{uuid4().hex}",
+                        "status": "duplicate",
+                        "duplicate_of": (
+                            original.get("id")
+                            if isinstance(original, dict)
+                            else payload["id"]
+                        ),
+                    }
+                    if isinstance(original, dict) and "account_id" in original:
+                        duplicate["account_id"] = original.get("account_id")
+                    coordinator.store.data["bookings"].append(duplicate)
                     continue
                 account, created = ensure_account(
                     coordinator.store.data,
@@ -2823,21 +2883,15 @@ class ImportView(HomeAssistantView):
                             new_account_ids.add(account_id)
                         if not account.get("owner_targets"):
                             unconfigured_account_ids.add(account_id)
-                payload["source_data"] = {
-                    **parsed_booking.source_data,
-                    "format": format_name,
-                    "filename": source_filename,
-                    "file_sha256": source_hash,
-                    "record_index": record_index,
-                }
                 existing.add(payload["id"])
+                stored_by_fingerprint[payload["id"]] = payload
                 coordinator.store.data["bookings"].append(payload)
                 accepted.append(payload)
                 file_accepted += 1
             if (
                 parsed
                 and source_hash not in stored_upload_hashes
-                and (file_accepted or source_hash in existing_source_hashes)
+                and (file_accepted or file_duplicates or source_hash in existing_source_hashes)
             ):
                 original_uploads.append({
                     "sha256": source_hash,

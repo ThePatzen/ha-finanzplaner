@@ -466,6 +466,17 @@ class RuleViewTests(unittest.TestCase):
         self.assertNotIn("AT123456789012345678", str(result))
         self.assertEqual(self.coordinator.store.save_count, 0)
 
+    def test_rules_get_exposes_potential_conflict_partners(self):
+        second = deepcopy(self.coordinator.store.data["rules"][0])
+        second["id"] = "rule-2"
+        self.coordinator.store.data["rules"].append(second)
+
+        result = asyncio.run(self.http.RulesView().get(self._request()))
+
+        rules = {rule["id"]: rule for rule in result["rules"]}
+        self.assertEqual(rules["rule-1"]["conflict_rule_ids"], ["rule-2"])
+        self.assertEqual(rules["rule-2"]["conflict_rule_ids"], ["rule-1"])
+
     def test_rule_conditions_round_trip_and_counterparty_account_is_masked(self):
         payload = self._valid_rule_payload()
         payload.update({
