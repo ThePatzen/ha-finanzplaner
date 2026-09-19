@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running fast checks..."
+scripts/check-fast
+
+echo "Running Python tests..."
+python3 -m unittest discover -s tests -p 'test*.py' -v
+
+if ! command -v node >/dev/null; then
+    echo "Node.js is required for the full frontend check" >&2
+    exit 2
+fi
+
+echo "Running frontend tests..."
+node --test custom_components/finanzplaner/frontend/panel-utils.test.mjs
+
+echo "Checking frontend syntax..."
+node --check custom_components/finanzplaner/frontend/panel.js

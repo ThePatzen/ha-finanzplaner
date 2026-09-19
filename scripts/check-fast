@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+echo "Checking Python syntax..."
+python3 -m compileall -q custom_components tests
+
+echo "Checking JSON metadata..."
+python3 -m json.tool custom_components/finanzplaner/manifest.json >/dev/null
+python3 -m json.tool hacs.json >/dev/null
+
+echo "Checking repository diff..."
+git diff --check
