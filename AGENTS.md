@@ -20,7 +20,7 @@ verweisen darauf, statt dieselben Fakten zu duplizieren.
 - `custom_components/finanzplaner/frontend/`: natives Panel sowie Frontend-Helfer und Node-Tests
 - `tests/`: Python-Tests für Backend, Importe, Persistenz und fachliche Abläufe
 - `docs/`: dauerhafte Dokumentation sowie `docs/superpowers/{plans,specs}/`
-- `scripts/`: geplante ausführbare Prüf- und Entwicklungsbefehle des Harness
+- `scripts/`: ausführbare Prüf- und Entwicklungsbefehle des Harness
 - `.agents/skills/`: projektspezifische Skills und ihre Einstiegspunkte
 - `assets/`: visuelle und HACS-Assets
 - `template/`: Excel-Referenzvorlage; sie enthält private Referenzdaten und gehört nicht in Änderungen oder Ausgaben
@@ -51,10 +51,9 @@ Die kleinsten relevanten Einstiegspunkte sind `core.py`, `storage.py`,
 - Für Markdown- oder Skill-Änderungen genügt der schnelle Check; für Code gilt
   die [Prüfmatrix](docs/workflows/testing.md).
 
-## Geplante Standardprüfungen
+## Kanonische Standardprüfungen
 
-Die folgenden Namen sind die kanonischen Einstiegspunkte, die der Harness in
-den nächsten Tasks ergänzt:
+Die folgenden Namen sind die kanonischen Einstiegspunkte des Harness:
 
 ```bash
 scripts/check-fast
@@ -63,7 +62,7 @@ scripts/check-full
 ```
 
 `scripts/test-file <path>` erhält den konkreten passenden Testpfad, zum
-Beispiel `tests/test_rules.py`. Die Auswahl der künftigen Befehle richtet sich
+Beispiel `tests/test_rules.py`. Die Auswahl der Befehle richtet sich
 nach `docs/workflows/testing.md`.
 
 GitHub-Befehle, Pushes, Tags und Release-Veröffentlichungen benötigen eine
