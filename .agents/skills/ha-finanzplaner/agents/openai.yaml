@@ -1,0 +1,4 @@
+interface:
+  display_name: "HA Finanzplaner"
+  short_description: "Projekt-Routing und fachliche Finanzinvarianten"
+  default_prompt: "Use $ha-finanzplaner, read PRODUCT.md, README.md, CHANGELOG.md and the relevant project docs, then select the matching specialized skill before working."
