@@ -29,7 +29,7 @@ class RuleMatchingTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "suggested")
 
-    def test_exact_counterparty_and_account_create_one_suggestion(self):
+    def test_counterparty_contains_filter_and_account_create_one_suggestion(self):
         core = load_core()
         rules = [{
             "id": "rule-grocery",
@@ -50,7 +50,7 @@ class RuleMatchingTests(unittest.TestCase):
         }]
         booking = {
             "account_id": "account-giro",
-            "counterparty": "  supermarkt ag ",
+            "counterparty": "  supermarkt ag filiale telfs ",
             "purpose": "Einkauf",
             "amount": -42.37,
         }
@@ -172,8 +172,9 @@ class RuleMatchingTests(unittest.TestCase):
             with self.subTest(length=length):
                 rule = self._rule("rule-long-counterparty")
                 rule["counterparty"] = "x" * min(length, 160)
+                booking_counterparty = "X" * length if length <= 160 else "Y" * length
                 result = load_core().rule_suggestion(
-                    {"account_id": "account-giro", "counterparty": "X" * length,
+                    {"account_id": "account-giro", "counterparty": booking_counterparty,
                      "purpose": "", "amount": -10},
                     [rule], accounts={"account-giro": {}}, valid_targets={"household"},
                     catalogs={}, pets={},
@@ -278,6 +279,47 @@ class RuleMatchingTests(unittest.TestCase):
         self.assertEqual(conflicts, {
             "rule-a": ["rule-b"],
             "rule-b": ["rule-a"],
+        })
+
+    def test_rule_conflict_index_ignores_disjoint_purpose_filters(self):
+        core = load_core()
+
+        conflicts = core.rule_conflict_index([
+            self._rule("rule-deichmann", priority=20, purpose_contains="DEICHMANN"),
+            self._rule("rule-fressnapf", priority=20, purpose_contains="FRESSNAPF"),
+        ])
+
+        self.assertEqual(conflicts, {})
+
+    def test_rule_conflict_index_keeps_nested_purpose_filters(self):
+        core = load_core()
+
+        conflicts = core.rule_conflict_index([
+            self._rule("rule-amazon", priority=20, purpose_contains="AMAZON"),
+            self._rule(
+                "rule-amazon-payments",
+                priority=20,
+                purpose_contains="AMAZON PAYMENTS",
+            ),
+        ])
+
+        self.assertEqual(conflicts, {
+            "rule-amazon": ["rule-amazon-payments"],
+            "rule-amazon-payments": ["rule-amazon"],
+        })
+
+    def test_rule_conflict_index_keeps_nested_counterparty_filters(self):
+        core = load_core()
+
+        shorter = self._rule("rule-supermarkt", priority=20)
+        shorter["counterparty"] = "Supermarkt"
+        longer = self._rule("rule-supermarkt-ag", priority=20)
+        longer["counterparty"] = "Supermarkt AG"
+        conflicts = core.rule_conflict_index([shorter, longer])
+
+        self.assertEqual(conflicts, {
+            "rule-supermarkt": ["rule-supermarkt-ag"],
+            "rule-supermarkt-ag": ["rule-supermarkt"],
         })
 
     def test_purpose_filter_rejects_nonmatching_booking(self):

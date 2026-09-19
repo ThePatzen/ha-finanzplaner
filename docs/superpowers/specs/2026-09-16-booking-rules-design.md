@@ -114,7 +114,7 @@ Eine Regel trifft zu, wenn:
 
 1. sie aktiv ist;
 2. `account_id` leer ist oder exakt der Buchungskonto-ID entspricht;
-3. der normalisierte Zahlungsempfänger exakt übereinstimmt;
+3. der normalisierte Zahlungsempfänger den normalisierten Regelwert enthält;
 4. `purpose_contains` leer ist oder der normalisierte Filter im
    normalisierten Verwendungszweck vorkommt.
 
@@ -290,7 +290,7 @@ ausdrücklicher Freigabe.
 Die Implementierung ist fachlich abnahmefähig, wenn folgende Fälle mit Tests
 abgedeckt sind:
 
-- ein exakter Zahlungsempfänger erzeugt bei passendem Konto einen Vorschlag;
+- ein enthaltener Zahlungsempfänger erzeugt bei passendem Konto einen Vorschlag;
 - ein abweichendes Konto verhindert den Treffer;
 - ein optionaler Verwendungszweckfilter schränkt den Treffer korrekt ein;
 - deaktivierte Regeln erzeugen keinen Vorschlag;

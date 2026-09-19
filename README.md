@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.19.0 umfasst den JSON-Export/-Import und das dauerhafte Löschen ausgewählter Regeln, prüfbare Duplikatbuchungen, sichtbare Regelkonflikte, die gebündelte Sieben-Punkte-Navigation, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
+Version 0.19.1 umfasst den JSON-Export/-Import und das dauerhafte Löschen ausgewählter Regeln, prüfbare Duplikatbuchungen, sichtbare Regelkonflikte, die gebündelte Sieben-Punkte-Navigation, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -112,13 +112,13 @@ Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`per
 
 ## Buchungsregeln
 
-Öffne `Regeln` und wähle `Regel anlegen`, um eine Vorlage für künftige Buchungsvorschläge zu speichern. Vergib einen Namen und trage den vollständigen Zahlungsempfänger ein, sofern er bekannt ist. Wenn du ein Konto auswählst, grenzt die Regel die Zahlungsquelle auf genau dieses Konto ein. Finanzplaner trimmt und normalisiert die Konto-ID und vergleicht sie anschließend exakt. Der Zahlungsempfänger ist optional; wenn er fehlt, muss die Regel über ein Konto oder `Verwendungszweck enthält (optional)` eingeschränkt werden. Beim Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung. Eine Regelaufteilung enthält jedes Ziel höchstens einmal; ihre Anteile müssen zusammen 100 Prozent ergeben.
+Öffne `Regeln` und wähle `Regel anlegen`, um eine Vorlage für künftige Buchungsvorschläge zu speichern. Vergib einen Namen und trage einen kennzeichnenden Teil des Zahlungsempfängers ein, sofern er bekannt ist. Wenn du ein Konto auswählst, grenzt die Regel die Zahlungsquelle auf genau dieses Konto ein. Finanzplaner trimmt und normalisiert die Konto-ID und vergleicht sie anschließend exakt. Der Zahlungsempfänger ist optional; wenn er fehlt, muss die Regel über ein Konto oder `Verwendungszweck enthält (optional)` eingeschränkt werden. Beim Zahlungsempfänger normalisiert Finanzplaner den Leerraum, ignoriert die Groß- und Kleinschreibung und prüft, ob der Regelwert im vollständigen Zahlungsempfänger enthalten ist. Eine Regelaufteilung enthält jedes Ziel höchstens einmal; ihre Anteile müssen zusammen 100 Prozent ergeben.
 
 Die Regelübersicht gruppiert die Regeln nach Konto und blendet die wiederholte Konto-Spalte aus. Die Kontogruppen werden alphabetisch angezeigt; innerhalb einer Gruppe entspricht die Reihenfolge dem Matching: höchste Priorität zuerst, bei gleicher Priorität alphabetisch nach Regelname.
 
 Regeln lassen sich in der Übersicht einzeln oder mit `Alle auswählen` markieren. Die Auswahl kann als versioniertes JSON exportiert werden. Über `JSON importieren` werden Regeldefinitionen ergänzt; der Import validiert die gesamte Datei vor dem Speichern und vergibt neue lokale Regel-IDs. Mit `Auswahl löschen` können markierte Regeln nach einer Bestätigung dauerhaft entfernt werden. Bereits übernommene Buchungen und ihre gespeicherten Regel-Snapshots bleiben dabei unverändert.
 
-Für eine offene Buchung prüft Finanzplaner nur aktive Regeln. Wenn die Regel ein Konto festlegt, muss die Buchung genau diesem Konto entsprechen. Wenn die Regel einen Zahlungsempfänger festlegt, muss auch dieser vollständige Text passen; fehlt die Bedingung, wird sie nicht geprüft. Der optionale Verwendungszweckfilter muss zusätzlich zutreffen. Die Regel mit der höchsten Priorität liefert den Vorschlag. Treffen mehrere Regeln mit gleicher höchster Priorität zu, zeigt die Prüfliste `Regelkonflikt` an; die Buchung wird nicht automatisch übernommen. Ein eindeutiger Treffer wird nur übernommen, wenn seine Aufteilung serverseitig weiterhin gültig ist.
+Für eine offene Buchung prüft Finanzplaner nur aktive Regeln. Wenn die Regel ein Konto festlegt, muss die Buchung genau diesem Konto entsprechen. Wenn die Regel einen Zahlungsempfänger festlegt, muss dieser Regelwert im Zahlungsempfänger vorkommen; fehlt die Bedingung, wird sie nicht geprüft. Der optionale Verwendungszweckfilter muss zusätzlich zutreffen. Die Regel mit der höchsten Priorität liefert den Vorschlag. Treffen mehrere Regeln mit gleicher höchster Priorität zu, zeigt die Prüfliste `Regelkonflikt` an; die Buchung wird nicht automatisch übernommen. Ein eindeutiger Treffer wird nur übernommen, wenn seine Aufteilung serverseitig weiterhin gültig ist.
 
 Die Regelliste zeigt zusätzlich aktive Regeln gleicher Priorität, deren Bedingungen dieselbe Buchung treffen könnten, als `Regelkonflikt` und nennt die jeweils betroffenen Regeln. Die Anzeige ist ein Prüfhinweis; die Prioritäts- und Matchingregeln bleiben unverändert.
 

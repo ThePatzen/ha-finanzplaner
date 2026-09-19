@@ -8,6 +8,14 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.19.1] – 2026-09-19
+
+- Die Konfliktanzeige der Buchungsregeln berücksichtigt Verwendungszweckfilter
+  und meldet getrennte Filter nicht mehr pauschal als Duplikatkonflikt.
+- Zahlungsempfänger-Regeln prüfen nun einen normalisierten, nicht
+  groß-/kleinschreibungssensitiven enthaltenen Textabschnitt; die
+  Konflikterkennung verwendet dieselbe Semantik.
+
 ## [0.19.0] – 2026-09-19
 
 - Regeln können einzeln oder vollständig markiert und als versioniertes JSON exportiert werden.

@@ -697,8 +697,8 @@ test("rule overview groups by account and sorts by matching priority then label"
 
   const markup = panel._rulesOverviewTemplate();
   assert.doesNotMatch(markup, /<th scope="col">Konto<\/th>/);
-  assert.match(markup, /<th scope="rowgroup" colspan="6">Gemeinsames Girokonto<\/th>/);
-  assert.match(markup, /<th scope="rowgroup" colspan="6">Rücklagen<\/th>/);
+  assert.match(markup, /<th scope="rowgroup" colspan="7">Gemeinsames Girokonto<\/th>/);
+  assert.match(markup, /<th scope="rowgroup" colspan="7">Rücklagen<\/th>/);
 
   const giroGroupStart = markup.indexOf(">Gemeinsames Girokonto</th>");
   const giroGroupEnd = markup.indexOf("</tbody>", giroGroupStart);
@@ -1007,7 +1007,14 @@ test("month, dimension, close and view changes discard pending breakdown respons
   ]) {
     const panel = comparisonTestPanel();
     let respond;
-    panel._hass = { fetchWithAuth: () => new Promise((resolve) => { respond = resolve; }) };
+    panel._hass = { fetchWithAuth: (url) => {
+      if (!url.includes("/breakdown")) {
+        return Promise.resolve(new Response(JSON.stringify({ demo: false, month: "2026-10" }), {
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      return new Promise((resolve) => { respond = resolve; });
+    } };
     const pending = panel._loadBreakdown("categories", "id:food");
     change(panel);
     respond(breakdownResponse());

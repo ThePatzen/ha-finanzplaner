@@ -791,6 +791,45 @@ def _rule_amount(value: object, label: str) -> float | None:
     return float(amount)
 
 
+def _contains_conditions_overlap(
+    left: dict[str, object],
+    right: dict[str, object],
+    field: str,
+    label: str,
+) -> bool:
+    """Prüfe, ob zwei normalisierte Enthält-Filter dieselbe Buchung treffen können."""
+    try:
+        left_filter = _normalized_match_text(
+            left.get(field),
+            label,
+            required=False,
+        )
+        right_filter = _normalized_match_text(
+            right.get(field),
+            label,
+            required=False,
+        )
+    except ValueError:
+        # Ungültige Regeln werden an anderer Stelle validiert; der Konflikthinweis
+        # darf sie nicht stillschweigend als disjunkt behandeln.
+        return True
+
+    if left_filter is None or right_filter is None:
+        return True
+
+    left_filter = left_filter.casefold()
+    right_filter = right_filter.casefold()
+    return left_filter in right_filter or right_filter in left_filter
+
+
+def _purpose_conditions_overlap(left: dict[str, object], right: dict[str, object]) -> bool:
+    """Prüfe, ob zwei Verwendungszweckfilter dieselbe Buchung treffen können."""
+
+    return _contains_conditions_overlap(
+        left, right, "purpose_contains", "Der Verwendungszweckfilter"
+    )
+
+
 def _rule_conditions_overlap(left: dict[str, object], right: dict[str, object]) -> bool:
     """Prüfe, ob zwei Regelbedingungen dieselbe Buchung treffen können."""
 
@@ -800,13 +839,18 @@ def _rule_conditions_overlap(left: dict[str, object], right: dict[str, object]) 
         if left_value in (None, "") or right_value in (None, ""):
             continue
         if field == "counterparty":
-            if str(left_value).casefold() != str(right_value).casefold():
+            if not _contains_conditions_overlap(
+                left, right, "counterparty", "Der Zahlungsempfänger"
+            ):
                 return False
         elif field == "counterparty_account":
             if normalize_account_reference(left_value) != normalize_account_reference(right_value):
                 return False
         elif left_value != right_value:
             return False
+
+    if not _purpose_conditions_overlap(left, right):
+        return False
 
     left_min = Decimal(str(left.get("amount_min") or 0))
     right_min = Decimal(str(right.get("amount_min") or 0))
@@ -1014,7 +1058,11 @@ def _rule_matches_booking(rule: dict[str, object], booking: dict[str, object]) -
     )
     rule_counterparty = rule.get("counterparty")
     if rule_counterparty not in (None, ""):
-        if counterparty is None or not isinstance(rule_counterparty, str) or rule_counterparty.casefold() != counterparty.casefold():
+        if (
+            counterparty is None
+            or not isinstance(rule_counterparty, str)
+            or rule_counterparty.casefold() not in counterparty.casefold()
+        ):
             return False
     counterparty_account = rule.get("counterparty_account")
     if counterparty_account not in (None, "") and counterparty_account != normalize_account_reference(booking.get("counterparty_account", "")):
@@ -1190,7 +1238,7 @@ def rule_suggestion(
     )
     reason = f"{account_condition}."
     if normalized["counterparty"]:
-        reason += f" Zahlungsempfänger „{normalized['counterparty']}“ stimmt überein."
+        reason += f" Zahlungsempfänger enthält „{normalized['counterparty']}“."
     if normalized["counterparty_account"]:
         reason += f" Gegenkonto „{normalized['counterparty_account']}“ stimmt überein."
     if normalized["direction"]:

@@ -62,7 +62,7 @@ Zusätzlich enthalten:
 - Regelliste mit Checkbox-Auswahl einschließlich „Alle auswählen“, JSON-Export und ergänzendem JSON-Import
 - Ausgewählte Regeln können nach Bestätigung dauerhaft gelöscht werden; der Import validiert atomar und erzeugt neue lokale IDs
 - Die Regelübersicht gruppiert Regeln nach Konto; je Konto werden sie wie beim Matching nach absteigender Priorität und anschließend alphabetisch nach Regelname sortiert.
-- Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim optionalen Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung.
+- Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim optionalen Zahlungsempfänger normalisiert Finanzplaner den Leerraum, prüft den Regelwert als enthaltenen Textabschnitt und ignoriert die Groß- und Kleinschreibung.
 - optionaler Verwendungszweckfilter, der nur Buchungen mit dem angegebenen Textabschnitt berücksichtigt; jede Regel benötigt mindestens eine Bedingung aus Konto, Zahlungsempfänger oder Verwendungszweckfilter
 - automatische Übernahme nur bei einem eindeutigen, gültigen Treffer mit höchster Priorität; Regeln mit gleicher höchster Priorität bleiben ungeklärt
 - Die Regelübersicht kennzeichnet aktive Regeln mit potenziell überschneidenden Bedingungen gleicher Priorität und nennt die Konfliktpartner.
