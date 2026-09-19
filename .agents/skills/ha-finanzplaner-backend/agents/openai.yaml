@@ -1,0 +1,4 @@
+interface:
+  display_name: "HA Finanzplaner Backend"
+  short_description: "Backend-Änderungen sicher routen"
+  default_prompt: "Use $ha-finanzplaner-backend to route a Finanzplaner backend change through the canonical source files and focused tests."

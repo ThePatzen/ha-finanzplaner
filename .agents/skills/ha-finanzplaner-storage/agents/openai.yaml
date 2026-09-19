@@ -1,0 +1,4 @@
+interface:
+  display_name: "HA Finanzplaner Storage"
+  short_description: "Persistenz und Migrationen routen"
+  default_prompt: "Use $ha-finanzplaner-storage to route a Finanzplaner storage change through the canonical project documentation and focused tests."
