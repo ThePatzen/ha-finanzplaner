@@ -1,46 +1,70 @@
 # Arbeitsanweisungen
 
-Prüfe vor jeder Änderung im Repository zuerst diese Dokumente:
+## Einstieg und Inhaltsübersicht
 
-- [PRODUCT.md](PRODUCT.md) für Produktziele, Funktionsumfang und Leitplanken
-- [README.md](README.md) für den aktuellen Nutzungs- und Installationsstand
-- [CHANGELOG.md](CHANGELOG.md) für bisherige und geplante Änderungen
+Vor jeder Änderung zuerst [PRODUCT.md](PRODUCT.md), [README.md](README.md)
+und [CHANGELOG.md](CHANGELOG.md) lesen. Danach nur die für die Aufgabe
+relevanten Quellen und Tests öffnen:
 
-Richte die Umsetzung an diesen Dokumenten aus und halte sie bei relevanten Änderungen konsistent.
+- [docs/architecture.md](docs/architecture.md): Komponenten, Datenflüsse und wichtige Einstiegspunkte
+- [docs/domain-invariants.md](docs/domain-invariants.md): fachliche und technische Invarianten
+- [docs/workflows/testing.md](docs/workflows/testing.md): risikobasierte Prüfmatrix
+- [docs/workflows/release.md](docs/workflows/release.md): Versionierung und Release-Sicherheit
 
-## Kurzüberblick über Stack und Struktur
+Diese Dokumente enthalten das dauerhafte Projektwissen. Skripte und Skills
+verweisen darauf, statt dieselben Fakten zu duplizieren.
 
-- Stack: Python-basierte Home-Assistant-Custom-Integration mit nativer eingebetteter Oberfläche aus HTML, CSS und clientseitigem JavaScript. Verteilung über HACS, lokale Persistenz, Tests mit Python `unittest` und Node `--test`.
-- `custom_components/finanzplaner/`: Integration, API, Speicher, Importe, Sensoren und Services.
-- `custom_components/finanzplaner/frontend/`: statische Panel-Oberfläche und zugehörige Node-Tests.
-- `tests/`: Python-Tests; `docs/superpowers/{plans,specs}/`: Pläne und Designspezifikationen.
-- `assets/` und `template/`: visuelle Assets und Excel-Referenzvorlage. Die Vorlage enthält private Referenzdaten und gehört nicht in Änderungen oder Ausgaben.
+## Verzeichnisübersicht
 
-## Token- und Arbeitsprozess-Leitlinien
+- `custom_components/finanzplaner/`: Backend-Integration, Core, Speicher, API, Importe, Sensoren und Services
+- `custom_components/finanzplaner/frontend/`: natives Panel sowie Frontend-Helfer und Node-Tests
+- `tests/`: Python-Tests für Backend, Importe, Persistenz und fachliche Abläufe
+- `docs/`: dauerhafte Dokumentation sowie `docs/superpowers/{plans,specs}/`
+- `scripts/`: ausführbare Prüf- und Entwicklungsbefehle des Harness
+- `.agents/skills/`: projektspezifische Skills und ihre Einstiegspunkte
+- `assets/`: visuelle und HACS-Assets
+- `template/`: Excel-Referenzvorlage; sie enthält private Referenzdaten und gehört nicht in Änderungen oder Ausgaben
 
-- Lies zuerst nur die vorgeschriebenen Projektdokumente und danach gezielt die Dateien und Ausschnitte, die für die Aufgabe relevant sind. Gib große Dateien nicht vollständig aus.
-- Suche mit `rg` oder `rg --files`, bevor du Verzeichnisse oder Dateien breit öffnest. Formuliere Suchmuster eng und begrenze Treffer sowie Zeilenbereiche.
-- Begrenze Tool-Ausgaben auf den benötigten Umfang. Filtere Logs und Diffs früh, setze passende Ausgabegrenzen und teile große Ausgaben in gezielte Abschnitte.
-- Führe voneinander unabhängige, schreibgeschützte Prüfungen parallel aus. Warte nur bei echten Abhängigkeiten sequenziell und wiederhole bereits erledigte Abfragen nicht.
-- Halte während der Arbeit kurze interne Notizen zu Befunden, Annahmen und offenen Punkten. Lade bereits geprüften Kontext nicht erneut, solange sich die Dateien nicht geändert haben.
-- Passe Planung und Erklärung an die Aufgabengröße an. Kleine Änderungen brauchen keinen ausführlichen Plan; ein fokussierter Patch ist umfangreichen Umschreibungen vorzuziehen.
-- Ändere nur den relevanten Bereich. Vermeide unbeteiligte Formatierungsänderungen, vollständige Datei-Neuerzeugung und unnötige Anpassungen an Zeilenenden.
-- Delegiere nur eigenständige Aufgaben, bei denen der Nutzen die Kosten für Kontextübergabe und Abstimmung übersteigt.
-- Verifiziere proportional zum Risiko: Bei Dokumentationsänderungen reichen Diff- und Formatprüfung; bei Codeänderungen kommen die passenden fokussierten Tests hinzu. Überspringe notwendige Prüfungen nicht allein wegen Tokenersparnis.
-- Halte Statusmeldungen und die abschließende Übergabe knapp. Verlinke betroffene Dateien, fasse Änderungen und Prüfergebnisse zusammen und kopiere keine großen Quelltext- oder Logblöcke.
+Die kleinsten relevanten Einstiegspunkte sind `core.py`, `storage.py`,
+`http.py`, `coordinator.py`, `frontend/panel.js` und
+`frontend/panel-utils.mjs`; die passenden Regressionen liegen vor allem in
+`tests/test_finanzplaner_core.py`, `tests/test_account_import.py`,
+`tests/test_accounts_and_migration.py`, `tests/test_rules.py` und
+`custom_components/finanzplaner/frontend/panel-utils.test.mjs`.
 
-## GitHub- und Release-Befehle
+## Arbeitsregeln
 
-- GitHub-Befehle wie `gh`, `git push`, `git fetch`, `git pull`, `git ls-remote` und das Anlegen oder Veröffentlichen von Releases müssen immer außerhalb der Sandbox mit expliziter Freigabe ausgeführt werden.
-- Release Notes müssen als korrekt gerendertes Markdown erscheinen: echte Zeilenumbrüche und Leerzeilen verwenden, niemals Escape-Sequenzen wie `\\n` wörtlich in den Release-Text schreiben. Vor dem Veröffentlichen Überschrift, Listen und Absätze auf saubere Darstellung prüfen.
+- Bestehende Benutzeränderungen bleiben erhalten. Niemals unbeteiligte Dateien
+  formatieren, überschreiben oder mit `git add -A` aufnehmen.
+- Suche zuerst mit `rg` oder `rg --files`, eng gefiltert und ohne generierte
+  oder abhängige Verzeichnisse breit einzulesen. Große Dateien nur in den
+  benötigten Ausschnitten öffnen.
+- Vollständige IBANs und rohe Bankdaten bleiben lokal; API, Oberfläche, Logs
+  und öffentliche Dateien verwenden Maskierung.
+- Schemaänderungen brauchen Migration und Regressionstests. Direkte
+  Änderungen an Home-Assistant-`.storage`-Dateien sind verboten.
+- Kontoinhaber beschreiben Zahlungsquellen, nicht automatisch Buchungsziele.
+  Ziele, Bereiche, Kategorien, Projekte und Tiere bleiben fachlich getrennt.
+- Änderungen an HTML, CSS, clientseitigem JavaScript, Layout, Navigation,
+  Formularen, Tabellen, Zuständen, Barrierefreiheit oder visueller Politur
+  erfordern den Projekt-Skill `$impeccable`.
+- Für Markdown- oder Skill-Änderungen genügt der schnelle Check; für Code gilt
+  die [Prüfmatrix](docs/workflows/testing.md).
 
-## Verbindliche Frontend-Regel
+## Kanonische Standardprüfungen
 
-Bei jeder Arbeit an HTML, CSS, clientseitigem JavaScript, Layout, Navigation,
-Formularen, Tabellen, Zuständen, Barrierefreiheit oder visueller Politur muss
-die Skill `$impeccable` verwendet werden. Ihre Nutzung ist verpflichtend und
-darf nicht übersprungen oder durch eine eigene Vorgehensweise ersetzt werden.
+Die folgenden Namen sind die kanonischen Einstiegspunkte des Harness:
 
-`$impeccable` muss vor Beginn der UI-Arbeit erfolgreich geladen werden. Wenn
-der Launcher oder ein erforderlicher Skill-Schritt nicht funktioniert, muss die
-UI-Arbeit pausieren, bis das Problem behoben ist.
+```bash
+scripts/check-fast
+scripts/test-file <path>
+scripts/check-full
+```
+
+`scripts/test-file <path>` erhält den konkreten passenden Testpfad, zum
+Beispiel `tests/test_rules.py`. Die Auswahl der Befehle richtet sich
+nach `docs/workflows/testing.md`.
+
+GitHub-Befehle, Pushes, Tags und Release-Veröffentlichungen benötigen eine
+explizite Freigabe. Die Release-Reihenfolge steht in
+[docs/workflows/release.md](docs/workflows/release.md).

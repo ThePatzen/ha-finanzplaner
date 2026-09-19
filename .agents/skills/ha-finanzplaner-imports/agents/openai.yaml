@@ -1,0 +1,4 @@
+interface:
+  display_name: "HA Finanzplaner Importe"
+  short_description: "Bank- und Excelimporte routen"
+  default_prompt: "Use $ha-finanzplaner-imports to route a Finanzplaner import change through the canonical project documentation and focused tests."

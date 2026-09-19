@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+    echo "Usage: scripts/test-file <repository-relative test or source path>" >&2
+    exit 2
+fi
+
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+target="$1"
+
+case "$target" in
+    tests/test*.py)
+        if [[ ! -f "$target" ]]; then
+            echo "Test file not found: $target" >&2
+            exit 2
+        fi
+        python3 -m unittest discover -s tests -p "$(basename "$target")" -v
+        ;;
+    custom_components/finanzplaner/frontend/*.test.mjs)
+        if ! command -v node >/dev/null; then
+            echo "Node.js is required for frontend checks. Install Node.js to run this command." >&2
+            exit 2
+        fi
+        node --test "$target"
+        ;;
+    custom_components/finanzplaner/frontend/*.js|custom_components/finanzplaner/frontend/*.mjs)
+        if ! command -v node >/dev/null; then
+            echo "Node.js is required for frontend checks. Install Node.js to run this command." >&2
+            exit 2
+        fi
+        node --check "$target"
+        ;;
+    *)
+        echo "Usage: scripts/test-file <repository-relative test or source path>" >&2
+        exit 2
+        ;;
+esac

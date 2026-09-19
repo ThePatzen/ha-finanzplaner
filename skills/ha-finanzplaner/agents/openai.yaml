@@ -1,4 +1,0 @@
-interface:
-  display_name: "HA Finanzplaner"
-  short_description: "Projektkontext und Finanzplaner-Roadmap"
-  default_prompt: "Use $ha-finanzplaner to continue implementing the Home Assistant Finanzplaner with its existing architecture and roadmap."

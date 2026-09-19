@@ -1,0 +1,4 @@
+interface:
+  display_name: "HA Finanzplaner Frontend"
+  short_description: "Frontend-Änderungen sicher umsetzen"
+  default_prompt: "Use $ha-finanzplaner-frontend when changing the Finanzplaner panel or frontend tests."

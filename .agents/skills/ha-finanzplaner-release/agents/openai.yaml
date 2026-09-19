@@ -1,0 +1,4 @@
+interface:
+  display_name: "HA Finanzplaner Release"
+  short_description: "Releases sicher vorbereiten"
+  default_prompt: "Use $ha-finanzplaner-release when preparing an authorized Finanzplaner release."

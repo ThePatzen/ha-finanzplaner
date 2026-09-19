@@ -1,0 +1,4 @@
+interface:
+  display_name: "HA Finanzplaner Verification"
+  short_description: "Prüfungen evidenzbasiert auswählen"
+  default_prompt: "Use $ha-finanzplaner-verification when choosing or reporting Finanzplaner verification commands."
