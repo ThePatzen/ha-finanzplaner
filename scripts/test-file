@@ -12,6 +12,10 @@ target="$1"
 
 case "$target" in
     tests/test*.py)
+        if [[ ! -f "$target" ]]; then
+            echo "Test file not found: $target" >&2
+            exit 2
+        fi
         python3 -m unittest discover -s tests -p "$(basename "$target")" -v
         ;;
     custom_components/finanzplaner/frontend/*.test.mjs)
