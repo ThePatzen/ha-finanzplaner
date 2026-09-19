@@ -1,4 +1,4 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, ruleConflictIds, rulePayloadFromForm, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, ruleConflictIds, rulePayloadFromForm, ruleSelectionState, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const BREAKDOWN_URL = "/api/finanzplaner/overview/breakdown";
@@ -12,6 +12,8 @@ const REVIEW_URL = "/api/finanzplaner/bookings/unresolved";
 const RESOLVED_URL = "/api/finanzplaner/bookings/resolved";
 const APPLY_RULES_URL = "/api/finanzplaner/bookings/apply-rules";
 const RULES_URL = "/api/finanzplaner/rules";
+const RULE_EXPORT_URL = "/api/finanzplaner/rules/export";
+const RULE_IMPORT_URL = "/api/finanzplaner/rules/import";
 const BOOKINGS_URL = "/api/finanzplaner/bookings";
 const IMPORTS_URL = "/api/finanzplaner/imports";
 const REPORT_URL = "/api/finanzplaner/report";
@@ -736,6 +738,14 @@ const styles = `
   .rules-view button:disabled, .review-view button:disabled { cursor: not-allowed; opacity: 0.55; }
   .rules-view .management-table-wrap:focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 3px; }
   .rules-view .management-table { min-inline-size: 58rem; }
+  .rule-selection-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-block-start: 1rem; padding: 0.65rem 0.8rem; border: 1px solid var(--fp-line); border-radius: 0.55rem; background: rgb(255 254 249 / 0.78); }
+  .rule-selection-all, .rule-selection { min-block-size: 3rem; min-inline-size: 3rem; display: inline-flex; align-items: center; gap: 0.5rem; }
+  .rule-selection-all { color: var(--fp-ink); font-size: 0.8rem; font-weight: 800; }
+  .rule-selection-all input, .rule-selection input { inline-size: 1.2rem; block-size: 1.2rem; accent-color: var(--fp-cyan); }
+  .rule-selection-summary { flex: 1 1 12rem; margin: 0; color: var(--fp-muted); font-size: 0.78rem; }
+  .rules-view .selection-column, .rules-view .selection-cell { inline-size: 3rem; padding-inline: 0.5rem; text-align: center; }
+  .rules-view tbody tr:has([data-rule-select]:checked) { background: rgb(223 244 247 / 0.45); }
+  .rules-view .rule-selection-toolbar button { min-block-size: 3rem; }
   .rules-view .management-table td, .rules-view .management-table tbody th { min-inline-size: 9rem; max-inline-size: 24rem; overflow-wrap: anywhere; }
   .rules-view .management-table .table-number { min-inline-size: 6rem; }
   .rules-view .management-table ul { margin: 0; padding-inline-start: 1.1rem; }
@@ -1224,6 +1234,10 @@ class FinanzplanerPanel extends HTMLElement {
     this._rulesLoading = false;
     this._rulesLoadFailed = false;
     this._rulesRequest = null;
+    this._selectedRuleIds = new Set();
+    this._ruleExporting = false;
+    this._ruleImporting = false;
+    this._ruleDeleting = false;
     this._ruleEditingId = null;
     this._ruleMessage = "";
     this._ruleDraft = null;
@@ -1708,6 +1722,8 @@ class FinanzplanerPanel extends HTMLElement {
       if (this._rulesRequest !== request) return;
       const [rules, accounts, persons, pets, catalogs] = results;
       this._rules = rules.rules || [];
+      const ruleIds = new Set(this._rules.map((rule) => String(rule.id)));
+      this._selectedRuleIds = new Set([...this._selectedRuleIds].filter((id) => ruleIds.has(id)));
       this._accounts = accounts.accounts || [];
       this._persons = persons.persons || [];
       this._pets = pets.pets || [];
@@ -1722,6 +1738,155 @@ class FinanzplanerPanel extends HTMLElement {
         this._rulesLoading = false;
         this._rulesRequest = null;
       }
+    }
+  }
+
+  _syncRuleSelectionControls() {
+    const state = ruleSelectionState(this._rules, this._selectedRuleIds);
+    this.shadowRoot.querySelectorAll("[data-rule-select]").forEach((input) => {
+      input.checked = this._selectedRuleIds.has(String(input.dataset.ruleId));
+    });
+    const selectAll = this.shadowRoot.querySelector("[data-rule-select-all]");
+    if (selectAll) {
+      selectAll.checked = state.allSelected;
+      selectAll.indeterminate = state.someSelected;
+    }
+    const summary = this.shadowRoot.querySelector("[data-rule-selection-summary]");
+    if (summary) summary.textContent = `${state.selectedCount} von ${this._rules.length} ausgewählt`;
+    const exportButton = this.shadowRoot.querySelector("[data-rule-export]");
+    if (exportButton) {
+      exportButton.disabled = state.selectedCount === 0 || this._ruleExporting || this._ruleImporting || this._ruleDeleting;
+      exportButton.textContent = this._ruleExporting ? "JSON wird erstellt …" : "JSON exportieren";
+    }
+    const deleteButton = this.shadowRoot.querySelector("[data-rule-delete-selected]");
+    if (deleteButton) {
+      deleteButton.disabled = state.selectedCount === 0 || this._ruleExporting || this._ruleImporting || this._ruleDeleting;
+      deleteButton.textContent = this._ruleDeleting ? "Regeln werden gelöscht …" : "Auswahl löschen";
+    }
+    const importButton = this.shadowRoot.querySelector("[data-rule-import]");
+    if (importButton) {
+      importButton.disabled = this._ruleExporting || this._ruleImporting || this._ruleDeleting;
+      importButton.textContent = this._ruleImporting ? "JSON wird importiert …" : "JSON importieren";
+    }
+  }
+
+  _updateRuleSelection(event) {
+    const input = event.currentTarget;
+    if (input.hasAttribute("data-rule-select-all")) {
+      if (input.checked) this._rules.forEach((rule) => this._selectedRuleIds.add(String(rule.id)));
+      else this._selectedRuleIds.clear();
+    } else if (input.checked) {
+      this._selectedRuleIds.add(String(input.dataset.ruleId));
+    } else {
+      this._selectedRuleIds.delete(String(input.dataset.ruleId));
+    }
+    this._syncRuleSelectionControls();
+  }
+
+  _downloadRuleExport(payload) {
+    const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `finanzplaner-regeln-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async _exportSelectedRules() {
+    if (this._ruleExporting) return;
+    const ruleIds = [...this._selectedRuleIds].filter((ruleId) =>
+      this._rules.some((rule) => String(rule.id) === ruleId),
+    );
+    if (!ruleIds.length) return;
+    this._ruleExporting = true;
+    this._ruleMessage = `${ruleIds.length} ${ruleIds.length === 1 ? "Regel wird" : "Regeln werden"} exportiert …`;
+    this._render();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, RULE_EXPORT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule_ids: ruleIds }),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Die Regeln konnten nicht exportiert werden."));
+      this._downloadRuleExport(result);
+      this._ruleMessage = `${ruleIds.length} ${ruleIds.length === 1 ? "Regel wurde" : "Regeln wurden"} als JSON exportiert.`;
+    } catch (error) {
+      this._ruleMessage = error.message || "Die Regeln konnten nicht exportiert werden.";
+    } finally {
+      this._ruleExporting = false;
+      this._render();
+    }
+  }
+
+  async _importRules(event) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file || this._ruleImporting) return;
+    this._ruleImporting = true;
+    this._ruleMessage = "JSON wird importiert …";
+    this._render();
+    try {
+      let payload;
+      try {
+        payload = JSON.parse(await file.text());
+      } catch {
+        throw new Error("Die ausgewählte Datei enthält kein gültiges JSON.");
+      }
+      const response = await fetchWithHomeAssistantAuth(this._hass, RULE_IMPORT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Die Regeln konnten nicht importiert werden."));
+      await this._loadRules({ fresh: true });
+      const imported = Number(result?.imported) || 0;
+      this._ruleMessage = `${imported} ${imported === 1 ? "Regel wurde" : "Regeln wurden"} ergänzt.`;
+    } catch (error) {
+      this._ruleMessage = error.message || "Die Regeln konnten nicht importiert werden.";
+    } finally {
+      this._ruleImporting = false;
+      this._render();
+    }
+  }
+
+  async _deleteSelectedRules() {
+    if (this._ruleDeleting || !(await this._confirmDiscardUnsavedChanges())) return;
+    const ruleIds = [...this._selectedRuleIds].filter((ruleId) =>
+      this._rules.some((rule) => String(rule.id) === ruleId),
+    );
+    if (!ruleIds.length) return;
+    const noun = ruleIds.length === 1 ? "Regel" : "Regeln";
+    if (!(await this._requestConfirmation(`Möchtest du ${ruleIds.length} ${noun} dauerhaft löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.`, {
+      title: `${noun} löschen`,
+      confirmLabel: "Dauerhaft löschen",
+    }))) return;
+    this._ruleDeleting = true;
+    this._ruleMessage = `${ruleIds.length} ${noun} werden gelöscht …`;
+    this._render();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, RULES_URL, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule_ids: ruleIds }),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Die Regeln konnten nicht gelöscht werden."));
+      this._selectedRuleIds.clear();
+      await this._loadRules({ fresh: true });
+      const deleted = Number(result?.deleted) || ruleIds.length;
+      this._ruleMessage = `${deleted} ${deleted === 1 ? "Regel wurde" : "Regeln wurden"} dauerhaft gelöscht.`;
+    } catch (error) {
+      this._ruleMessage = error.message || "Die Regeln konnten nicht gelöscht werden.";
+    } finally {
+      this._ruleDeleting = false;
+      this._render();
+      this._focusContent();
     }
   }
 
@@ -3401,7 +3566,7 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _hasPendingSubmissions() {
-    return this._deletingBookings || this._ruleSubmitting || this._planItemSubmissions.size > 0
+    return this._deletingBookings || this._ruleSubmitting || this._ruleExporting || this._ruleImporting || this._ruleDeleting || this._planItemSubmissions.size > 0
       || this._petSubmissions.size > 0
       || this._feedProfileSubmissions.size > 0
       || this._catalogSubmissions.size > 0
@@ -3992,6 +4157,7 @@ class FinanzplanerPanel extends HTMLElement {
       if (dialog && !dialog.open && typeof dialog.showModal === "function") dialog.showModal();
     }
     if (this._view === "rules" && this._ruleEditingId) this._syncRuleFormState();
+    if (this._view === "rules" && !this._ruleEditingId) this._syncRuleSelectionControls();
     this.shadowRoot.querySelectorAll("[data-assignment-form]").forEach((form) => this._updateAllocationSummary(form));
     if (["review", "resolved"].includes(this._view)) this._syncBookingSelectionControls(this._view);
     this._syncFeedbackPresenter();
@@ -4026,6 +4192,11 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-open-rule-editor]").forEach((button) => button.addEventListener("click", () => this._openRuleEditor(button.dataset.openRuleEditor)));
     this.shadowRoot.querySelector("[data-close-rule-editor]")?.addEventListener("click", () => this._closeRuleEditor());
     this.shadowRoot.querySelectorAll("[data-deactivate-rule]").forEach((button) => button.addEventListener("click", () => this._deactivateRule(button.dataset.deactivateRule)));
+    this.shadowRoot.querySelectorAll("[data-rule-select], [data-rule-select-all]").forEach((input) => input.addEventListener("change", (event) => this._updateRuleSelection(event)));
+    this.shadowRoot.querySelector("[data-rule-export]")?.addEventListener("click", () => this._exportSelectedRules());
+    this.shadowRoot.querySelector("[data-rule-delete-selected]")?.addEventListener("click", () => this._deleteSelectedRules());
+    this.shadowRoot.querySelector("[data-rule-import]")?.addEventListener("click", () => this.shadowRoot.querySelector("[data-rule-import-file]")?.click());
+    this.shadowRoot.querySelector("[data-rule-import-file]")?.addEventListener("change", (event) => this._importRules(event));
     this.shadowRoot.querySelectorAll("[data-rule-from-booking]").forEach((button) => button.addEventListener("click", () => this._openRuleFromBooking(button.dataset.ruleFromBooking)));
     this.shadowRoot.querySelectorAll("[data-accept-suggestion]").forEach((button) => button.addEventListener("click", () => this._acceptSuggestion(button.dataset.acceptSuggestion)));
     this.shadowRoot.querySelectorAll("[data-unresolve-booking]").forEach((button) => button.addEventListener("click", () => this._unresolveBooking(button.dataset.unresolveBooking)));
@@ -4975,7 +5146,8 @@ class FinanzplanerPanel extends HTMLElement {
   }
 
   _rulesOverviewTemplate() {
-    const disabled = this._ruleSubmitting ? " disabled" : "";
+    const disabled = this._ruleSubmitting || this._ruleExporting || this._ruleImporting || this._ruleDeleting ? " disabled" : "";
+    const selectionState = ruleSelectionState(this._rules, this._selectedRuleIds);
     const accountLabelForRule = (rule) => {
       const account = this._accounts.find((entry) => entry.id === rule.account_id);
       return !rule.account_id ? "Alle Konten" : account ? `${account.label || account.iban_masked || account.id}${account.active === false ? " (archiviert)" : ""}` : `${rule.account_id} (Konto fehlt)`;
@@ -4998,13 +5170,18 @@ class FinanzplanerPanel extends HTMLElement {
           const invalid = Object.keys(this._ruleValidationErrors(this._ruleDraftFromRule(rule))).length > 0;
           const conflictLabels = ruleConflictIds(rule).map((id) => this._rules.find((candidate) => String(candidate.id) === String(id))?.label || `Regel ${id}`);
           const conflictMarkup = conflictLabels.length ? `<span class="rule-conflict-note">Konflikt mit: ${escapeHtml(conflictLabels.join(", "))}</span>` : "";
-          return `<tr><th scope="row">${escapeHtml(rule.label)}</th><td>${rule.active === false ? "Deaktiviert" : conflictLabels.length ? "Aktiv · Regelkonflikt" : "Aktiv"}${invalid ? " · Angaben prüfen" : ""}${conflictMarkup}</td><td class="table-number">${escapeHtml(rule.priority)}</td><td>${escapeHtml(rule.counterparty)}${rule.purpose_contains ? `<p>Verwendungszweck enthält: ${escapeHtml(rule.purpose_contains)}</p>` : ""}</td><td><ul>${(rule.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row, true))}</li>`).join("")}</ul></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-rule-editor="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} bearbeiten"${disabled}>Bearbeiten</button> <button class="table-edit-button" type="button" data-deactivate-rule="${escapeHtml(rule.id)}" aria-label="Regel ${escapeHtml(rule.label)} deaktivieren"${this._ruleSubmitting || rule.active === false ? " disabled" : ""}>Deaktivieren</button></td></tr>`;
+          const ruleId = String(rule.id);
+          const selectionId = `rule-select-${ruleId}`;
+          const selected = this._selectedRuleIds.has(ruleId);
+          return `<tr${selected ? " class=\"rule-row--selected\"" : ""}><td class="selection-cell"><label class="rule-selection" for="${escapeHtml(selectionId)}"><input id="${escapeHtml(selectionId)}" name="selected_rules" value="${escapeHtml(ruleId)}" type="checkbox" data-rule-select data-rule-id="${escapeHtml(ruleId)}"${selected ? " checked" : ""}${disabled}><span class="visually-hidden">Regel ${escapeHtml(rule.label)} auswählen</span></label></td><th scope="row">${escapeHtml(rule.label)}</th><td>${rule.active === false ? "Deaktiviert" : conflictLabels.length ? "Aktiv · Regelkonflikt" : "Aktiv"}${invalid ? " · Angaben prüfen" : ""}${conflictMarkup}</td><td class="table-number">${escapeHtml(rule.priority)}</td><td>${escapeHtml(rule.counterparty)}${rule.purpose_contains ? `<p>Verwendungszweck enthält: ${escapeHtml(rule.purpose_contains)}</p>` : ""}</td><td><ul>${(rule.allocations || []).map((row) => `<li>${escapeHtml(this._ruleAllocationLabel(row, true))}</li>`).join("")}</ul></td><td class="table-actions"><button class="table-edit-button" type="button" data-open-rule-editor="${escapeHtml(ruleId)}" aria-label="Regel ${escapeHtml(rule.label)} bearbeiten"${disabled}>Bearbeiten</button> <button class="table-edit-button" type="button" data-deactivate-rule="${escapeHtml(ruleId)}" aria-label="Regel ${escapeHtml(rule.label)} deaktivieren"${this._ruleSubmitting || rule.active === false ? " disabled" : ""}>Deaktivieren</button></td></tr>`;
         }).join("");
-        return `<tbody><tr class="rule-account-group"><th scope="rowgroup" colspan="6">${escapeHtml(group.label)}</th></tr>${rows}</tbody>`;
+        return `<tbody><tr class="rule-account-group"><th scope="rowgroup" colspan="7">${escapeHtml(group.label)}</th></tr>${rows}</tbody>`;
       }).join("");
-    const body = groupsMarkup || `<tbody><tr><td colspan="6">Noch keine Regeln angelegt. Mit „Regel anlegen“ legst du Bedingungen und eine Aufteilungsvorlage für künftige Vorschläge fest.</td></tr></tbody>`;
+    const body = groupsMarkup || `<tbody><tr><td colspan="7">Noch keine Regeln angelegt. Mit „Regel anlegen“ legst du Bedingungen und eine Aufteilungsvorlage für künftige Vorschläge fest.</td></tr></tbody>`;
+    const selectionDisabled = !this._rules.length || Boolean(disabled);
     return `<div class="management-list-toolbar"><p>${this._rules.filter((rule) => rule.active !== false).length} aktive Regeln · Deaktivierte Regeln bleiben erhalten.</p><button class="table-new-button" type="button" data-open-rule-editor="new"${disabled}>Regel anlegen ${icon("plus", 17)}</button></div>
-      <div class="management-table-wrap" tabindex="0" role="region" aria-label="Regelübersicht, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Regeln für Buchungsvorschläge</caption><thead><tr><th scope="col">Regelname</th><th scope="col">Status</th><th scope="col">Priorität</th><th scope="col">Zahlungsempfänger</th><th scope="col">Aufteilung</th><th scope="col">Aktionen</th></tr></thead>${body}</table></div>`;
+      <div class="rule-selection-toolbar" aria-label="Regelauswahl"><label class="rule-selection-all" for="rules-select-all"><input id="rules-select-all" name="select_all_rules" type="checkbox" data-rule-select-all aria-controls="rules-table"${selectionState.allSelected ? " checked" : ""}${selectionDisabled ? " disabled" : ""}><span>Alle auswählen</span></label><p class="rule-selection-summary" data-rule-selection-summary aria-live="polite">${selectionState.selectedCount} von ${this._rules.length} ausgewählt</p><button class="bulk-export-button" type="button" data-rule-export${selectionState.selectedCount === 0 || disabled ? " disabled" : ""}>JSON exportieren</button><button class="bulk-export-button" type="button" data-rule-import${disabled ? " disabled" : ""}>JSON importieren</button><input class="visually-hidden" type="file" data-rule-import-file accept=".json,application/json" aria-label="Regel-JSON auswählen"><button class="bulk-delete-button" type="button" data-rule-delete-selected${selectionState.selectedCount === 0 || disabled ? " disabled" : ""}>Auswahl löschen</button></div>
+      <div class="management-table-wrap" tabindex="0" role="region" aria-label="Regelübersicht, horizontal scrollbar"><table id="rules-table" class="management-table"><caption class="visually-hidden">Regeln für Buchungsvorschläge</caption><thead><tr><th scope="col" class="selection-column"><span class="visually-hidden">Auswahl</span></th><th scope="col">Regelname</th><th scope="col">Status</th><th scope="col">Priorität</th><th scope="col">Zahlungsempfänger</th><th scope="col">Aufteilung</th><th scope="col">Aktionen</th></tr></thead>${body}</table></div>`;
   }
 
   _openResolvedAllocationEditor(bookingId) {

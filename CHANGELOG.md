@@ -8,6 +8,12 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.19.0] – 2026-09-19
+
+- Regeln können einzeln oder vollständig markiert und als versioniertes JSON exportiert werden.
+- JSON-Regelimporte ergänzen den Bestand atomar mit neuen lokalen IDs.
+- Ausgewählte Regeln können nach Bestätigung dauerhaft gelöscht werden.
+
 ## [0.18.0] – 2026-09-19
 
 - Erneute Bankimporte speichern Duplikate als eigene prüfbare Buchungen mit Status `duplicate` und Originalverweis.
@@ -216,6 +222,7 @@ Erste vorbereitete vertikale Version:
 [0.15.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.15.0
 [0.16.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.16.0
 [0.18.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.18.0
+[0.19.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.19.0
 [0.17.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.17.0
 [0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0
 [0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0

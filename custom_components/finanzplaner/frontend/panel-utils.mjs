@@ -134,6 +134,19 @@ export function bookingSelectionState(bookings = [], selectedIds = []) {
   };
 }
 
+export function ruleSelectionState(rules = [], selectedIds = []) {
+  const selected = new Set([...selectedIds].map((id) => String(id)));
+  const selectedCount = rules.reduce(
+    (count, rule) => count + (selected.has(String(rule?.id)) ? 1 : 0),
+    0,
+  );
+  return {
+    selectedCount,
+    allSelected: rules.length > 0 && selectedCount === rules.length,
+    someSelected: selectedCount > 0 && selectedCount < rules.length,
+  };
+}
+
 export function suggestionDraft(booking) {
   return booking?.status === "suggested"
     ? (booking.suggestion?.allocations || []).map((row) => ({ ...row }))

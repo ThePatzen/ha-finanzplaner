@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.18.0 umfasst prüfbare Duplikatbuchungen, sichtbare Regelkonflikte, die gebündelte Sieben-Punkte-Navigation, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
+Version 0.19.0 umfasst den JSON-Export/-Import und das dauerhafte Löschen ausgewählter Regeln, prüfbare Duplikatbuchungen, sichtbare Regelkonflikte, die gebündelte Sieben-Punkte-Navigation, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
@@ -116,6 +116,8 @@ Kontoinhaber und Zuordnungsziele stammen aus den vorhandenen Home-Assistant-`per
 
 Die Regelübersicht gruppiert die Regeln nach Konto und blendet die wiederholte Konto-Spalte aus. Die Kontogruppen werden alphabetisch angezeigt; innerhalb einer Gruppe entspricht die Reihenfolge dem Matching: höchste Priorität zuerst, bei gleicher Priorität alphabetisch nach Regelname.
 
+Regeln lassen sich in der Übersicht einzeln oder mit `Alle auswählen` markieren. Die Auswahl kann als versioniertes JSON exportiert werden. Über `JSON importieren` werden Regeldefinitionen ergänzt; der Import validiert die gesamte Datei vor dem Speichern und vergibt neue lokale Regel-IDs. Mit `Auswahl löschen` können markierte Regeln nach einer Bestätigung dauerhaft entfernt werden. Bereits übernommene Buchungen und ihre gespeicherten Regel-Snapshots bleiben dabei unverändert.
+
 Für eine offene Buchung prüft Finanzplaner nur aktive Regeln. Wenn die Regel ein Konto festlegt, muss die Buchung genau diesem Konto entsprechen. Wenn die Regel einen Zahlungsempfänger festlegt, muss auch dieser vollständige Text passen; fehlt die Bedingung, wird sie nicht geprüft. Der optionale Verwendungszweckfilter muss zusätzlich zutreffen. Die Regel mit der höchsten Priorität liefert den Vorschlag. Treffen mehrere Regeln mit gleicher höchster Priorität zu, zeigt die Prüfliste `Regelkonflikt` an; die Buchung wird nicht automatisch übernommen. Ein eindeutiger Treffer wird nur übernommen, wenn seine Aufteilung serverseitig weiterhin gültig ist.
 
 Die Regelliste zeigt zusätzlich aktive Regeln gleicher Priorität, deren Bedingungen dieselbe Buchung treffen könnten, als `Regelkonflikt` und nennt die jeweils betroffenen Regeln. Die Anzeige ist ein Prüfhinweis; die Prioritäts- und Matchingregeln bleiben unverändert.
@@ -136,7 +138,7 @@ Die `Buchungshistorie` in `Buchungen prüfen` lässt sich über Suche (`q` für 
 
 Wird eine bereits bekannte Bankbuchung erneut importiert, bleibt die ursprüngliche Buchung unverändert und der neue Datensatz wird mit Status `duplicate` sowie einem Verweis auf das Original gespeichert. In der Prüfliste erscheinen solche Einträge unter `Duplikat prüfen`; dort können die Details kontrolliert und der Eintrag gelöscht oder ausdrücklich zugeordnet werden.
 
-Regeln und Vorschläge verarbeitet Finanzplaner lokal in Home Assistant. Vollständige Kontoreferenzen bleiben im lokalen Speicher; Oberfläche und API zeigen nur maskierte Kontodaten.
+Regeln und Vorschläge verarbeitet Finanzplaner lokal in Home Assistant. Vollständige Kontoreferenzen bleiben im lokalen Speicher; Oberfläche und normale API-Antworten zeigen nur maskierte Kontodaten. Der ausdrücklich ausgelöste Regel-JSON-Export enthält die vollständige Gegenkonto-Bedingung, damit ein Reimport die Regel nicht verändert.
 
 Regeln können neben Konto, Zahlungsempfänger und Verwendungszweck auch die `Richtung` (`Einnahme` oder `Ausgabe`), ein maskiertes `Gegenkonto` (`counterparty_account`) sowie eine inklusive `Betragsspanne` mit `Mindestbetrag` (`amount_min`) und `Höchstbetrag` (`amount_max`) enthalten. Eine Regel benötigt mindestens eine dieser Bedingungen; die Betragsgrenzen werden gegen den absoluten Buchungsbetrag geprüft.
 

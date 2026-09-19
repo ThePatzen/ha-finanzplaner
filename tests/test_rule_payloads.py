@@ -396,6 +396,118 @@ class RuleViewTests(unittest.TestCase):
         self.assertFalse(result["rule"]["active"])
         self.assertEqual(self.coordinator.store.save_count, 1)
 
+    def test_rules_export_returns_selected_editable_rules_without_display_fields(self):
+        self.coordinator.store.data["rules"][0]["counterparty_account"] = "AT123456789012345678"
+        result = asyncio.run(
+            self.http.RuleExportView().post(
+                self._request({"rule_ids": ["rule-1"]})
+            )
+        )
+
+        self.assertEqual(result["version"], 1)
+        self.assertEqual(len(result["rules"]), 1)
+        exported = result["rules"][0]
+        self.assertEqual(exported["label"], "Bestehende Regel")
+        self.assertEqual(exported["counterparty_account"], "AT123456789012345678")
+        self.assertNotIn("id", exported)
+        self.assertNotIn("account", exported)
+        self.assertNotIn("conflict_rule_ids", exported)
+
+    def test_rules_import_appends_rules_with_new_ids(self):
+        payload = {
+            "version": 1,
+            "rules": [
+                {
+                    "label": "Importierte Regel",
+                    "active": True,
+                    "priority": 120,
+                    "account_id": "account-1",
+                    "counterparty": "Import AG",
+                    "purpose_contains": None,
+                    "direction": "expense",
+                    "counterparty_account": None,
+                    "amount_min": None,
+                    "amount_max": None,
+                    "allocations": [{"target": "household", "share_percent": 100}],
+                }
+            ],
+        }
+
+        result = asyncio.run(self.http.RuleImportView().post(self._request(payload)))
+
+        self.assertEqual(result["imported"], 1)
+        self.assertEqual(len(self.coordinator.store.data["rules"]), 2)
+        imported = self.coordinator.store.data["rules"][-1]
+        self.assertEqual(imported["label"], "Importierte Regel")
+        self.assertNotEqual(imported["id"], "rule-1")
+        self.assertEqual(self.coordinator.store.save_count, 1)
+
+    def test_rules_import_validates_all_rules_before_mutating(self):
+        before = deepcopy(self.coordinator.store.data)
+        payload = {
+            "version": 1,
+            "rules": [
+                {
+                    "label": "Gültige Regel",
+                    "active": True,
+                    "priority": 120,
+                    "account_id": "account-1",
+                    "counterparty": "Import AG",
+                    "purpose_contains": None,
+                    "direction": None,
+                    "counterparty_account": None,
+                    "amount_min": None,
+                    "amount_max": None,
+                    "allocations": [{"target": "household", "share_percent": 100}],
+                },
+                {
+                    "label": "Ungültige Regel",
+                    "active": True,
+                    "priority": 120,
+                    "account_id": "account-1",
+                    "counterparty": None,
+                    "purpose_contains": None,
+                    "direction": None,
+                    "counterparty_account": None,
+                    "amount_min": None,
+                    "amount_max": None,
+                    "allocations": [{"target": "person.unknown", "share_percent": 100}],
+                },
+            ],
+        }
+
+        with self.assertRaises(self.bad_request):
+            asyncio.run(self.http.RuleImportView().post(self._request(payload)))
+
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+
+    def test_rules_delete_removes_selected_rules(self):
+        second = deepcopy(self.coordinator.store.data["rules"][0])
+        second["id"] = "rule-2"
+        self.coordinator.store.data["rules"].append(second)
+
+        result = asyncio.run(
+            self.http.RulesView().delete(self._request({"rule_ids": ["rule-1", "rule-2"]}))
+        )
+
+        self.assertEqual(result["deleted"], 2)
+        self.assertEqual(self.coordinator.store.data["rules"], [])
+        self.assertEqual(self.coordinator.store.save_count, 1)
+
+    def test_rules_delete_rejects_unknown_rule_without_mutating(self):
+        before = deepcopy(self.coordinator.store.data)
+
+        with self.assertRaises(self.not_found):
+            asyncio.run(
+                self.http.RulesView().delete(
+                    self._request({"rule_ids": ["rule-1", "rule-missing"]})
+                )
+            )
+
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.save_count, 0)
+
     def test_from_booking_requires_resolved_booking(self):
         before = deepcopy(self.coordinator.store.data)
 
@@ -1316,6 +1428,8 @@ class RuleRegistrationTests(unittest.TestCase):
             http.RulesView,
             http.RuleView,
             http.RuleFromBookingView,
+            http.RuleExportView,
+            http.RuleImportView,
             http.BookingDetailsView,
             http.BookingDeleteView,
             http.BookingExportView,

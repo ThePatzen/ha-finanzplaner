@@ -54,7 +54,9 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
         PlanItemView,
         PlanItemsView,
         PersonsView,
+        RuleExportView,
         RuleFromBookingView,
+        RuleImportView,
         RuleView,
         ReportView,
         RulesView,
@@ -79,6 +81,8 @@ async def async_setup(hass: Any, config: dict[str, Any]) -> bool:
     hass.http.register_view(CatalogEntriesView)
     hass.http.register_view(CatalogEntryView)
     hass.http.register_view(RulesView)
+    hass.http.register_view(RuleExportView)
+    hass.http.register_view(RuleImportView)
     hass.http.register_view(RuleView)
     hass.http.register_view(RuleFromBookingView)
     hass.http.register_view(UnresolvedBookingsView)

@@ -747,6 +747,27 @@ def _rule_draft(rule: dict[str, object]) -> dict[str, object]:
     return {field: rule.get(field) for field in RULE_FIELDS}
 
 
+_RULE_EXPORT_FIELDS = (
+    "label",
+    "active",
+    "priority",
+    "account_id",
+    "counterparty",
+    "counterparty_account",
+    "purpose_contains",
+    "direction",
+    "amount_min",
+    "amount_max",
+    "allocations",
+)
+
+
+def _rule_export_payload(rule: dict[str, object]) -> dict[str, object]:
+    """Return only portable, editable rule data for an explicit export."""
+
+    return {field: rule.get(field) for field in _RULE_EXPORT_FIELDS}
+
+
 def _rule_list(coordinator: FinanzplanerCoordinator) -> list[dict[str, object]]:
     rules = coordinator.store.data.get("rules")
     return rules if isinstance(rules, list) else []
@@ -1998,6 +2019,126 @@ class RulesView(HomeAssistantView):
             else None
         )
         return self.json(_response_payload({"rule": rule_payload(rule, account)}))
+
+    async def delete(self, request: web.Request) -> web.Response:
+        """Permanently delete a selected set of rules."""
+
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Löschung ist kein gültiges JSON.") from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Löschung muss als Objekt übermittelt werden.")
+        rule_ids = payload.get("rule_ids")
+        if not isinstance(rule_ids, list) or not rule_ids or not all(
+            isinstance(rule_id, str) and rule_id.strip() for rule_id in rule_ids
+        ):
+            raise web.HTTPBadRequest(text="Bitte mindestens eine Regel zum Löschen auswählen.")
+        if len(set(rule_ids)) != len(rule_ids):
+            raise web.HTTPBadRequest(text="Eine Regel darf nur einmal zum Löschen ausgewählt werden.")
+        rules = _rule_list(coordinator)
+        rules_by_id = {
+            str(rule.get("id")): rule
+            for rule in rules
+            if isinstance(rule, dict) and isinstance(rule.get("id"), str)
+        }
+        missing = [rule_id for rule_id in rule_ids if rule_id not in rules_by_id]
+        if missing:
+            raise web.HTTPNotFound(text=f"Regel nicht gefunden: {missing[0]}.")
+        selected = set(rule_ids)
+        coordinator.store.data["rules"] = [
+            rule for rule in rules if str(rule.get("id")) not in selected
+        ]
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json({"deleted": len(rule_ids)})
+
+
+class RuleExportView(HomeAssistantView):
+    """Export explicitly selected rule definitions."""
+
+    url = "/api/finanzplaner/rules/export"
+    name = "api:finanzplaner:rules:export"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Der Export ist kein gültiges JSON.") from exc
+        rule_ids = payload.get("rule_ids") if isinstance(payload, dict) else None
+        if not isinstance(rule_ids, list) or not rule_ids or not all(
+            isinstance(rule_id, str) and rule_id.strip() for rule_id in rule_ids
+        ):
+            raise web.HTTPBadRequest(text="Bitte mindestens eine Regel zum Export auswählen.")
+        rules_by_id = {
+            str(rule.get("id")): rule
+            for rule in _rule_list(coordinator)
+            if isinstance(rule, dict) and isinstance(rule.get("id"), str)
+        }
+        missing = [rule_id for rule_id in rule_ids if rule_id not in rules_by_id]
+        if missing:
+            raise web.HTTPNotFound(text=f"Regel nicht gefunden: {missing[0]}.")
+        return self.json({
+            "format": "finanzplaner-rules",
+            "version": 1,
+            "rules": [_rule_export_payload(rules_by_id[rule_id]) for rule_id in rule_ids],
+        })
+
+
+class RuleImportView(HomeAssistantView):
+    """Validate and append a portable rule export atomically."""
+
+    url = "/api/finanzplaner/rules/import"
+    name = "api:finanzplaner:rules:import"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Der Import ist kein gültiges JSON.") from exc
+        if not isinstance(payload, dict) or payload.get("version") != 1:
+            raise web.HTTPBadRequest(text="Die Regeldatei hat kein unterstütztes Format.")
+        imported_rules = payload.get("rules")
+        if not isinstance(imported_rules, list) or not imported_rules:
+            raise web.HTTPBadRequest(text="Die Regeldatei enthält keine Regeln.")
+
+        normalized_rules: list[dict[str, object]] = []
+        try:
+            for index, imported_rule in enumerate(imported_rules, start=1):
+                if not isinstance(imported_rule, dict):
+                    raise ValueError(f"Regel {index} muss ein Objekt sein.")
+                unknown = set(imported_rule) - set(RULE_FIELDS)
+                if unknown:
+                    raise ValueError(f"Regel {index} enthält ein unbekanntes Feld.")
+                normalized_rules.append(
+                    _validated_rule(imported_rule, coordinator, request.app["hass"])
+                )
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=f"Import abgebrochen: {exc}") from exc
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        rules = _rule_list(coordinator)
+        for normalized in normalized_rules:
+            rules.append({
+                "id": uuid4().hex,
+                **normalized,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            })
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json({"imported": len(normalized_rules)})
 
 
 class RuleView(HomeAssistantView):

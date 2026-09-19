@@ -59,6 +59,8 @@ Zusätzlich enthalten:
 - lokal verwaltete Stammdaten für Kategorien, Bereiche und Projekte mit stabilen IDs und historischen Namens-Snapshots
 - Kategorien können optional genau eine Unterkategorie-Ebene besitzen, zum Beispiel „Shopping“ mit „Amazon“ und „Zalando“
 - Regelverwaltung für Buchungsvorschläge mit aktiven und deaktivierten Regeln, Priorität und Aufteilungsvorlage
+- Regelliste mit Checkbox-Auswahl einschließlich „Alle auswählen“, JSON-Export und ergänzendem JSON-Import
+- Ausgewählte Regeln können nach Bestätigung dauerhaft gelöscht werden; der Import validiert atomar und erzeugt neue lokale IDs
 - Die Regelübersicht gruppiert Regeln nach Konto; je Konto werden sie wie beim Matching nach absteigender Priorität und anschließend alphabetisch nach Regelname sortiert.
 - Finanzplaner trimmt und normalisiert Konto-IDs und vergleicht sie anschließend exakt. Beim optionalen Zahlungsempfänger normalisiert Finanzplaner den Leerraum, vergleicht den vollständigen Text exakt und ignoriert die Groß- und Kleinschreibung.
 - optionaler Verwendungszweckfilter, der nur Buchungen mit dem angegebenen Textabschnitt berücksichtigt; jede Regel benötigt mindestens eine Bedingung aus Konto, Zahlungsempfänger oder Verwendungszweckfilter
@@ -101,7 +103,7 @@ Weitere Produktfähigkeiten und Leitplanken:
 - Nur eindeutige, gültige Regeltreffer mit höchster Priorität werden beim Import oder auf ausdrückliche Anforderung automatisch übernommen. Konflikte, ungültige Treffer und fehlende Treffer bleiben in der Prüfliste.
 - Manuelle Zuordnungen werden ausdrücklich gespeichert; eine automatische oder manuelle Übernahme kann über die Ansicht „Übernommene Buchungen“ rückgängig gemacht werden.
 - Regeländerungen und deaktivierte Regeln verändern bestehende bestätigte Buchungsaufteilungen nicht rückwirkend.
-- Vollständige Kontoreferenzen bleiben im lokalen Speicher; Panel und API zeigen Kontodaten nur maskiert.
+- Vollständige Kontoreferenzen bleiben im lokalen Speicher; Panel und normale API-Antworten zeigen Kontodaten nur maskiert. Ein ausdrücklich angeforderter Regel-Export enthält die vollständige Gegenkonto-Bedingung, damit der lokale JSON-Reimport verlustfrei bleibt.
 - Die normalisierten Parserfelder bleiben für die Fachlogik erhalten; zusätzlich wird der vollständige buchungsbezogene MT940-/CAMT.053-Quellsatz lokal zur Prüfung aufbewahrt und in API sowie Panel maskiert dargestellt.
 - CAMT.053-Buchungen führen Absender und Zahlungsempfänger getrennt; bei fehlenden MT940-Absenderdaten wird dies ausdrücklich als nicht vorhanden angezeigt.
 - Wenn eine CAMT-Absender- oder Empfängerkontoreferenz einem konfigurierten Konto entspricht, zeigen Buchungen und Prüfliste die jeweilige Kontobezeichnung direkt neben Absender beziehungsweise Zahlungsempfänger; Buchungsdetails führen beide Konten weiterhin getrennt auf.

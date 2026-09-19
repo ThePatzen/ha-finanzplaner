@@ -229,6 +229,33 @@ test("ruleConflictIds returns only listed rule conflict partners", () => {
   assert.deepEqual(utils.ruleConflictIds({}), []);
 });
 
+test("ruleSelectionState reports selected rules and select-all state", () => {
+  assert.deepEqual(
+    utils.ruleSelectionState([{ id: "rule-1" }, { id: "rule-2" }], ["rule-1"]),
+    { selectedCount: 1, allSelected: false, someSelected: true },
+  );
+  assert.deepEqual(
+    utils.ruleSelectionState([{ id: "rule-1" }, { id: "rule-2" }], ["rule-1", "rule-2"]),
+    { selectedCount: 2, allSelected: true, someSelected: false },
+  );
+});
+
+test("ruleSelectionState ignores ids outside the visible rule list", () => {
+  assert.deepEqual(
+    utils.ruleSelectionState([{ id: "rule-1" }], ["rule-1", "rule-missing"]),
+    { selectedCount: 1, allSelected: true, someSelected: false },
+  );
+});
+
+test("rule overview exposes select-all, JSON transfer and permanent deletion controls", () => {
+  assert.match(panelSource, /data-rule-select-all/);
+  assert.match(panelSource, /data-rule-export/);
+  assert.match(panelSource, /data-rule-import/);
+  assert.match(panelSource, /data-rule-delete-selected/);
+  assert.match(panelSource, /method: "DELETE"/);
+  assert.match(panelSource, /Dauerhaft löschen/);
+});
+
 test("review filter exposes duplicate bookings as a dedicated status", () => {
   assert.match(panelSource, /value="duplicate"[^>]*>Duplikat prüfen/);
   assert.match(panelSource, /status === "duplicate"/);
