@@ -1126,7 +1126,8 @@ test("overview ignores old month responses and requests the local calendar month
 function validRuleDraft() {
   return {
     label: "Lebensmittel", active: true, priority: "100", account_id: "",
-    counterparty: "Laden", purpose_contains: "",
+    counterparty: "Laden", purpose_contains: "", direction: "",
+    counterparty_account: "", amount_min: "", amount_max: "",
     allocations: [{ target: "household", share_percent: "100", area_id: "", category_id: "", project_id: "", pet_id: "" }],
   };
 }
@@ -1377,6 +1378,7 @@ test("a booking template with invalid percentages and references can be repaired
   await panel._handleRuleSave({ preventDefault() {}, currentTarget: { querySelector: () => null, querySelectorAll: () => [] } });
   assert.deepEqual(writes, [{ url: "/api/finanzplaner/rules", body: {
     label: "Laden", active: true, priority: 100, account_id: null, counterparty: "Laden", purpose_contains: "Bewusst ergänzt",
+    direction: null, counterparty_account: null, amount_min: null, amount_max: null,
     allocations: [
       { target: "person.anna", share_percent: 0.01, category_id: null, area_id: null, project_id: null, pet_id: null },
       { target: "household", share_percent: 99.99, category_id: null, area_id: null, project_id: null, pet_id: null },
