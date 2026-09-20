@@ -5,7 +5,11 @@ Ein Release folgt genau dieser Reihenfolge:
 1. Ausdrückliche Release-Autorisierung bestätigen.
 2. `custom_components/finanzplaner/manifest.json` und `CHANGELOG.md` auf
    dieselbe Semantic-Version aktualisieren.
-3. Die vollständige Prüfsuite ausführen und `git diff --check` prüfen.
+3. Die vollständige Prüfsuite ausführen und `git diff --check` prüfen. Vor der
+   Erstellung eines Versions-Tags müssen alle lokalen Prüfungen erfolgreich
+   abgeschlossen sein: `scripts/check-full` muss mit Status 0 enden. Ein
+   fehlgeschlagener, übersprungener oder wegen einer fehlenden Laufzeit nicht
+   ausgeführter Test blockiert Tag und Release.
 4. Die geprüften Manifest- und Changelog-Änderungen committen und diesen
    Commit als Release-Commit festhalten.
 5. HACS-Struktur und Metadaten prüfen, einschließlich `hacs.json`, Manifest

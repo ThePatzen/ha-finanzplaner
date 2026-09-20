@@ -10,6 +10,10 @@ Follow [`docs/workflows/release.md`](../../../docs/workflows/release.md) exactly
 1. Confirm explicit release authorization.
 2. Update `custom_components/finanzplaner/manifest.json` and [`CHANGELOG.md`](../../../CHANGELOG.md) to the same Semantic Version.
 3. Run [`scripts/check-full`](../../../scripts/check-full) and `git diff --check`.
+   Before creating any version tag, all local checks must finish successfully:
+   `scripts/check-full` must exit with status 0, including the Python and
+   frontend tests. A failed test, skipped test, missing runtime, or any other
+   non-zero verification result blocks tagging and release publication.
 4. Commit the verified manifest and changelog changes, and record that commit as the release commit.
 5. Confirm HACS structure and metadata, including [`hacs.json`](../../../hacs.json), the integration manifest, and the expected `custom_components/finanzplaner/` layout.
 6. Only after successful verification create the local tag `vMAJOR.MINOR.PATCH` on the recorded release commit.
