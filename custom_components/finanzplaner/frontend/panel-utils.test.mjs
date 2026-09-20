@@ -174,6 +174,17 @@ test("ruleStatusLabel explains conflict status", () => {
   assert.equal(utils.ruleStatusLabel("other"), "Prüfung erforderlich");
 });
 
+test("explains imported rules skipped as duplicates", () => {
+  assert.equal(
+    utils.ruleImportMessage({ imported: 1, skipped_duplicates: 2 }),
+    "1 Regel wurde ergänzt; 2 identische Duplikate wurden übersprungen.",
+  );
+  assert.equal(
+    utils.ruleImportMessage({ imported: 0, skipped_duplicates: 1 }),
+    "Keine neue Regel ergänzt; 1 identisches Duplikat wurde übersprungen.",
+  );
+});
+
 test("ruleStatusLabel falls back for prototype-key statuses", () => {
   for (const status of ["toString", "__proto__"]) {
     assert.equal(utils.ruleStatusLabel(status), "Prüfung erforderlich");

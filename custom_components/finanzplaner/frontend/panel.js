@@ -1,4 +1,4 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, readPaginationPageSize, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, ruleConflictIds, rulePayloadFromForm, ruleSelectionState, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow, writePaginationPageSize } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, readPaginationPageSize, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, ruleConflictIds, ruleImportMessage, rulePayloadFromForm, ruleSelectionState, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow, writePaginationPageSize } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const BREAKDOWN_URL = "/api/finanzplaner/overview/breakdown";
@@ -1863,8 +1863,7 @@ class FinanzplanerPanel extends HTMLElement {
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(apiErrorMessage(result, "Die Regeln konnten nicht importiert werden."));
       await this._loadRules({ fresh: true });
-      const imported = Number(result?.imported) || 0;
-      this._ruleMessage = `${imported} ${imported === 1 ? "Regel wurde" : "Regeln wurden"} ergänzt.`;
+      this._ruleMessage = ruleImportMessage(result);
     } catch (error) {
       this._ruleMessage = error.message || "Die Regeln konnten nicht importiert werden.";
     } finally {

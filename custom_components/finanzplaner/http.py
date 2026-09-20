@@ -39,6 +39,7 @@ from .core import (
     plan_item_totals,
     record_feed_profile_purchase,
     rule_conflict_index,
+    rule_definition_key,
     rule_payload_from_booking,
     rule_suggestion,
     validate_pet_payload,
@@ -2129,16 +2130,33 @@ class RuleImportView(HomeAssistantView):
 
         now_iso = datetime.now(timezone.utc).isoformat()
         rules = _rule_list(coordinator)
+        existing_definitions = {
+            rule_definition_key(rule)
+            for rule in rules
+            if isinstance(rule, dict)
+        }
+        imported_count = 0
+        skipped_duplicates = 0
         for normalized in normalized_rules:
+            definition_key = rule_definition_key(normalized)
+            if definition_key in existing_definitions:
+                skipped_duplicates += 1
+                continue
             rules.append({
                 "id": uuid4().hex,
                 **normalized,
                 "created_at": now_iso,
                 "updated_at": now_iso,
             })
-        await coordinator.store.async_save()
-        await coordinator.async_refresh_data()
-        return self.json({"imported": len(normalized_rules)})
+            existing_definitions.add(definition_key)
+            imported_count += 1
+        if imported_count:
+            await coordinator.store.async_save()
+            await coordinator.async_refresh_data()
+        return self.json({
+            "imported": imported_count,
+            "skipped_duplicates": skipped_duplicates,
+        })
 
 
 class RuleView(HomeAssistantView):

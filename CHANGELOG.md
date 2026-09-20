@@ -8,6 +8,12 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.20.1] – 2026-09-20
+
+- Die Regelkonfliktanzeige meldet unabhängige Zahlungsempfänger- und Verwendungszweckregeln nicht mehr als Konflikt.
+- Identische Regeln werden beim Laden dedupliziert und beim JSON-Import übersprungen.
+- Der Regelimport zeigt übersprungene Duplikate in der Rückmeldung an.
+
 ## [0.20.0] – 2026-09-20
 
 - Importhistorie-Einträge können einzeln gelöscht werden, ohne Buchungen oder Planposten zu entfernen.
@@ -239,6 +245,7 @@ Erste vorbereitete vertikale Version:
 [0.18.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.18.0
 [0.19.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.19.0
 [0.20.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.20.0
+[0.20.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.20.1
 [0.17.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.17.0
 [0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0
 [0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0

@@ -88,6 +88,27 @@ def _load_http_module():
 
 
 class RuleStorageTests(unittest.TestCase):
+    def test_current_store_removes_identical_duplicate_rules_and_keeps_first_id(self):
+        rule = {
+            "id": "rule-first",
+            "label": "St. Erhard Apotheke",
+            "active": True,
+            "priority": 100,
+            "account_id": "account-1",
+            "counterparty": "St. Erhard Apotheke",
+            "purpose_contains": None,
+            "allocations": [{"target": "household", "share_percent": 100}],
+        }
+        duplicate = deepcopy(rule)
+        duplicate["id"] = "rule-duplicate"
+
+        data = storage.normalize_current_store_data(
+            {"version": storage.STORAGE_VERSION, "rules": [rule, duplicate]},
+            "Test",
+        )
+
+        self.assertEqual([item["id"] for item in data["rules"]], ["rule-first"])
+
     def test_legacy_rules_receive_null_optional_conditions_without_mutation(self):
         data = storage.normalize_current_store_data(
             {"version": 2, "rules": [{"id": "r1"}]}, "Test"
@@ -440,6 +461,33 @@ class RuleViewTests(unittest.TestCase):
         imported = self.coordinator.store.data["rules"][-1]
         self.assertEqual(imported["label"], "Importierte Regel")
         self.assertNotEqual(imported["id"], "rule-1")
+        self.assertEqual(self.coordinator.store.save_count, 1)
+
+    def test_rules_import_skips_duplicates_in_file_and_existing_store(self):
+        existing = self.http._rule_export_payload(self.coordinator.store.data["rules"][0])
+        new_rule = {
+            "label": "Neue Importregel",
+            "active": True,
+            "priority": 120,
+            "account_id": "account-1",
+            "counterparty": "Neue Firma",
+            "purpose_contains": None,
+            "direction": "expense",
+            "counterparty_account": None,
+            "amount_min": None,
+            "amount_max": None,
+            "allocations": [{"target": "household", "share_percent": 100}],
+        }
+        result = asyncio.run(
+            self.http.RuleImportView().post(
+                self._request({"version": 1, "rules": [existing, existing, new_rule]})
+            )
+        )
+
+        self.assertEqual(result["imported"], 1)
+        self.assertEqual(result["skipped_duplicates"], 2)
+        self.assertEqual(len(self.coordinator.store.data["rules"]), 2)
+        self.assertEqual(self.coordinator.store.data["rules"][-1]["label"], "Neue Importregel")
         self.assertEqual(self.coordinator.store.save_count, 1)
 
     def test_rules_import_validates_all_rules_before_mutating(self):

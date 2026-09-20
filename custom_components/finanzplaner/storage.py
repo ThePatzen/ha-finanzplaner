@@ -15,6 +15,7 @@ from .core import (
     account_id_for_reference,
     catalog_id_for_label,
     normalize_account_reference,
+    rule_definition_key,
     sender_from_camt_source,
 )
 
@@ -264,8 +265,11 @@ def _normalize_rules(data: dict[str, Any]) -> None:
     if not isinstance(data.get("rules"), list):
         data["rules"] = []
         return
+    normalized_rules: list[Any] = []
+    seen_definitions: set[str] = set()
     for rule in data["rules"]:
         if not isinstance(rule, dict):
+            normalized_rules.append(rule)
             continue
         rule.setdefault("counterparty_account", None)
         if isinstance(rule["counterparty_account"], str):
@@ -275,6 +279,12 @@ def _normalize_rules(data: dict[str, Any]) -> None:
         rule.setdefault("direction", None)
         rule.setdefault("amount_min", None)
         rule.setdefault("amount_max", None)
+        definition_key = rule_definition_key(rule)
+        if definition_key in seen_definitions:
+            continue
+        seen_definitions.add(definition_key)
+        normalized_rules.append(rule)
+    data["rules"] = normalized_rules
 
 
 def _catalog_source_values(data: dict[str, Any], kind: str) -> list[str]:

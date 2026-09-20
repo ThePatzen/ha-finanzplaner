@@ -291,6 +291,21 @@ class RuleMatchingTests(unittest.TestCase):
 
         self.assertEqual(conflicts, {})
 
+    def test_rule_conflict_index_ignores_independent_counterparty_and_purpose_filters(self):
+        core = load_core()
+        counterparty_rule = self._rule(
+            "rule-amazon-payments", priority=20, purpose_contains=None
+        )
+        counterparty_rule["counterparty"] = "AMAZON PAYMENTS"
+        purpose_rule = self._rule(
+            "rule-deichmann", priority=20, purpose_contains="DEICHMANN"
+        )
+        purpose_rule["counterparty"] = None
+
+        self.assertEqual(
+            core.rule_conflict_index([counterparty_rule, purpose_rule]), {}
+        )
+
     def test_rule_conflict_index_keeps_nested_purpose_filters(self):
         core = load_core()
 

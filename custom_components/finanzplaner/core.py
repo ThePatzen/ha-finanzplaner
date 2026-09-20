@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
+import json
 import re
 from typing import TypedDict
 import xml.etree.ElementTree as ET
@@ -822,6 +823,18 @@ def _contains_conditions_overlap(
     return left_filter in right_filter or right_filter in left_filter
 
 
+def rule_definition_key(rule: dict[str, object]) -> str:
+    """Return a stable key for one portable rule definition."""
+
+    return json.dumps(
+        {field: rule.get(field) for field in sorted(RULE_FIELDS)},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
 def _purpose_conditions_overlap(left: dict[str, object], right: dict[str, object]) -> bool:
     """Prüfe, ob zwei Verwendungszweckfilter dieselbe Buchung treffen können."""
 
@@ -833,37 +846,61 @@ def _purpose_conditions_overlap(left: dict[str, object], right: dict[str, object
 def _rule_conditions_overlap(left: dict[str, object], right: dict[str, object]) -> bool:
     """Prüfe, ob zwei Regelbedingungen dieselbe Buchung treffen können."""
 
-    for field in ("account_id", "counterparty", "counterparty_account", "direction"):
-        left_value = left.get(field)
-        right_value = right.get(field)
-        if left_value in (None, "") or right_value in (None, ""):
-            continue
-        if field == "counterparty":
-            if not _contains_conditions_overlap(
-                left, right, "counterparty", "Der Zahlungsempfänger"
-            ):
-                return False
-        elif field == "counterparty_account":
-            if normalize_account_reference(left_value) != normalize_account_reference(right_value):
-                return False
-        elif left_value != right_value:
+    left_account = left.get("account_id")
+    right_account = right.get("account_id")
+    if (
+        left_account not in (None, "")
+        and right_account not in (None, "")
+        and left_account != right_account
+    ):
+        return False
+
+    left_groups = set()
+    right_groups = set()
+    for rule, groups in ((left, left_groups), (right, right_groups)):
+        if rule.get("counterparty") not in (None, "") or rule.get("counterparty_account") not in (None, ""):
+            groups.add("counterparty")
+        if rule.get("purpose_contains") not in (None, ""):
+            groups.add("purpose")
+        if rule.get("direction") not in (None, ""):
+            groups.add("direction")
+        if rule.get("amount_min") is not None or rule.get("amount_max") is not None:
+            groups.add("amount")
+
+    # Different matching dimensions are separate alternatives in the rule
+    # catalog.  Treating every missing field as a wildcard creates noise such
+    # as a payment-recipient rule conflicting with every purpose rule.
+    if left_groups and right_groups and not left_groups.intersection(right_groups):
+        return False
+
+    if "counterparty" in left_groups.intersection(right_groups):
+        if not _contains_conditions_overlap(left, right, "counterparty", "Der Zahlungsempfänger"):
+            return False
+        left_reference = normalize_account_reference(left.get("counterparty_account", ""))
+        right_reference = normalize_account_reference(right.get("counterparty_account", ""))
+        if left_reference and right_reference and left_reference != right_reference:
             return False
 
-    if not _purpose_conditions_overlap(left, right):
+    if "purpose" in left_groups.intersection(right_groups) and not _purpose_conditions_overlap(left, right):
         return False
 
-    left_min = Decimal(str(left.get("amount_min") or 0))
-    right_min = Decimal(str(right.get("amount_min") or 0))
-    left_max = left.get("amount_max")
-    right_max = right.get("amount_max")
-    if left_max is not None and left_min > Decimal(str(left_max)):
-        return False
-    if right_max is not None and right_min > Decimal(str(right_max)):
-        return False
-    if left_max is not None and right_min > Decimal(str(left_max)):
-        return False
-    if right_max is not None and left_min > Decimal(str(right_max)):
-        return False
+    if "direction" in left_groups.intersection(right_groups):
+        if left.get("direction") != right.get("direction"):
+            return False
+
+    if "amount" in left_groups.intersection(right_groups):
+        left_min = Decimal(str(left.get("amount_min") or 0))
+        right_min = Decimal(str(right.get("amount_min") or 0))
+        left_max = left.get("amount_max")
+        right_max = right.get("amount_max")
+        if left_max is not None and left_min > Decimal(str(left_max)):
+            return False
+        if right_max is not None and right_min > Decimal(str(right_max)):
+            return False
+        if left_max is not None and right_min > Decimal(str(left_max)):
+            return False
+        if right_max is not None and left_min > Decimal(str(right_max)):
+            return False
     return True
 
 

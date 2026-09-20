@@ -225,6 +225,17 @@ export function conflictRuleIds(booking) {
     : [];
 }
 
+export function ruleImportMessage(result) {
+  const imported = Math.max(0, Number(result?.imported) || 0);
+  const skipped = Math.max(0, Number(result?.skipped_duplicates) || 0);
+  const added = imported === 1 ? "1 Regel wurde ergänzt" : `${imported} Regeln wurden ergänzt`;
+  if (!skipped) return `${added}.`;
+  const skippedText = skipped === 1
+    ? "1 identisches Duplikat wurde übersprungen"
+    : `${skipped} identische Duplikate wurden übersprungen`;
+  return imported ? `${added}; ${skippedText}.` : `Keine neue Regel ergänzt; ${skippedText}.`;
+}
+
 export function ruleConflictIds(rule) {
   return Array.isArray(rule?.conflict_rule_ids)
     ? rule.conflict_rule_ids.map((ruleId) => ruleId)
