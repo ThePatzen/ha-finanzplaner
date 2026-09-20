@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import date, datetime, timezone
 import hashlib
+import json
 from typing import Any
 
 from .const import DEFAULT_HOUSEHOLD_NAME, STORAGE_KEY, STORAGE_VERSION
@@ -65,6 +66,26 @@ def _normalize_original_uploads(data: dict[str, Any]) -> None:
 
     if not isinstance(data.get("original_uploads"), list):
         data["original_uploads"] = []
+
+
+def _normalize_imports(data: dict[str, Any]) -> None:
+    """Ensure every import-history entry has a stable local identifier."""
+
+    imports = data.get("imports")
+    if not isinstance(imports, list):
+        data["imports"] = []
+        return
+    used_ids: set[str] = set()
+    for index, item in enumerate(imports):
+        if not isinstance(item, dict):
+            continue
+        import_id = item.get("id") or item.get("import_id")
+        if not isinstance(import_id, str) or not import_id.strip() or import_id.strip() in used_ids:
+            material = json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+            material = f"{material}|{index}"
+            import_id = f"import-{hashlib.sha256(material.encode('utf-8')).hexdigest()[:24]}"
+        item["id"] = import_id.strip()
+        used_ids.add(item["id"])
 
 
 def _pet_by_id(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -587,6 +608,7 @@ def migrate_store_data(
 
     data["version"] = STORAGE_VERSION
     _normalize_original_uploads(data)
+    _normalize_imports(data)
     _normalize_pets(data)
     pets = _pet_by_id(data)
     _normalize_feed_profiles(data, pets)
@@ -656,6 +678,7 @@ def normalize_current_store_data(
 
     data["version"] = STORAGE_VERSION
     _normalize_original_uploads(data)
+    _normalize_imports(data)
     _normalize_pets(data)
     pets = _pet_by_id(data)
     _normalize_feed_profiles(data, pets)

@@ -6,12 +6,12 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.19.1 umfasst den JSON-Export/-Import und das dauerhafte Löschen ausgewählter Regeln, prüfbare Duplikatbuchungen, sichtbare Regelkonflikte, die gebündelte Sieben-Punkte-Navigation, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
+Version 0.20.0 umfasst löschbare Importhistorie-Einträge, benutzerbezogene Seitengrößen, die getrennten Menüpunkte Aufgaben und Energie, den JSON-Export/-Import und das dauerhafte Löschen ausgewählter Regeln, prüfbare Duplikatbuchungen, sichtbare Regelkonflikte, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow
 - native Home-Assistant-Seitenleiste mit schneller Monatsübersicht
-- sieben Hauptbereiche mit Buchungen, Planung, Haushalt, Kalender, Futter und einem Mehr-Menü für weitere Bereiche
+- acht Hauptbereiche mit Buchungen, Planung, Haushalt, Kalender, Futter, Aufgaben und Energie
 - Plan · Prognose · Ist und offene Buchungen als zentrale Sicht
 - Home-Assistant-`person.*`-Entitäten als Personenquelle
 - MT940- und CAMT.053-Upload mit Duplikatfingerprint
@@ -36,7 +36,8 @@ und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserung
 - priorisierte Regelübernahmen nur bei eindeutigen Treffern, mit sichtbarer Zuordnungsquelle und Rückgängig-Funktion
 - aktive Regelkonflikte gleicher Priorität werden in der Regelliste mit ihren Konfliktpartnern angezeigt
 - Prüfliste mit erneutem Regel-Lauf sowie separate Ansicht für sämtliche übernommene Buchungen
-- Buchungshistorie und Übernahmesicht mit gemeinsamen Filtern, blätterbarer Seitennavigation und Seitengröße inklusive „Alle“
+- Buchungshistorie und Übernahmesicht mit gemeinsamen Filtern, blätterbarer Seitennavigation und pro Benutzer gespeicherter Seitengröße inklusive „Alle“
+- Importhistorie mit löschbaren Historieneinträgen; die zugehörigen Buchungen und Planposten bleiben erhalten
 - Übernommene Buchungsdetails zeigen fehlende Absender und Zahlungsempfänger bei auflösbaren internen Konten; die unveränderten Quelldaten bleiben gespeichert
 - Buchungen lassen sich in der Prüfliste und der Übernahmesicht per Checkbox einzeln oder vollständig auswählen und dauerhaft löschen
 - Budget-Ist-Vergleich für Bereiche, Kategorien und Projekte mit Inline-Details zu Planposten und Buchungen
@@ -134,7 +135,7 @@ In `Übernommene Buchungen` kannst du sämtliche automatisch und manuell überno
 
 In `Buchungen prüfen` und `Übernommene Buchungen` kannst du Buchungen per Checkbox markieren. `Alle auswählen` markiert die aktuell sichtbare Liste; `Auswahl löschen` entfernt die markierten Buchungen nach einer Sicherheitsbestätigung dauerhaft.
 
-Die `Buchungshistorie` in `Buchungen prüfen` lässt sich über Suche (`q` für Gegenpartei, Verwendungszweck, Referenz oder Absender), Zeitraum (`from`/`to`), Status, Konto sowie Kategorie filtern. Die Ansicht zeigt zusätzlich die `Importhistorie` mit Dateiname, Format, Zeitpunkt, Anzahl übernommener Buchungen und Duplikaten; Quelldateien werden dort nicht angezeigt.
+Die `Buchungshistorie` in `Buchungen prüfen` lässt sich über Suche (`q` für Gegenpartei, Verwendungszweck, Referenz oder Absender), Zeitraum (`from`/`to`), Status, Konto sowie Kategorie filtern. Die Ansicht zeigt zusätzlich die `Importhistorie` mit Dateiname, Format, Zeitpunkt, Anzahl übernommener Buchungen und Duplikaten; einzelne Historieneinträge können gelöscht werden, ohne Buchungen oder Planposten zu entfernen. Quelldateien werden dort nicht angezeigt.
 
 Wird eine bereits bekannte Bankbuchung erneut importiert, bleibt die ursprüngliche Buchung unverändert und der neue Datensatz wird mit Status `duplicate` sowie einem Verweis auf das Original gespeichert. In der Prüfliste erscheinen solche Einträge unter `Duplikat prüfen`; dort können die Details kontrolliert und der Eintrag gelöscht oder ausdrücklich zugeordnet werden.
 

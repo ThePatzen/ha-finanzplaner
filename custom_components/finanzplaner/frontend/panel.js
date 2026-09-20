@@ -1,4 +1,4 @@
-import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, ruleConflictIds, rulePayloadFromForm, ruleSelectionState, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow } from "./panel-utils.mjs";
+import { acceptSuggestionDraft, accountActiveStatus, accountOwnerStatus, addAllocationDraftRow, allocationErrorMessage, allocationRemaining, allocationSubmitState, bookingDetailRawJson, bookingDetailsRequestUrl, bookingGroups, bookingHistoryRequestUrl, bookingSelectionState, breakdownRequestUrl, comparisonDimensionLabel, comparisonEntries, conflictRuleIds, equalAllocationDraft, fetchWithHomeAssistantAuth, formatEuro, homeAssistantPath, overviewRequestUrl, planItemFrequencyLabel, planItemStatus, readApiResponse, readPaginationPageSize, removeAllocationDraftRow, repairTargetsPayload, reportRequestUrl, resolvedBookingSourceLabel, ruleConflictIds, rulePayloadFromForm, ruleSelectionState, ruleStatusLabel, selectedSuggestionSummary, trendSummary, updateAllocationDraftRow, writePaginationPageSize } from "./panel-utils.mjs";
 
 const OVERVIEW_URL = "/api/finanzplaner/overview";
 const BREAKDOWN_URL = "/api/finanzplaner/overview/breakdown";
@@ -184,11 +184,6 @@ const styles = `
     padding: 1.05rem 0.5rem;
   }
 
-  .nav-more-menu { position: absolute; inset-block-start: 4.2rem; inset-inline-end: 0.75rem; z-index: 8; display: grid; gap: 0.2rem; min-inline-size: 12rem; padding: 0.45rem; border: 1px solid var(--fp-line); border-radius: 0.65rem; color: var(--fp-ink); background: var(--fp-paper-strong); box-shadow: 0 0.9rem 2rem rgb(11 30 63 / 0.2); }
-  .nav-more-menu button { min-block-size: 2.65rem; display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.7rem; border: 1px solid transparent; border-radius: 0.4rem; color: var(--fp-ink); background: transparent; text-align: start; font-size: 0.8rem; font-weight: 800; }
-  .nav-more-menu button:hover { border-color: var(--fp-line); background: var(--fp-cyan-soft); }
-  .nav-more-menu button[aria-current="page"] { color: var(--fp-paper); background: var(--fp-navy); }
-  .nav-more-menu button:focus-visible { outline: 3px solid var(--fp-cyan); outline-offset: 2px; }
 
   .nav-item {
     min-block-size: 2.85rem;
@@ -416,8 +411,10 @@ const styles = `
   .import-strip { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-block-start: 1.5rem; padding: 1rem; border: 1px solid var(--fp-line); border-radius: var(--fp-radius); background: rgb(255 254 249 / 0.78); }
   .import-strip h3 { margin: 0; font-size: 0.95rem; }
   .import-strip p { margin: 0.25rem 0 0; color: var(--fp-muted); font-size: 0.78rem; }
-  .file-input { max-inline-size: 18rem; color: var(--fp-muted); font-size: 0.8rem; }
-  .file-input::file-selector-button { min-block-size: 2.4rem; margin-inline-end: 0.5rem; padding: 0.45rem 0.7rem; border: 1px solid var(--fp-navy); border-radius: 0.45rem; color: var(--fp-paper); background: var(--fp-navy); font-weight: 700; }
+  .file-picker { display: grid; justify-items: end; gap: 0.45rem; max-inline-size: 18rem; }
+  .file-input-control { min-block-size: 2.7rem; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.85rem; border: 1px solid var(--fp-navy); border-radius: 0.5rem; color: var(--fp-paper); background: var(--fp-navy); font-size: 0.82rem; font-weight: 800; cursor: pointer; }
+  .file-input-control:hover { background: var(--fp-navy-deep); }
+  .file-input-control:focus-within { outline: 3px solid var(--fp-cyan); outline-offset: 2px; }
   .excel-review { display: grid; gap: 1rem; margin-block-start: 1rem; padding: 1rem; }
   .excel-review-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
   .excel-review-header h3 { margin: 0; font-family: var(--fp-display); font-size: 1.35rem; line-height: 1; }
@@ -842,7 +839,6 @@ const styles = `
     .nav-item { min-block-size: 2.5rem; flex: 0 0 auto; padding-inline: 0.7rem; }
     .nav-item[data-nav="rules"] { min-block-size: 48px; }
     .nav-item span { display: none; }
-    .nav-more-menu { position: fixed; inset-block-start: 3.65rem; inset-inline: auto 0.65rem; }
     .rail-footer { display: none; }
     .main { padding-inline: 0.85rem; }
     .toolbar { min-block-size: auto; align-items: flex-start; flex-direction: column; padding-block: 0.8rem; }
@@ -899,7 +895,8 @@ const styles = `
     .booking-page-size { margin-inline-start: 0; }
     .management-editor-header { flex-direction: column; }
     .plan-item-new-row { display: block; }
-    .file-input { max-inline-size: 100%; margin-block-start: 0.8rem; }
+    .file-picker { max-inline-size: 100%; justify-items: stretch; margin-block-start: 0.8rem; }
+    .file-input-control { justify-content: center; }
     .excel-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .booking-row { grid-template-columns: 3rem minmax(0, 1fr) auto; gap: 0.35rem 0.8rem; }
     .booking-selection { grid-column: 1; grid-row: 1 / span 3; justify-content: center; align-self: center; }
@@ -938,7 +935,7 @@ const styles = `
     .booking-detail-dialog { border-color: CanvasText; box-shadow: none; }
     .booking-detail-dialog::backdrop { background: CanvasText; opacity: 0.5; }
     .booking-detail-actions button { border-color: ButtonText; color: ButtonText; background: Canvas; }
-    .review-pill, .review-action, .file-input::file-selector-button { border: 1px solid ButtonText; }
+    .review-pill, .review-action, .file-input-control { border: 1px solid ButtonText; }
     .bar-track { border: 1px solid CanvasText; }
   }
 `;
@@ -1174,7 +1171,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._month = new Date();
     this._data = { demo: false, month: this._month.toISOString().slice(0, 7) };
     this._view = "overview";
-    this._moreOpen = false;
+    this._paginationUserId = null;
     this._comparisonDimension = "categories";
     this._comparisonCategoryGrouping = "structure";
     this._reportView = "month";
@@ -1208,6 +1205,7 @@ class FinanzplanerPanel extends HTMLElement {
     this._bookingHistoryFilters = { q: "", from: "", to: "", status: "", account_id: "", target: "", category_id: "", area_id: "", project_id: "" };
     this._imports = [];
     this._importsLoading = false;
+    this._importDeleting = false;
     this._reviewLoading = false;
     this._reviewLoadFailed = false;
     this._resolvedBookings = [];
@@ -1314,6 +1312,27 @@ class FinanzplanerPanel extends HTMLElement {
 
   set hass(value) {
     this._hass = value;
+    const userId = String(value?.user?.id || "default");
+    if (this._paginationUserId !== userId) {
+      this._paginationUserId = userId;
+      const storage = this._paginationStorage();
+      this._bookingHistoryPageSize = {
+        review: readPaginationPageSize(storage, this._paginationListKey("review")),
+        resolved: readPaginationPageSize(storage, this._paginationListKey("resolved")),
+      };
+    }
+  }
+
+  _paginationStorage() {
+    try {
+      return window.localStorage;
+    } catch {
+      return null;
+    }
+  }
+
+  _paginationListKey(view) {
+    return `${this._paginationUserId || "default"}:${view}`;
   }
 
   _monthValue() {
@@ -1698,7 +1717,6 @@ class FinanzplanerPanel extends HTMLElement {
 
   async _openHubOverview(view) {
     if (!HUB_VIEWS.includes(view) || !(await this._confirmDiscardUnsavedChanges())) return;
-    this._moreOpen = false;
     this._view = view;
     this._message = "";
     this._render();
@@ -2395,6 +2413,37 @@ class FinanzplanerPanel extends HTMLElement {
       this._message = error.message || "Die Buchungen konnten nicht gelöscht werden.";
     } finally {
       this._deletingBookings = false;
+      this._render();
+      this._focusContent();
+    }
+  }
+
+  async _deleteImport(importId) {
+    const id = String(importId || "");
+    if (!id || this._importDeleting) return;
+    const item = this._imports.find((entry) => String(entry.id) === id);
+    if (!item || !(await this._requestConfirmation(
+      `Möchtest du den Import „${item.filename || item.format || "Import"}“ aus der Importhistorie löschen? Buchungen und Planposten bleiben erhalten.`,
+      { title: "Importhistorie löschen", confirmLabel: "Eintrag löschen" },
+    ))) return;
+
+    this._importDeleting = true;
+    this._message = "Importhistorie wird aktualisiert …";
+    this._render();
+    try {
+      const response = await fetchWithHomeAssistantAuth(this._hass, IMPORTS_URL, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ import_ids: [id] }),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(apiErrorMessage(result, "Der Import konnte nicht aus der Historie gelöscht werden."));
+      this._imports = this._imports.filter((entry) => String(entry.id) !== id);
+      this._message = "Importhistorie-Eintrag gelöscht. Buchungen und Planposten bleiben erhalten.";
+    } catch (error) {
+      this._message = error.message || "Der Import konnte nicht aus der Historie gelöscht werden.";
+    } finally {
+      this._importDeleting = false;
       this._render();
       this._focusContent();
     }
@@ -4242,6 +4291,7 @@ class FinanzplanerPanel extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-booking-page-size]").forEach((select) => select.addEventListener("change", () => {
       const view = select.dataset.bookingView === "resolved" ? "resolved" : "review";
       this._bookingHistoryPageSize[view] = Number(select.value);
+      writePaginationPageSize(this._paginationStorage(), this._paginationListKey(view), this._bookingHistoryPageSize[view]);
       this._bookingHistoryPage[view] = 0;
       this._reloadBookingHistoryView(view);
     }));
@@ -4257,17 +4307,13 @@ class FinanzplanerPanel extends HTMLElement {
     }));
     this.shadowRoot.querySelectorAll("[data-export-bookings]").forEach((button) => button.addEventListener("click", () => this._exportSelectedBookings(button.dataset.bookingView)));
     this.shadowRoot.querySelectorAll("[data-delete-bookings]").forEach((button) => button.addEventListener("click", () => this._deleteSelectedBookings(button.dataset.bookingView)));
+    this.shadowRoot.querySelectorAll("[data-import-delete]").forEach((button) => button.addEventListener("click", () => this._deleteImport(button.dataset.importDelete)));
     const ruleForm = this.shadowRoot.querySelector("[data-rule-form]");
     ruleForm?.addEventListener("submit", (event) => this._handleRuleSave(event));
     for (const type of ["input", "change", "focusout"]) ruleForm?.addEventListener(type, (event) => this._updateRuleField(event));
     this.shadowRoot.querySelector("[data-rule-add]")?.addEventListener("click", () => this._changeRuleAllocation());
     this.shadowRoot.querySelectorAll("[data-rule-remove]").forEach((button) => button.addEventListener("click", () => this._changeRuleAllocation(Number(button.dataset.ruleRemove))));
     this.shadowRoot.querySelector("[data-action='accounts']")?.addEventListener("click", () => this._openAccounts());
-    this.shadowRoot.querySelector("[data-action='more']")?.addEventListener("click", () => {
-      this._moreOpen = !this._moreOpen;
-      this._render();
-      this.shadowRoot.querySelector("[data-action='more']")?.focus();
-    });
     this.shadowRoot.querySelector("[data-action='back']")?.addEventListener("click", () => this._navigateToOverview());
     this.shadowRoot.querySelector("[data-import]")?.addEventListener("change", (event) => this._handleImport(event));
     this.shadowRoot.querySelector("[data-excel-confirm]")?.addEventListener("click", () => this._confirmExcelImport());
@@ -4336,8 +4382,6 @@ class FinanzplanerPanel extends HTMLElement {
       else if (SECTION_VIEWS.includes(target)) this._openSectionOverview(target);
     }));
     this.shadowRoot.querySelectorAll("[data-nav]").forEach((button) => button.addEventListener("click", () => {
-      if (button.dataset.nav === "more") return;
-      this._moreOpen = false;
       if (button.dataset.nav === "bookings") this._openHubOverview("bookings");
       else if (button.dataset.nav === "planning") this._openHubOverview("planning");
       else if (button.dataset.nav === "review") this._openReview();
@@ -4361,7 +4405,8 @@ class FinanzplanerPanel extends HTMLElement {
       ["household", "household", "Haushalt"],
       ["calendar", "calendar", "Kalender"],
       ["feed_profiles", "cart", "Futter"],
-      ["more", "more", "Mehr"],
+      ["tasks", "tasks", "Aufgaben"],
+      ["energy", "energy", "Energie"],
     ];
     return items.map(([id, iconName, label]) => {
       const target = id;
@@ -4371,19 +4416,9 @@ class FinanzplanerPanel extends HTMLElement {
           ? ["planning", "plan_items", "rules"].includes(this._view)
           : id === "household"
             ? ["household", "accounts", "people", "pets", "catalogs"].includes(this._view)
-            : id === "more"
-              ? this._moreOpen || ["energy", "tasks"].includes(this._view)
-              : this._view === id;
-      const expanded = id === "more" ? ` aria-expanded="${this._moreOpen ? "true" : "false"}"` : "";
-      const action = id === "more" ? ' data-action="more"' : "";
-      return `<button class="nav-item" data-nav="${target}"${current ? ' aria-current="page"' : ""}${expanded}${action} type="button" aria-label="${escapeHtml(label)}">${icon(iconName, 22)}<span>${label}</span></button>`;
+            : this._view === id;
+      return `<button class="nav-item" data-nav="${target}"${current ? ' aria-current="page"' : ""} type="button" aria-label="${escapeHtml(label)}">${icon(iconName, 22)}<span>${label}</span></button>`;
     }).join("");
-  }
-
-  _moreNavTemplate() {
-    if (!this._moreOpen) return "";
-    const entries = [["tasks", "tasks", "Aufgaben"], ["energy", "energy", "Energie"]];
-    return `<div class="nav-more-menu" role="menu" aria-label="Weitere Bereiche">${entries.map(([target, iconName, label]) => `<button type="button" role="menuitem" data-nav="${target}"${this._view === target ? ' aria-current="page"' : ""}>${icon(iconName, 18)}<span>${label}</span></button>`).join("")}</div>`;
   }
 
   _shellTemplate(content) {
@@ -4392,7 +4427,6 @@ class FinanzplanerPanel extends HTMLElement {
       <aside class="rail" aria-label="Finanzplaner-Navigation">
         <a class="rail-brand" href="${homeAssistantPath(window.location.href)}">${icon("home", 18)}<span>Home Assistant</span><span class="brand-arrow">${icon("chevronRight", 18)}</span></a>
         <nav class="rail-nav" aria-label="Bereiche">${this._navTemplate()}</nav>
-        ${this._moreNavTemplate()}
         <div class="rail-footer"><button class="household-switcher" type="button">${icon("household", 21)}<span>Gemeinsamer Haushalt</span>${icon("chevronRight", 16)}</button><p>Zu Hause leben. Besser planen.</p></div>
       </aside>
       ${content}
@@ -5361,7 +5395,7 @@ class FinanzplanerPanel extends HTMLElement {
 
   _reviewTemplate() {
     const filterStrip = this._bookingHistoryFilterTemplate("review");
-    const importHistory = `<section class="import-history" aria-labelledby="import-history-heading"><h3 id="import-history-heading">Importhistorie</h3>${this._imports.length ? `<div class="management-table-wrap" tabindex="0" role="region" aria-label="Importhistorie, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Importhistorie ohne Quelldateien</caption><thead><tr><th scope="col">Datei</th><th scope="col">Format</th><th scope="col">Zeitpunkt</th><th scope="col">Buchungen</th><th scope="col">Duplikate</th></tr></thead><tbody>${this._imports.map((item) => `<tr><th scope="row">${escapeHtml(item.filename || "Import")}</th><td>${escapeHtml(item.format || "—")}</td><td>${escapeHtml(item.imported_at || "—")}</td><td class="table-number">${escapeHtml(item.accepted_count ?? 0)}</td><td class="table-number">${escapeHtml(item.duplicate_count ?? 0)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="empty-state">Noch keine Importläufe vorhanden.</p>`}</section>`;
+    const importHistory = `<section class="import-history" aria-labelledby="import-history-heading"><h3 id="import-history-heading">Importhistorie</h3>${this._imports.length ? `<div class="management-table-wrap" tabindex="0" role="region" aria-label="Importhistorie, horizontal scrollbar"><table class="management-table"><caption class="visually-hidden">Importhistorie ohne Quelldateien</caption><thead><tr><th scope="col">Datei</th><th scope="col">Format</th><th scope="col">Zeitpunkt</th><th scope="col">Buchungen</th><th scope="col">Duplikate</th><th scope="col" class="table-actions">Aktion</th></tr></thead><tbody>${this._imports.map((item) => `<tr><th scope="row">${escapeHtml(item.filename || "Import")}</th><td>${escapeHtml(item.format || "—")}</td><td>${escapeHtml(item.imported_at || "—")}</td><td class="table-number">${escapeHtml(item.accepted_count ?? item.accepted ?? 0)}</td><td class="table-number">${escapeHtml(item.duplicate_count ?? item.duplicates ?? 0)}</td><td class="table-actions">${item.id ? `<button class="table-edit-button" type="button" data-import-delete="${escapeHtml(item.id)}"${this._importDeleting ? " disabled" : ""}>${this._importDeleting ? "Wird gelöscht …" : "Löschen"}</button>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<p class="empty-state">Noch keine Importläufe vorhanden.</p>`}</section>`;
     const bookingCount = this._bookingResultCountTemplate("review");
     let bookingIndex = 0;
     const bookingGroupsMarkup = bookingGroups(this._bookings, this._accounts).map((group, groupIndex) => {
@@ -5392,7 +5426,7 @@ class FinanzplanerPanel extends HTMLElement {
     const bookingList = this._reviewLoading ? `<p class="empty-state" role="status">Buchungen werden geladen …</p>`
       : this._reviewLoadFailed ? `<div class="empty-state"><p>Die Prüfliste konnte nicht geladen werden.</p><button class="table-edit-button" type="button" data-action="review">Erneut laden</button></div>`
         : this._bookings.length ? `${this._bookingSelectionToolbar("review", this._bookings, "review-bookings")}<div id="review-bookings" class="booking-account-groups" aria-label="Offene Buchungen">${bookingGroupsMarkup}</div>` : `<div class="empty-state">Keine offenen Buchungen in der Prüfliste. Weitere Buchungen kannst du aus einer Bankdatei importieren.</div>`;
-    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Buchungshistorie</h2><p>Historische und ungeklärte Buchungen filtern, prüfen und nachvollziehbar zuordnen.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${filterStrip}${bookingCount}${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><label class="file-input">Datei auswählen<input data-import type="file" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}${this._bookingPaginationTemplate("review")}${importHistory}</div></main>`;
+    const content = `<main class="main" id="content" tabindex="-1"><div class="review-view"><div class="review-view-header"><div><h2>Buchungshistorie</h2><p>Historische und ungeklärte Buchungen filtern, prüfen und nachvollziehbar zuordnen.</p></div><div class="accounts-actions"><button class="table-new-button" type="button" data-action="apply-rules"${this._ruleApplying ? " disabled" : ""}>${this._ruleApplying ? "Regeln werden angewendet …" : "Regeln erneut anwenden"}</button><button class="table-edit-button" type="button" data-action="resolved">Übernommene Buchungen ${icon("arrowRight", 18)}</button><button class="table-edit-button" type="button" data-action="rules">Regeln verwalten</button><button class="back-button" type="button" data-action="back">${icon("chevronLeft", 18)} Zur Übersicht</button></div></div>${filterStrip}${bookingCount}${this._rulesLoadFailed ? `<p role="status">Regeln konnten nicht geladen werden. Die manuelle Aufteilung ist weiterhin möglich. Über „Regeln verwalten“ kannst du erneut laden.</p>` : ""}${this._confirmedBookingsTemplate()}<form class="import-strip"><div><h3>Bank- oder Exceldatei importieren</h3><p>MT940 oder CAMT.053 einzeln oder als ZIP mit mehreren Buchungsdateien · .xlsx für Planposten, jeweils lokal geprüft.</p></div><div class="file-picker"><label class="file-input-control">${icon("file", 17)}<span>Datei auswählen</span><input class="visually-hidden" data-import type="file" aria-label="Bank- oder Exceldatei auswählen" accept=".xlsx,.zip,.sta,.mt940,.txt,.xml,.camt,.camt053,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/xml,text/plain"></label></div></form>${this._excelPreview ? this._excelPreviewTemplate() : ""}${bookingList}${this._bookingPaginationTemplate("review")}${importHistory}</div></main>`;
     return this._shellTemplate(content);
   }
 }

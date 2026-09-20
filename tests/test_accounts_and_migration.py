@@ -13,6 +13,18 @@ from custom_components.finanzplaner.storage import (
 
 
 class AccountsAndMigrationTests(unittest.TestCase):
+    def test_current_store_assigns_stable_ids_to_legacy_import_history(self):
+        stored = {
+            "version": 2,
+            "imports": [{"filename": "rent.mt940", "accepted": 2}],
+        }
+
+        first = normalize_current_store_data(stored, "Test")
+        second = normalize_current_store_data(stored, "Test")
+
+        self.assertRegex(first["imports"][0]["id"], r"^import-[0-9a-f]{24}$")
+        self.assertEqual(first["imports"][0]["id"], second["imports"][0]["id"])
+
     def test_normalizes_iban_for_matching_without_changing_display_data(self):
         self.assertEqual(
             core.normalize_account_reference(" at12 3456 7890 1234 5678 "),

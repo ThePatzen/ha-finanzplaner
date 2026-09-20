@@ -8,6 +8,13 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.20.0] – 2026-09-20
+
+- Importhistorie-Einträge können einzeln gelöscht werden, ohne Buchungen oder Planposten zu entfernen.
+- Seitengrößen der paginierten Buchungslisten werden pro Home-Assistant-Benutzer im Browser gespeichert.
+- Aufgaben und Energie sind als eigene Menüpunkte verfügbar; das Mehr-Menü entfällt.
+- Die Datei-Auswahl im Importbereich verwendet einen zugänglichen, einheitlich gestalteten Button.
+
 ## [0.19.1] – 2026-09-19
 
 - Die Konfliktanzeige der Buchungsregeln berücksichtigt Verwendungszweckfilter
@@ -231,6 +238,7 @@ Erste vorbereitete vertikale Version:
 [0.16.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.16.0
 [0.18.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.18.0
 [0.19.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.19.0
+[0.20.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.20.0
 [0.17.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.17.0
 [0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0
 [0.10.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.10.0

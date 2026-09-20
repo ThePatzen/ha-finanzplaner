@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 import importlib
 import sys
 import types
@@ -120,7 +121,10 @@ class BookingHistoryReportsTests(unittest.TestCase):
                 {"id": "booking-4", "booking_date": "2026-02-11", "amount": -5,
                  "purpose": "Food duplicate", "status": "duplicate", "account_id": "account-1", "allocations": []},
             ],
-            "imports": [{"filename": "rent.mt940", "accepted": 2, "content_base64": "secret"}],
+            "imports": [
+                {"id": "import-rent", "filename": "rent.mt940", "accepted": 2, "content_base64": "secret"},
+                {"id": "import-food", "filename": "food.mt940", "accepted": 1},
+            ],
             "persons": [], "accounts": [
                 {"id": "account-1", "label": "Gemeinsames Girokonto"},
                 {"id": "account-2", "label": "Rücklagen"},
@@ -189,6 +193,31 @@ class BookingHistoryReportsTests(unittest.TestCase):
         self.assertIn("cashflow", report["report"])
         imports = asyncio.run(self.http.ImportHistoryView().get(Request(self.hass)))
         self.assertNotIn("content_base64", str(imports))
+        self.assertEqual([item["id"] for item in imports["imports"]], ["import-rent", "import-food"])
+
+    def test_import_history_delete_removes_selected_entries_and_preserves_bookings(self):
+        response = asyncio.run(self.http.ImportHistoryView().delete(
+            Request(self.hass, payload={"import_ids": ["import-rent"]})
+        ))
+
+        self.assertEqual(response["deleted"], 1)
+        self.assertEqual([item["id"] for item in self.coordinator.store.data["imports"]], ["import-food"])
+        self.assertEqual(len(self.coordinator.store.data["bookings"]), 4)
+        self.assertEqual(self.coordinator.store.saves, 1)
+        self.assertEqual(self.coordinator.refreshes, 1)
+
+    def test_import_history_delete_rejects_unknown_entry_without_mutation(self):
+        before = deepcopy(self.coordinator.store.data)
+
+        with self.assertRaises(Exception) as context:
+            asyncio.run(self.http.ImportHistoryView().delete(
+                Request(self.hass, payload={"import_ids": ["import-missing", "import-rent"]})
+            ))
+
+        self.assertEqual(context.exception.text, "Ein oder mehrere Importe wurden nicht gefunden.")
+        self.assertEqual(self.coordinator.store.data, before)
+        self.assertEqual(self.coordinator.store.saves, 0)
+        self.assertEqual(self.coordinator.refreshes, 0)
 
     def test_report_year_keeps_all_requested_months(self):
         response = asyncio.run(self.http.ReportView().get(

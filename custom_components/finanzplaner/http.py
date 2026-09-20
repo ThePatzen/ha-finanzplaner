@@ -2544,6 +2544,44 @@ class ImportHistoryView(HomeAssistantView):
         projected = [{key: value for key, value in item.items() if key not in {"content_base64", "original_uploads"}} for item in imports if isinstance(item, dict)]
         return self.json(_response_payload({"imports": projected}))
 
+    async def delete(self, request: web.Request) -> web.Response:
+        coordinator = _coordinator(request.app["hass"])
+        if coordinator is None:
+            raise web.HTTPBadRequest(text="Finanzplaner ist nicht eingerichtet.")
+        try:
+            payload = await request.json()
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="Die Löschung ist kein gültiges JSON.") from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Die Löschung muss als Objekt übermittelt werden.")
+        import_ids = payload.get("import_ids")
+        if not isinstance(import_ids, list) or not import_ids or not all(
+            isinstance(import_id, str) and import_id.strip() for import_id in import_ids
+        ):
+            raise web.HTTPBadRequest(text="Bitte mindestens einen Import zum Löschen auswählen.")
+        if len(set(import_ids)) != len(import_ids):
+            raise web.HTTPBadRequest(text="Ein Import darf nur einmal zum Löschen ausgewählt werden.")
+
+        imports = coordinator.store.data.get("imports", [])
+        if not isinstance(imports, list):
+            raise web.HTTPBadRequest(text="Die gespeicherte Importhistorie ist ungültig.")
+        stored_ids = {
+            item.get("id")
+            for item in imports
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
+        requested_ids = {import_id.strip() for import_id in import_ids}
+        if not requested_ids.issubset(stored_ids):
+            raise web.HTTPNotFound(text="Ein oder mehrere Importe wurden nicht gefunden.")
+
+        coordinator.store.data["imports"] = [
+            item for item in imports
+            if not isinstance(item, dict) or item.get("id") not in requested_ids
+        ]
+        await coordinator.store.async_save()
+        await coordinator.async_refresh_data()
+        return self.json(_response_payload({"deleted": len(requested_ids)}))
+
 
 class ReportView(HomeAssistantView):
     url = "/api/finanzplaner/report"
@@ -3058,6 +3096,7 @@ class ImportView(HomeAssistantView):
         )
         archive_import = filename.lower().endswith(".zip")
         import_record = {
+            "id": uuid4().hex,
             "format": "ZIP" if archive_import else import_files[0][3],
             "filename": filename,
             "sha256": hashlib.sha256(raw_bytes).hexdigest(),
@@ -3266,6 +3305,7 @@ class ExcelConfirmView(HomeAssistantView):
             ensure_catalog_entries(coordinator.store.data, item)
         coordinator.store.data.setdefault("imports", []).append(
             {
+                "id": import_id,
                 "format": "XLSX",
                 "import_id": import_id,
                 "accepted": len(items),

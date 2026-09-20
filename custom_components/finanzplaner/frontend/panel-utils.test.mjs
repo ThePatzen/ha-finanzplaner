@@ -24,6 +24,20 @@ test("reads API responses according to their content type", async () => {
   assert.equal(await utils.readApiResponse(textResponse), "  Dienst nicht erreichbar\n");
 });
 
+test("persists a valid page size per list and ignores invalid stored values", () => {
+  const values = new Map([["finanzplaner.pagination.review", "50"], ["finanzplaner.pagination.rules", "999"]]);
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+  };
+
+  assert.equal(utils.readPaginationPageSize(storage, "review", 25), 50);
+  assert.equal(utils.readPaginationPageSize(storage, "rules", 25), 25);
+  assert.equal(utils.readPaginationPageSize(storage, "missing", 25), 25);
+  utils.writePaginationPageSize(storage, "rules", 100);
+  assert.equal(values.get("finanzplaner.pagination.rules"), "100");
+});
+
 test("bookingDetailsRequestUrl encodes the booking id", () => {
   assert.equal(
     utils.bookingDetailsRequestUrl("/api/finanzplaner/bookings", "booking/42"),
@@ -86,6 +100,16 @@ test("supports one-level category parents in the editor and selectors", () => {
   assert.match(panelSource, /Übergeordnete Kategorie/);
   assert.match(panelSource, /→/);
   assert.doesNotMatch(panelSource, /Unterkategorie ·/);
+});
+
+test("shows the former More entries as separate navigation items", () => {
+  assert.match(panelSource, /\["tasks", "tasks", "Aufgaben"\],\s*\["energy", "energy", "Energie"\],/);
+  assert.doesNotMatch(panelSource, /data-action="more"/);
+});
+
+test("renders a styled accessible file picker and import deletion action", () => {
+  assert.match(panelSource, /class="file-input-control"/);
+  assert.match(panelSource, /data-import-delete/);
 });
 
 test("returns from a root-hosted panel to the HA base route", () => {
@@ -606,17 +630,18 @@ test("provides overview pages for every prepared navigation section", () => {
   assert.doesNotMatch(panelSource, /für die nächste Ausbaustufe vorbereitet/);
 });
 
-test("mobile navigation groups work areas into seven primary destinations", () => {
+test("mobile navigation exposes tasks and energy as primary destinations", () => {
   assert.match(panelSource, /\["overview", "overview", "Übersicht"\]/);
   assert.match(panelSource, /\["bookings", "file", "Buchungen"\]/);
   assert.match(panelSource, /\["planning", "planner", "Planen"\]/);
   assert.match(panelSource, /\["household", "household", "Haushalt"\]/);
   assert.match(panelSource, /\["calendar", "calendar", "Kalender"\]/);
   assert.match(panelSource, /\["feed_profiles", "cart", "Futter"\]/);
-  assert.match(panelSource, /\["more", "more", "Mehr"\]/);
-  assert.match(panelSource, /_moreNavTemplate\(\)/);
-  assert.match(panelSource, /data-action="more"/);
-  assert.match(panelSource, /const entries = \[\["tasks", "tasks", "Aufgaben"\], \["energy", "energy", "Energie"\]\]/);
+  assert.match(panelSource, /\["tasks", "tasks", "Aufgaben"\]/);
+  assert.match(panelSource, /\["energy", "energy", "Energie"\]/);
+  assert.doesNotMatch(panelSource, /\["more", "more", "Mehr"\]/);
+  assert.doesNotMatch(panelSource, /_moreNavTemplate\(\)/);
+  assert.doesNotMatch(panelSource, /data-action="more"/);
   assert.match(panelSource, /data-nav="\$\{target\}"/);
   assert.doesNotMatch(panelSource, /\["people", "people", "Personen"\]/);
   assert.doesNotMatch(panelSource, /\["pets", "paw", "Tiere"\]/);

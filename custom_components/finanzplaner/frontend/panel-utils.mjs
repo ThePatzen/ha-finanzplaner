@@ -3,6 +3,35 @@ const euroNumber = new Intl.NumberFormat("de-DE", {
   maximumFractionDigits: 2,
 });
 
+const PAGINATION_PAGE_SIZES = new Set([0, 25, 50, 100]);
+
+function paginationStorageKey(listKey) {
+  return `finanzplaner.pagination.${String(listKey || "default").trim()}`;
+}
+
+export function readPaginationPageSize(storage, listKey, fallback = 25) {
+  const safeFallback = PAGINATION_PAGE_SIZES.has(Number(fallback)) ? Number(fallback) : 25;
+  try {
+    const stored = storage?.getItem?.(paginationStorageKey(listKey));
+    if (stored === null || stored === undefined || String(stored).trim() === "") return safeFallback;
+    const value = Number(stored);
+    return PAGINATION_PAGE_SIZES.has(value) ? value : safeFallback;
+  } catch {
+    return safeFallback;
+  }
+}
+
+export function writePaginationPageSize(storage, listKey, pageSize) {
+  const value = Number(pageSize);
+  if (!PAGINATION_PAGE_SIZES.has(value) || typeof storage?.setItem !== "function") return false;
+  try {
+    storage?.setItem?.(paginationStorageKey(listKey), String(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function formatEuro(value) {
   const amount = Number(value) || 0;
   const sign = amount < 0 ? "−" : "";
