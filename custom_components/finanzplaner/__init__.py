@@ -123,7 +123,8 @@ async def async_setup_entry(hass: Any, entry: Any) -> bool:
     await async_setup_services(hass, entry.entry_id)
 
     static_dir = Path(__file__).parent / "frontend"
-    static_url = panel_static_path(_integration_version())
+    version = await hass.async_add_executor_job(_integration_version)
+    static_url = panel_static_path(version)
     await hass.http.async_register_static_paths(
         [StaticPathConfig(static_url, str(static_dir), False)]
     )

@@ -8,6 +8,11 @@ Das Projekt verwendet Semantic Versioning:
 - `MINOR`: neue rückwärtskompatible Funktionen
 - `PATCH`: Fehlerkorrekturen und kleine Verbesserungen
 
+## [0.20.2] – 2026-10-05
+
+- Der Datumssensor „Nächste größere Zahlung“ liefert Home Assistant ein echtes Date-Objekt, auch bei späteren Aktualisierungen; fehlende oder ungültige Datumswerte ergeben einen unbekannten Zustand.
+- Das Lesen der Manifest-Version beim Start läuft außerhalb des Home-Assistant-Ereignisloops, um blockierende Dateioperationen zu vermeiden.
+
 ## [0.20.1] – 2026-09-20
 
 - Die Regelkonfliktanzeige meldet unabhängige Zahlungsempfänger- und Verwendungszweckregeln nicht mehr als Konflikt.
@@ -245,6 +250,7 @@ Erste vorbereitete vertikale Version:
 [0.18.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.18.0
 [0.19.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.19.0
 [0.20.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.20.0
+[0.20.2]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.20.2
 [0.20.1]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.20.1
 [0.17.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.17.0
 [0.11.0]: https://github.com/ThePatzen/ha-finanzplaner/releases/tag/v0.11.0

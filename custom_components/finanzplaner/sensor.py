@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
@@ -58,13 +59,19 @@ class FinanceSensor(CoordinatorEntity[FinanzplanerCoordinator], SensorEntity):
             self._attr_device_class = SensorDeviceClass.DATE
 
     @property
-    def native_value(self) -> float | int | str | None:
+    def native_value(self) -> float | int | str | date | None:
         if self._key == "next_feed_purchase":
             forecast = self._next_feed_forecast()
             return forecast.get("next_purchase_date") if forecast else None
         overview = self.coordinator.data.get("overview", {}) if self.coordinator.data else {}
         if self._key == "next_major_payment":
-            return overview.get(self._key)
+            value = overview.get(self._key)
+            if not isinstance(value, str):
+                return None
+            try:
+                return date.fromisoformat(value)
+            except ValueError:
+                return None
         if self._key == "unresolved_amount":
             return overview.get("unresolved_total", 0)
         return overview.get(self._key, 0)

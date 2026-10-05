@@ -6,7 +6,7 @@ Lokaler Finanzplan für gemeinsame Haushalte — mit Planwerten, Prognose, echte
 
 ## Aktueller Stand
 
-Version 0.20.1 umfasst die korrigierte Regelkonfliktanzeige, die Deduplizierung identischer Regeln beim Laden und Import sowie löschbare Importhistorie-Einträge, benutzerbezogene Seitengrößen, die getrennten Menüpunkte Aufgaben und Energie, den JSON-Export/-Import und das dauerhafte Löschen ausgewählter Regeln, prüfbare Duplikatbuchungen, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
+Version 0.20.2 behebt den Datumssensor „Nächste größere Zahlung“ und die Blocking-I/O-Warnungen beim Start. Sie umfasst außerdem die korrigierte Regelkonfliktanzeige, die Deduplizierung identischer Regeln beim Laden und Import sowie löschbare Importhistorie-Einträge, benutzerbezogene Seitengrößen, die getrennten Menüpunkte Aufgaben und Energie, den JSON-Export/-Import und das dauerhafte Löschen ausgewählter Regeln, prüfbare Duplikatbuchungen, wiederverwendbare Unterkategorien, die automatische Übernahme eindeutiger Buchungsregeln und die vollständige Übernahmesicht
 und den Budget-Ist-Vergleich mit den folgenden Erweiterungen und UI-Verbesserungen:
 
 - HACS-fähige Custom Integration mit Config Flow

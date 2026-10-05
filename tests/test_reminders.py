@@ -157,6 +157,31 @@ class ReminderEntityTests(unittest.TestCase):
 
 
 class FinanceSensorContractTests(unittest.TestCase):
+    def test_next_major_payment_returns_date_on_initial_and_later_updates(self):
+        module = _load_sensor_module()
+        coordinator = SimpleNamespace(data={"overview": {"next_major_payment": "2026-10-01"}})
+        sensor = module.FinanceSensor(coordinator, "entry", "next_major_payment", "", "")
+
+        self.assertEqual(sensor._attr_device_class, module.SensorDeviceClass.DATE)
+        self.assertEqual(sensor.native_value, date(2026, 10, 1))
+        self.assertIs(type(sensor.native_value), date)
+        self.assertEqual(coordinator.data["overview"]["next_major_payment"], "2026-10-01")
+
+        coordinator.data = {"overview": {"next_major_payment": "2026-11-01"}}
+        self.assertEqual(sensor.native_value, date(2026, 11, 1))
+
+    def test_next_major_payment_without_valid_date_returns_none(self):
+        module = _load_sensor_module()
+        coordinator = SimpleNamespace(data=None)
+        sensor = module.FinanceSensor(coordinator, "entry", "next_major_payment", "", "")
+        for data in (None, {}, {"overview": {}}, *(
+            {"overview": {"next_major_payment": value}}
+            for value in (None, "", "invalid", "2026-02-30", 42)
+        )):
+            with self.subTest(data=data):
+                coordinator.data = data
+                self.assertIsNone(sensor.native_value)
+
     def test_finance_sensor_exposes_report_metrics(self):
         module = _load_sensor_module()
 
@@ -210,7 +235,7 @@ class FinanceSensorContractTests(unittest.TestCase):
         self.assertEqual(forecast.native_value, 1575.0)
         self.assertEqual(unresolved.native_value, 25.0)
         self.assertEqual(balance.native_value, 775.0)
-        self.assertEqual(payment.native_value, "2026-09-30")
+        self.assertEqual(payment.native_value, date(2026, 9, 30))
         self.assertEqual(payment._attr_device_class, module.SensorDeviceClass.DATE)
 
 
